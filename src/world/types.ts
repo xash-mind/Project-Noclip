@@ -97,6 +97,7 @@ export interface NoteSpec {
   id: string;
   title: string;
   body: string;
+  attribution?: string;
   localPosition: LocalPoint;
   rotationY?: number;
   source: 'manila-book' | 'office-memo' | 'maintenance-note' | 'warning';
