@@ -1,0 +1,44 @@
+name: Apply Project Noclip Update
+
+on:
+  push:
+    branches: [agent/level-0-depth]
+    paths:
+      - '.project-update.part*'
+      - '.github/workflows/apply-project-update.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/level-0-depth
+          fetch-depth: 0
+
+      - name: Verify and unpack update
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .project-update.part* | base64 --decode > /tmp/project-noclip-update.tar.gz
+          echo '8674a86cc27f328091b57746582af4a27c54632d6a2fd2c49dbc16e554a63278  /tmp/project-noclip-update.tar.gz' | sha256sum --check -
+          tar -xzf /tmp/project-noclip-update.tar.gz -C .
+          rm -f .project-update.part*
+
+      - name: Commit verified source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No source changes to commit.'
+            exit 0
+          fi
+          git commit -m 'feat: deepen Level 0 exploration'
+          git push origin HEAD:agent/level-0-depth
