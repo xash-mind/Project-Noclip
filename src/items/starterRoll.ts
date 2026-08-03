@@ -1,41 +1,23 @@
-import { weightedChoice, unitFloat } from '../world/hash.js';
 import { ITEM_DEFINITIONS, type ItemDefinitionId } from './definitions.js';
-
-export interface StarterRollConfig {
-  noneChance: number;
-  oneChance: number;
-  twoChance: number;
+import { unitFloat, weightedChoice } from '../world/hash.js';
+export function rollStarterDefinitions(characterSeed: string): ItemDefinitionId[] {
+  const countRoll = unitFloat(`${characterSeed}:starter-count`);
+  const count = countRoll < 0.15 ? 0 : countRoll < 0.75 ? 1 : 2;
+  if (!count) return [];
+  const entries = Object.values(ITEM_DEFINITIONS).map((definition) => ({ value: definition.id, weight: definition.starterWeight }));
+  const selected: ItemDefinitionId[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const available = entries.filter((entry) => !selected.includes(entry.value)
+      && !(selected.some((id) => ITEM_DEFINITIONS[id].highValue) && ITEM_DEFINITIONS[entry.value].highValue));
+    selected.push(weightedChoice(`${characterSeed}:starter:${index}`, available.length ? available : entries).value);
+  }
+  return selected;
 }
-
-export const DEFAULT_STARTER_ROLL: StarterRollConfig = { noneChance: 0.15, oneChance: 0.6, twoChance: 0.25 };
-
-export function starterItemCount(characterSeed: string, config = DEFAULT_STARTER_ROLL): 0 | 1 | 2 {
-  const total = config.noneChance + config.oneChance + config.twoChance;
-  if (Math.abs(total - 1) > 0.0001) throw new Error('Starter roll probabilities must sum to 1');
-  const roll = unitFloat(`${characterSeed}:starter-count`);
-  if (roll < config.noneChance) return 0;
-  if (roll < config.noneChance + config.oneChance) return 1;
-  return 2;
-}
-
-export function rollStarterDefinitions(characterSeed: string, config = DEFAULT_STARTER_ROLL): ItemDefinitionId[] {
-  const count = starterItemCount(characterSeed, config);
-  if (count === 0) return [];
-  const pool = Object.values(ITEM_DEFINITIONS).map((definition) => ({ value: definition.id, weight: definition.starterWeight, highValue: definition.highValue }));
-  const first = weightedChoice(`${characterSeed}:starter:0`, pool);
-  if (count === 1) return [first.value];
-  const compatible = pool.filter((entry) => entry.value !== first.value && !(first.highValue && entry.highValue));
-  const second = weightedChoice(`${characterSeed}:starter:1`, compatible);
-  return [first.value, second.value];
-}
-
-export function simulateStarterRolls(seed: string, sampleCount: number): Record<'none' | 'one' | 'two', number> {
+export function simulateStarterRolls(seed: string, count: number): { none: number; one: number; two: number } {
   const result = { none: 0, one: 0, two: 0 };
-  for (let index = 0; index < sampleCount; index += 1) {
-    const count = starterItemCount(`${seed}:${index}`);
-    if (count === 0) result.none += 1;
-    else if (count === 1) result.one += 1;
-    else result.two += 1;
+  for (let index = 0; index < count; index += 1) {
+    const length = rollStarterDefinitions(`${seed}:${index}`).length;
+    if (length === 0) result.none += 1; else if (length === 1) result.one += 1; else result.two += 1;
   }
   return result;
 }

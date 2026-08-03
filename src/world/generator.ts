@@ -1,6 +1,9 @@
+import { ITEM_DEFINITIONS, type ItemDefinitionId } from '../items/definitions.js';
 import { exitsForCell } from './exits.js';
-import { stableId, unitFloat, intInRange, weightedChoice } from './hash.js';
-import { chooseZone, ZONE_PROFILES } from './zones.js';
+import { intInRange, stableId, unitFloat, weightedChoice } from './hash.js';
+import { boundaryWallParts, chooseArchetype, layoutFor } from './layouts.js';
+import { makeNote } from './notes.js';
+import { chooseZone, districtId, ZONE_PROFILES } from './zones.js';
 import {
   CELL_SIZE,
   DOOR_WIDTH,
@@ -11,12 +14,14 @@ import {
   type CellDescriptor,
   type Direction,
   type LootNode,
+  type NoteSpec,
   type Openings,
+  type RoomArchetype,
   type WallSpec,
   type WorldAddress,
-  type WorldTuning
+  type WorldTuning,
+  type ZoneId
 } from './types.js';
-import { ITEM_DEFINITIONS, type ItemDefinitionId } from '../items/definitions.js';
 
 const DIRECTIONS: Record<Direction, [number, number]> = {
   north: [0, -1],
@@ -56,63 +61,25 @@ export function generateOpenings(seed: string, x: number, z: number, extraOpenin
   };
 }
 
-function wall(id: string, cx: number, cy: number, cz: number, sx: number, sy: number, sz: number, orientation: 'x' | 'z', drawable = true): WallSpec {
-  return { id, cx, cy, cz, sx, sy, sz, orientation, drawable };
+function maybeNotes(seed: string, x: number, z: number, archetype: RoomArchetype): NoteSpec[] {
+  if (archetype === 'manila-room') return [];
+  if (x === 1 && z === 0) return [makeNote(stableId('note', seed, 'first-memo'), 'wetFloor', -3.8, 2.8, 'office-memo')];
+  const roll = unitFloat(`${seed}:note:${x}:${z}`);
+  if (roll > 0.045) return [];
+  const variants = ['wetFloor', 'margin', 'utility', 'warning'] as const;
+  const key = variants[intInRange(`${seed}:note-kind:${x}:${z}`, 0, variants.length)]!;
+  const source = key === 'utility' ? 'maintenance-note' : key === 'warning' ? 'warning' : 'office-memo';
+  return [makeNote(stableId('note', seed, x, z), key, -4.4 + unitFloat(`${seed}:note-x:${x}:${z}`) * 8.8, -4.4 + unitFloat(`${seed}:note-z:${x}:${z}`) * 8.8, source)];
 }
 
-function boundaryWallParts(seed: string, x: number, z: number, direction: Direction, open: boolean): WallSpec[] {
-  const half = CELL_SIZE / 2;
-  const sideLength = open ? (CELL_SIZE - DOOR_WIDTH) / 2 : CELL_SIZE;
-  const parts: WallSpec[] = [];
-  const base = stableId('surface', seed, x, z, direction);
-  if (direction === 'north' || direction === 'south') {
-    const zPos = direction === 'north' ? -half : half;
-    if (!open) parts.push(wall(base, 0, WALL_HEIGHT / 2, zPos, CELL_SIZE, WALL_HEIGHT, WALL_THICKNESS, 'z'));
-    else {
-      const offset = DOOR_WIDTH / 2 + sideLength / 2;
-      parts.push(wall(`${base}:a`, -offset, WALL_HEIGHT / 2, zPos, sideLength, WALL_HEIGHT, WALL_THICKNESS, 'z'));
-      parts.push(wall(`${base}:b`, offset, WALL_HEIGHT / 2, zPos, sideLength, WALL_HEIGHT, WALL_THICKNESS, 'z'));
-    }
-  } else {
-    const xPos = direction === 'west' ? -half : half;
-    if (!open) parts.push(wall(base, xPos, WALL_HEIGHT / 2, 0, WALL_THICKNESS, WALL_HEIGHT, CELL_SIZE, 'x'));
-    else {
-      const offset = DOOR_WIDTH / 2 + sideLength / 2;
-      parts.push(wall(`${base}:a`, xPos, WALL_HEIGHT / 2, -offset, WALL_THICKNESS, WALL_HEIGHT, sideLength, 'x'));
-      parts.push(wall(`${base}:b`, xPos, WALL_HEIGHT / 2, offset, WALL_THICKNESS, WALL_HEIGHT, sideLength, 'x'));
-    }
-  }
-  return parts;
-}
-
-function splitInteriorWall(seed: string, x: number, z: number, variant: number, shiftEpoch: number): WallSpec[] {
-  if (variant % 4 === 0) return [];
-  const horizontal = (variant + shiftEpoch) % 2 === 0;
-  const offset = ((variant % 3) - 1) * 2.2;
-  const length = CELL_SIZE - 2.4;
-  const segment = (length - DOOR_WIDTH) / 2;
-  const gapOffset = ((variant + shiftEpoch) % 3 - 1) * 2.1;
-  const leftCenter = -length / 2 + segment / 2 + Math.max(0, gapOffset);
-  const rightCenter = length / 2 - segment / 2 + Math.min(0, gapOffset);
-  const id = stableId('partition', seed, x, z, variant, shiftEpoch);
-  if (horizontal) {
-    return [
-      wall(`${id}:a`, leftCenter, WALL_HEIGHT / 2, offset, segment, WALL_HEIGHT, WALL_THICKNESS, 'z'),
-      wall(`${id}:b`, rightCenter, WALL_HEIGHT / 2, offset, segment, WALL_HEIGHT, WALL_THICKNESS, 'z')
-    ];
-  }
-  return [
-    wall(`${id}:a`, offset, WALL_HEIGHT / 2, leftCenter, WALL_THICKNESS, WALL_HEIGHT, segment, 'x'),
-    wall(`${id}:b`, offset, WALL_HEIGHT / 2, rightCenter, WALL_THICKNESS, WALL_HEIGHT, segment, 'x')
-  ];
-}
-
-function lootForCell(seed: string, x: number, z: number, lootChance: number): LootNode[] {
+function lootForCell(seed: string, x: number, z: number, lootChance: number, archetype: RoomArchetype): LootNode[] {
   const nodes: LootNode[] = [];
   const weights = Object.values(ITEM_DEFINITIONS).map((definition) => ({ value: definition.id, weight: definition.worldWeight }));
-  for (let index = 0; index < 2; index += 1) {
+  const count = archetype === 'wide-lobby' || archetype === 'maintenance-bay' ? 3 : 2;
+  for (let index = 0; index < count; index += 1) {
     const id = stableId('loot', seed, x, z, index);
-    const spawn = unitFloat(`${id}:spawn`) < lootChance * (index === 0 ? 1 : 0.45);
+    const bonus = archetype === 'maintenance-bay' ? 1.2 : archetype === 'open-office' ? 1.05 : 0.85;
+    const spawn = unitFloat(`${id}:spawn`) < lootChance * bonus * (index === 0 ? 1 : 0.42);
     const node: LootNode = {
       id,
       localPosition: {
@@ -139,27 +106,40 @@ export interface GenerateCellOptions {
 
 export function generateCell(options: GenerateCellOptions): CellDescriptor {
   const { seed, x, z, worldDay, exposure, shiftEpoch, tuning } = options;
-  const zoneId = chooseZone(seed, x, z, worldDay, exposure, tuning);
-  const profile = ZONE_PROFILES[zoneId];
-  const address: WorldAddress = { worldSeed: seed, levelId: 'level-0', cellX: x, cellZ: z, zoneId, shiftEpoch };
-  const openings = generateOpenings(seed, x, z, tuning.extraOpeningChance);
-  const variant = intInRange(`${seed}:variant:${x}:${z}`, 0, 9);
-  const walls: WallSpec[] = [];
-  for (const direction of Object.keys(DIRECTIONS) as Direction[]) walls.push(...boundaryWallParts(seed, x, z, direction, openings[direction]));
-  walls.push(...splitInteriorWall(seed, x, z, variant, shiftEpoch));
-
   const exits = exitsForCell(seed, x, z, worldDay, exposure, tuning.gateBypass);
+  let zoneId = chooseZone(seed, x, z, worldDay, exposure, tuning);
+  if (exits.length > 0 && zoneId !== 'manila') zoneId = 'exit-threshold';
+  const profile = ZONE_PROFILES[zoneId];
+  const dId = districtId(x, z);
+  const address: WorldAddress = { worldSeed: seed, levelId: 'level-0', cellX: x, cellZ: z, zoneId, districtId: dId, shiftEpoch };
+  const openings = generateOpenings(seed, x, z, tuning.extraOpeningChance);
+  const variant = intInRange(`${seed}:variant:${x}:${z}:${shiftEpoch}`, 0, Math.max(10, Math.round(18 * tuning.roomVariation)));
+  const archetype = chooseArchetype(seed, x, z, zoneId, shiftEpoch);
+  const materialVariant = intInRange(`${seed}:wall-material:${x}:${z}`, 0, 5);
+  const walls: WallSpec[] = [];
+  for (const direction of Object.keys(DIRECTIONS) as Direction[]) walls.push(...boundaryWallParts(seed, x, z, direction, openings[direction], materialVariant));
+  const layout = layoutFor(seed, x, z, archetype, shiftEpoch, variant);
+  walls.push(...layout.walls);
+  const noteSpecs = [...layout.notes, ...maybeNotes(seed, x, z, archetype)];
+
   return {
     id: cellId(x, z),
     address,
     stability: profile.stability,
     openings,
     variant,
+    roomArchetype: archetype,
+    roomLabel: layout.label,
     walls,
-    lootNodes: zoneId === 'manila' ? [] : lootForCell(seed, x, z, tuning.lootChance),
+    props: layout.props,
+    floorPatches: layout.patches,
+    notes: noteSpecs,
+    lootNodes: zoneId === 'manila' ? [] : lootForCell(seed, x, z, tuning.lootChance, archetype),
     exits,
-    lightFailure: zoneId === 'blackout' || unitFloat(`${addressId(address)}:light`) < 0.055,
-    hallucinationAnchor: profile.stability === 'disorienting' && unitFloat(`${seed}:hallucination:${x}:${z}`) < 0.035
+    lightFailure: zoneId === 'blackout' || unitFloat(`${addressId(address)}:light`) < 0.045,
+    lightTemperature: 0.82 + unitFloat(`${addressId(address)}:temperature`) * 0.24,
+    ceilingPattern: intInRange(`${seed}:ceiling:${x}:${z}`, 0, 4),
+    hallucinationAnchor: profile.stability === 'disorienting' && unitFloat(`${seed}:hallucination:${x}:${z}`) < 0.032
   };
 }
 

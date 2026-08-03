@@ -1,5 +1,8 @@
 declare module 'vite' {
-  export interface UserConfig { [key: string]: unknown; }
-  export function defineConfig<T extends UserConfig>(config: T): T;
-  export function build(config?: UserConfig): Promise<unknown>;
+  export function defineConfig<T>(config: T): T;
+  export function build(config?: unknown): Promise<unknown>;
+  export function createServer(config?: unknown): Promise<{ listen(): Promise<void>; resolvedUrls?: unknown }>;
+  export function preview(config?: unknown): Promise<unknown>;
 }
+interface ImportMetaEnv { readonly DEV?: boolean; readonly PROD?: boolean; }
+interface ImportMeta { readonly env: ImportMetaEnv; }

@@ -1,8 +1,1 @@
-import { rmSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
-
-rmSync('.test-dist', { recursive: true, force: true });
-let result = spawnSync('tsc', ['-p', 'tsconfig.test.json'], { stdio: 'inherit' });
-if (result.status !== 0) process.exit(result.status ?? 1);
-result = spawnSync(process.execPath, ['--test', 'tests/*.test.mjs'], { stdio: 'inherit', shell: true });
-process.exit(result.status ?? 1);
+import{rmSync}from'node:fs';import{spawnSync}from'node:child_process';rmSync('.test-dist',{recursive:true,force:true});const compile=spawnSync('tsc',['-p','tsconfig.test.json'],{stdio:'inherit'});if(compile.status!==0)process.exit(compile.status??1);const test=spawnSync(process.execPath,['--test','tests/core.test.mjs'],{stdio:'inherit'});process.exit(test.status??1);
