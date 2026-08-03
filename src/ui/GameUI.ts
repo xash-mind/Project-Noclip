@@ -167,9 +167,10 @@ export class GameUI {
   isNoteOpen(): boolean { return this.noteOverlay.classList.contains('visible'); }
   setMarkerMode(active: boolean): void { this.markerMode.classList.toggle('visible', active); }
 
-  showNote(title: string, body: string): void {
+  showNote(title: string, body: string, attribution?: string): void {
     this.noteTitle.textContent = title.slice(0, 120);
-    this.noteBody.textContent = body.slice(0, 4000);
+    const text = attribution ? `${body}\n\n— ${attribution}` : body;
+    this.noteBody.textContent = text.slice(0, 4000);
     this.noteOverlay.classList.add('visible');
     document.exitPointerLock();
   }
