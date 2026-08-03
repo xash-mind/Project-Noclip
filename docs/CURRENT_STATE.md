@@ -8,7 +8,8 @@
 ## 1. Verified repository state
 
 - The GitHub repository is accessible and writable.
-- The repository was created empty and has now been initialized with planning and build-handoff documentation.
+- The repository was created empty and has now been initialized with the complete planning, specification, launcher, and iterative build-handoff documentation.
+- `MASTER_BUILD_PROMPT.md` is committed and ready to drive the first implementation iteration.
 - No game client, package manifest, runtime code, tests, assets, or Vercel deployment have been created yet.
 - No implementation, build, browser test, performance result, or deployment should be treated as complete.
 
@@ -16,7 +17,7 @@
 
 - `README.md`
 - `START_BUILD_PROMPT.md`
-- `MASTER_BUILD_PROMPT.md` — to be executed for the first implementation iteration.
+- `MASTER_BUILD_PROMPT.md`
 - `docs/VISION.md`
 - `docs/LEVEL_0_SPEC.md`
 - `docs/DECISIONS.md`
@@ -181,7 +182,10 @@ A simpler structure is acceptable when it preserves dependency direction and inc
 
 ## 10. Latest verified commit
 
-This document was created during the initial documentation seed. The final documentation-seed commit will be recorded after `MASTER_BUILD_PROMPT.md` is committed and all files are re-read from GitHub.
+- Branch: `main`
+- Latest verified documentation bundle commit before this state update: `fadd98a4a2d6b0b14e19e36aad5ff26b581992bb`
+- That commit added `MASTER_BUILD_PROMPT.md` after the remaining project documents were committed.
+- No implementation commit exists yet.
 
 ## 11. Working commands
 
