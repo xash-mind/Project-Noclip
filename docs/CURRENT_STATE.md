@@ -1,226 +1,92 @@
 # Project Noclip — Current State
 
-**Last updated:** 2026-08-03  
+**Last updated:** 2026-08-03 — Iteration 1 implementation complete locally  
 **Repository:** `xash-mind/Project-Noclip`  
-**Default branch:** `main`  
-**Target client domain:** `https://project-noclip.vercel.app`
+**Branch target:** `main`  
+**Target deployment:** `https://project-noclip.vercel.app`
 
-## 1. Verified repository state
+## Executive state
 
-- The GitHub repository is accessible and writable.
-- The repository was created empty and has now been initialized with the complete planning, specification, launcher, and iterative build-handoff documentation.
-- `MASTER_BUILD_PROMPT.md` is committed and ready to drive the first implementation iteration.
-- No game client, package manifest, runtime code, tests, assets, or Vercel deployment have been created yet.
-- No implementation, build, browser test, performance result, or deployment should be treated as complete.
+A runnable Level 0 systems vertical slice now exists. It is no longer a documentation-only repository.
 
-## 2. Documents currently established
+The local build has passed strict typechecking, nine deterministic/system tests, a 10,000-cell generation benchmark, static production build, and a browser smoke path using an API-compatible PlayCanvas test module because this execution environment could not install the npm package or allow browser access to local network URLs. The real PlayCanvas/Vite bundle must therefore be validated by the Vercel build and public deployment before renderer verification is considered complete.
 
-- `README.md`
-- `START_BUILD_PROMPT.md`
-- `MASTER_BUILD_PROMPT.md`
-- `docs/VISION.md`
-- `docs/LEVEL_0_SPEC.md`
-- `docs/DECISIONS.md`
-- `docs/CONTENT_NEEDED.md`
-- `docs/CURRENT_STATE.md`
+## Implemented
 
-## 3. Product decisions already made
+- Vite/TypeScript browser project and Vercel configuration.
+- Repo-first PlayCanvas client boundary.
+- First-person pointer-lock controls, walk, sprint, crouch, pause, resize hook, and axis-separated wall collision.
+- Deterministic connected cell topology, symmetric openings, stable IDs, zone selection, interior variants, and fixed-seed replay.
+- Active-radius streaming/unloading with persistent shift epochs on distant unloads.
+- Baseline, arch, pillar, blackout, hole, Manila, and exit-threshold profiles.
+- Sparse deterministic loot nodes.
+- One-time deterministic starter roll: 15% none, 60% one, 25% two compatible items.
+- Trade-ready item instances with ownership, origin, condition/charge, revision, and escrow-ready owner type.
+- Six-slot inventory, pickup, drop, inspect presentation, selection, and use.
+- Functional flashlight, battery recharge, Almond Water consumption, marker mode/strokes.
+- Minimal/data-ready glow stick, string, can, note, and pry-tool behaviour.
+- IndexedDB persistence with restricted-origin local/in-memory fallback and version-1 migration guard.
+- World Day, traversal-weighted Exposure Day, stable-space elapsed time, content gates, and timeline HUD.
+- Multiple exit registry entries and saved pending transition records.
+- Local Manila Room stable module and future encounter protocol boundaries.
+- Ambiguous hallucination anchors and procedural Web Audio ambience.
+- World Lab controls for seed, zones, gates, days, exposure, loot, shifting, starter simulation, export, and runtime metrics.
+- Future Nakama/PostgreSQL authority document.
+- GitHub Actions verification workflow.
 
-- Project Noclip is a long-term living Backrooms game.
-- Level 0 is the first implementation.
-- Browser delivery is the initial platform.
-- The game prioritizes consistency, detailed worldbuilding, scale, atmosphere, persistence, and rare human encounters over high-end graphics.
-- The initial client stack is TypeScript, Vite, and PlayCanvas Engine in a repo-first workflow.
-- Core world generation and simulation must remain independent of PlayCanvas.
-- The future connected backend direction is Nakama plus PostgreSQL, but the first client must remain runnable without a deployed backend.
-- Vercel hosts the browser client, not the eventual authoritative game server.
-- Offline and Connected World characters will be separate.
-- Level 0 normally isolates players; the Manila Room is the primary realtime rendezvous.
-- Ordinary Level 0 should not use routine Hound or Faceling encounters.
-- Items are primarily found rather than granted universally.
-- A new character has a tunable chance to begin with no item, one item, or two compatible random items.
-- Inventory and item instances must be designed for future trading.
-- Project Noclip uses World Day and Exposure Day progression.
-- Marker drawings are limited, vector-based, persistent according to spatial stability, and moderation-ready.
-- Every build iteration must test continuously and end by updating project memory and rewriting the next build prompt.
+## Partial/stubbed
 
-## 4. Intended starter item probabilities
+- Primitive PlayCanvas entities are not yet batched or instanced; real draw-call cost requires deployed verification.
+- Generator has an active ring but no separate topology-prefetch ring or worker.
+- Hole sections are safe visual prototypes.
+- Marker renderer uses sampled marks rather than connected stroke geometry.
+- String does not render a physical trail.
+- Note editor is deferred.
+- Glow-stick decay is not yet simulated over persisted time.
+- Pry tool only reports contextual readiness.
+- Exit destinations are recorded but full destination levels/capsules are not built.
+- Manila Room is local only; no realtime presence/chat/trading.
+- World Lab does not yet include a top-down graph or JSON import.
+- Audio and geometry are original procedural placeholders rather than final assets.
 
-These are initial tunable defaults:
+## Verification
 
-- 15% no starter object.
-- 60% one starter object.
-- 25% two compatible starter objects.
-
-Starter pool:
-
-- Flashlight.
-- Battery.
-- Almond Water.
-- Permanent marker.
-- Paper note.
-- Glow stick.
-- String spool.
-- Empty bottle or can.
-- Pry tool at very low weight.
-
-Rules:
-
-- Starter selection is deterministic from the character seed or authoritative server roll.
-- Refreshing cannot reroll a connected or persisted local character.
-- Duplicate starter objects are normally prevented.
-- Some combinations are intentionally incomplete, such as receiving a battery without a flashlight.
-- All objects also exist as discoverable world loot.
-- Valuable objects remain scarce.
-
-## 5. Immediate milestone
-
-Create the first polished Level 0 vertical slice and deployable foundation.
-
-The first implementation pass should include:
-
-- Vite + TypeScript project.
-- PlayCanvas Engine client.
-- First-person movement and pointer lock.
-- Procedural deterministic Level 0.
-- Chunk streaming and unloading.
-- Basic collision.
-- Fluorescent lighting and spatial ambience.
-- Baseline room, corridor, junction, and rare landmark modules.
-- Seeded sparse item nodes.
-- Random one-time starter roll.
-- Inventory and item persistence.
-- Flashlight and battery.
-- Almond Water.
-- Marker drawing on approved surfaces.
-- Notes, glow sticks, string, empty containers, and pry tool as data-driven objects.
-- IndexedDB or equivalent local persistence.
-- World Day and Exposure Day prototype.
-- Peripheral shifting outside observation.
-- Exit threshold registry and visual stubs.
-- Manila Room placeholder or local special room.
-- Hallucination event system.
-- World Lab developer panel.
-- Unit tests, browser smoke testing, and build verification.
-- Vercel-ready configuration.
-- Updated documentation and next-iteration prompt.
-
-## 6. Acceptance criteria for the first pass
-
-- `npm install`, `npm run typecheck`, `npm test`, and `npm run build` work.
-- A player can enter first person and explore.
-- The world continues generating without a visible hard boundary.
-- The same seed recreates the same untouched topology.
-- Distant cells unload and ordinary traversal does not create unbounded memory growth.
-- A new character receives the starter roll only once.
-- Items can be discovered, picked up, dropped, inspected, and restored after reload.
-- Flashlight charge persists.
-- Marker strokes are limited and persist according to the current shift epoch.
-- World Day uses an authority abstraction rather than trusting arbitrary client writes.
-- Exposure progress is derived from route novelty in unstable zones and elapsed authority time in stable zones.
-- Architecture shifts only outside observation and protected stable regions.
-- Several exits exist in the registry, even when destinations are transition capsules.
-- Production output is suitable for Vercel static deployment.
-- No routine enemy chase is introduced.
-- Documentation distinguishes complete, partial, stubbed, deferred, and broken systems honestly.
-
-## 7. Recommended initial structure
+Commands passed locally:
 
 ```text
-src/
-  app/
-  engine/
-  renderer/
-  world/
-  generation/
-  simulation/
-  items/
-  inventory/
-  interactions/
-  persistence/
-  protocol/
-  content/
-  audio/
-  ui/
-  developer/
-  adapters/
-  tests/
-docs/
-content/
-services/
-  nakama/
+npm run typecheck
+npm test
+npm run benchmark
+npm run build
 ```
 
-A simpler structure is acceptable when it preserves dependency direction and increases delivery speed.
+Results:
 
-## 8. Known risks
+- TypeScript: pass.
+- Tests: 9 passed, 0 failed.
+- Generator benchmark: 10,000 cells, 78,718 walls, 1,471 spawned loot items, 0 connector errors, 242.87 ms total (24.29 μs/cell), approximately 5.25 MB heap in the benchmark process.
+- Build: pass through the TypeScript static fallback because the environment npm registry did not expose Vite/PlayCanvas packages.
+- Browser smoke: title, new journey, persisted starter creation, six inventory slots, timeline HUD, 49 loaded cells, and World Lab opened with no page or console errors under the test renderer.
 
-- The exact Vercel project slug may be unavailable.
-- Browser memory and draw calls can become limiting if modules are not instanced and unloaded correctly.
-- Freehand marker data can become abusive or too large without strict quotas.
-- Procedural generation may look repetitive if topology, material variation, and landmarks are not independently controlled.
-- Client-only progression is modifiable; Connected World authority must eventually live on the server.
-- ShareAlike and third-party asset licensing requires a canon and asset ledger.
-- Attempting production multiplayer during the first vertical slice will reduce world quality.
-- PlayCanvas editor-cloud workflows and a repo-first npm client are different; the first pass intentionally chooses repo-first.
+## Known defects/risks
 
-## 9. Deferred systems
+- Actual installed PlayCanvas runtime and real WebGL output are not yet verified in this environment.
+- Default radius creates hundreds of primitive render entities; optimisation is the next priority.
+- Collision is intentionally simple and may snag around complex future modules.
+- Save writes are periodic but not yet queued against overlapping asynchronous writes.
+- Local mode is modifiable and must never be treated as Connected World authority.
+- Final media/licensing review remains outstanding.
 
-- Production Nakama deployment.
-- Real accounts and entitlement checks.
-- Realtime Manila Room matching.
-- Trading UI and atomic server-side trades.
-- Regional encounter mesh.
-- Proximity voice.
-- Subscription billing.
-- Full destination levels.
-- Hound breach event.
-- Facelings.
-- Production moderation tools.
-- Native client.
-- User-created content.
+## Deployment
 
-## 10. Latest verified commit
+Pending Vercel creation/deployment and real-browser verification. Replace this section with the exact deployment URL, build result, and public smoke test before closing the release handoff.
 
-- Branch: `main`
-- Latest verified documentation bundle commit before this state update: `fadd98a4a2d6b0b14e19e36aad5ff26b581992bb`
-- That commit added `MASTER_BUILD_PROMPT.md` after the remaining project documents were committed.
-- No implementation commit exists yet.
+## Next three tasks
 
-## 11. Working commands
+1. Verify the real PlayCanvas/Vite deployment and correct renderer/API issues.
+2. Batch/instance the modular environment and measure long-traversal performance.
+3. Finish marker/note/string/glow/pry interactions and add transition capsules.
 
-None yet. No package manifest exists.
+## Mandatory handoff
 
-## 12. Current deployment
-
-Not deployed or verified.
-
-## 13. Implemented systems
-
-None. Documentation only.
-
-## 14. Partial or stubbed systems
-
-None in code. Architecture and requirements are specified in documentation.
-
-## 15. Known defects
-
-- No runnable game exists yet.
-- No automated tests exist yet.
-- No deployment exists yet.
-
-## 16. Next three tasks
-
-1. Execute `START_BUILD_PROMPT.md` and `MASTER_BUILD_PROMPT.md` against this repository.
-2. Establish the runnable TypeScript/PlayCanvas foundation, deterministic world core, and continuous test loop.
-3. Produce and verify the first Vercel-deployable Level 0 vertical slice, then rewrite the build prompt for the next iteration.
-
-## 17. Mandatory handoff protocol
-
-At the end of every implementation iteration:
-
-- Replace stale statements in this file with verified facts.
-- Review `docs/VISION.md` and update only durable product learning.
-- Update specifications, decisions, and content requirements where reality changed.
-- Rewrite `MASTER_BUILD_PROMPT.md` for the next implementation objective.
-- Preserve continuous testing, Git, deployment, and documentation closure in every future prompt.
+Every iteration must replace stale facts here, review the vision, synchronize the specification/decisions/content ledger, rewrite `MASTER_BUILD_PROMPT.md` for the next iteration, rerun verification, and commit/push the complete handoff.

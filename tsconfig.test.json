@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rootDir": ".",
+    "outDir": ".test-dist",
+    "noEmit": false,
+    "sourceMap": true,
+    "declaration": false,
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": [
+    "src/world/**/*.ts",
+    "src/items/**/*.ts",
+    "src/inventory/**/*.ts",
+    "src/simulation/**/*.ts",
+    "src/persistence/types.ts",
+    "src/protocol/**/*.ts"
+  ],
+  "exclude": [
+    "src/items/runtime.ts"
+  ]
+}

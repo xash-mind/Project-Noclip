@@ -1,63 +1,42 @@
 # Project Noclip — Content Needed
 
-**Last updated:** 2026-08-03
+**Last updated:** 2026-08-03 — after Iteration 1
 
-Do not block the first vertical slice on final art. Use clearly documented original procedural or temporary assets.
+The first vertical slice uses original procedural geometry, materials, and Web Audio placeholders. No external art is required to run it, but the following content is needed for a visually credible alpha.
 
-## Level 0 environment
+## Highest priority modular Level 0 kit
 
-- Original seamless dirty-yellow wallpaper texture.
-- Original damp carpet texture with normal/roughness maps.
-- Ceiling tile texture.
-- Fluorescent fixture model.
-- Arch-room module variants.
-- Pillar-field module variants.
-- Manila Room material identity.
-- Exit-threshold props and signs.
-- Cardboard boxes, chairs, cabinets, ceiling tiles, outlets, vents, and miscellaneous clutter.
+- Seamless original dirty-yellow wallpaper with normal/roughness variation.
+- Damp carpet material with subtle wetness variants.
+- Ceiling tile grid and damaged variants.
+- Efficient fluorescent fixture mesh and emissive material.
+- Wall, doorway, corner, arch, pillar, and offset-opening modules designed for batching/instancing.
+- Manila Room material and furniture identity.
+- Emergency, greenhouse, weak-wall, floor-breach, and anomalous-wall threshold modules.
 
-## Items
+## Item models/icons
 
-- Flashlight model.
-- Battery model.
-- Almond Water bottle design.
-- Permanent marker model.
-- Paper note model.
-- Glow stick model.
-- String spool model.
-- Empty bottle/can variants.
-- Pry tool model.
+- Flashlight, battery, Almond Water bottle, marker, note, glow stick, string spool, empty can, and pry tool.
+- Compact readable inventory icons.
 
 ## Audio
 
-- Layered fluorescent hum.
-- Fixture-specific buzz variations.
-- Damp carpet footsteps.
-- Dry/stable-room footsteps.
-- Distant impacts.
-- Scratching.
-- Electrical failures.
-- Object pickup/drop.
-- Flashlight toggle.
-- Marker stroke.
-- Manila Room ambience.
-- Reduced-flicker alternative.
+- Layered fluorescent hum recordings.
+- Damp and dry footsteps.
+- Fixture buzz/failure variations.
+- Distant impacts, scratches, object pickup/drop, marker strokes, flashlight toggle, and Manila Room room tone.
+- Reduced-flicker and reduced-intensity alternatives.
 
-## UI
+## Interaction/content work
 
-- Project Noclip wordmark.
-- Item icons.
-- Timeline/watch visual language.
-- Interaction sounds.
-- Accessibility icon set.
+- Safe paper-note editor and note visual presentation.
+- Rendered string trail system.
+- Glow-stick decay visuals.
+- Pryable wall/floor/vent/container variants.
+- Connected marker stroke mesh or decal renderer.
+- Destination transition capsules for Levels 1, 2, 13, 14, 27, and 483.
+- Top-down debug topology view and tuning-profile import UI.
 
 ## Licensing ledger
 
-For every non-original asset record:
-
-- Creator.
-- Source URL.
-- Exact licence.
-- Required attribution.
-- Whether modification and commercial use are allowed.
-- Whether ShareAlike applies.
+For every non-original asset record creator, source, exact licence, attribution, commercial/modification permission, and ShareAlike implications before committing the asset.

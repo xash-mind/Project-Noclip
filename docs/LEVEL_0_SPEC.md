@@ -1,8 +1,36 @@
 # Project Noclip — Level 0 Game Specification
 
-**Version:** 0.1  
-**Status:** Initial implementation authority  
+**Version:** 0.2  
+**Status:** Implemented foundation with explicit partial systems  
 **Last updated:** 2026-08-03
+
+
+## 0. Iteration 1 implementation matrix
+
+### Implemented and verified
+
+- Seeded cell topology with symmetric connectors and fixed-seed replay.
+- Streamed active cell radius with unloading and persistent shift epochs.
+- Baseline, arch, pillar, blackout, hole, Manila, and exit-threshold profiles.
+- Sparse deterministic loot nodes and one-time 15/60/25 starter rolls.
+- Trade-ready item instances, six-slot inventory, pickup, drop, use, and revisions.
+- Functional flashlight, batteries, Almond Water, and limited vector marker strokes.
+- Data/minimal interactions for notes, glow sticks, string, empty cans, and pry tools.
+- Version-1 local persistence with IndexedDB and restricted-origin fallback.
+- World Day, traversal-weighted Exposure Day, stable-room time, content gates, and exit registry.
+- Local Manila Room, several non-Level-1 thresholds, ambiguous hallucination anchors, and World Lab.
+- Deterministic tests, 10,000-cell benchmark, production build path, and CI workflow.
+
+### Partial or intentionally deferred
+
+- Rendering currently uses primitive entities and shared materials rather than batching/instancing.
+- Hole sections are visual-safe prototypes, not terminal falls.
+- String is represented as resource use and narrative feedback, not a rendered trail.
+- Note text editing, glow-stick decay, and pry-tool breach interactions are incomplete.
+- Marker strokes render as sampled marks rather than connected stroke meshes.
+- Exit destinations record pending transitions but do not contain full destination levels.
+- Manila Room has local stable behaviour and protocol boundaries, not realtime multiplayer.
+- Topology generation runs on the main thread; worker generation and topology prefetch remain future work.
 
 ## 1. Purpose
 
@@ -212,7 +240,7 @@ Objects may appear:
 - Inside boxes or cabinets.
 - Near abandoned furniture.
 - Beside electrical outlets.
-- In arch-room recesses.
+- In arch room recesses.
 - Near failed lights.
 - At dead ends.
 - In threshold zones.
@@ -444,7 +472,7 @@ Allowed events:
 - Distant silhouette.
 - Footsteps that copy the player.
 - Brief movement beyond an opening.
-- Growl with no source.
+- Growl without source.
 - Familiar but non-actionable voice fragment.
 - Shadow behind translucent material.
 - Light failure suggesting movement.
@@ -507,5 +535,5 @@ Create an in-browser developer panel with:
 - Exit registry and several threshold visuals.
 - Hallucination system.
 - World Lab.
-- Tests for seed determinism, starter roll stability, save migration, exit gate evaluation, and shift eligibility.
+- Tests for seed determinism, starter roll stability, save migration, and exit gate evaluation.
 - Honest documentation of stubs and deferred systems.

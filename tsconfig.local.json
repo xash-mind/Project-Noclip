@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "moduleResolution": "Bundler",
+    "rootDir": ".",
+    "outDir": "dist",
+    "noEmit": false,
+    "sourceMap": true,
+    "declaration": false,
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": ["src/**/*.ts"]
+}

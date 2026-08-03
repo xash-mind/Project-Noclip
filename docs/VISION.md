@@ -1,7 +1,7 @@
 # Project Noclip — Vision
 
 **Status:** Foundational product vision  
-**Last updated:** 2026-08-03  
+**Last updated:** 2026-08-03 — Iteration 1 implementation review  
 **Target public client:** `https://project-noclip.vercel.app`  
 **Primary initial release:** Project Noclip — Level 0 Alpha
 
@@ -297,8 +297,6 @@ Every milestone should end with:
 - No knowingly broken main branch.
 - Clear documentation of placeholders, missing assets, and deferred systems.
 
-Every implementation iteration must also review this vision, update it only with durable lessons, and rewrite `MASTER_BUILD_PROMPT.md` so the next build session begins from verified reality rather than stale instructions.
-
 ## 15. Licensing and source policy
 
 Backrooms community sources may use ShareAlike licences and individual media can have separate terms.
@@ -311,3 +309,13 @@ Project policy:
 - Record every third-party asset and exact licence.
 - Do not assume a page-wide licence automatically covers every image.
 - Complete a formal licensing review before commercial release.
+
+## 16. Durable lessons from the first implementation
+
+The first vertical slice validated several implementation principles:
+
+- A pure deterministic world core makes generation, item scarcity, exit gates, and shift logic testable without a renderer.
+- Persistence must fail safely. IndexedDB remains primary, but the client should degrade to local or in-memory storage when browser security policy blocks it rather than preventing the title screen from loading.
+- Fixed-seed tests and World Lab are not secondary developer conveniences; they are part of the production method for a world whose consistency matters more than handcrafted spectacle.
+- Primitive geometry is sufficient to validate scale and systems, but it is not the intended final visual language. The next stage must reduce render-object count and replace generic primitives with a compact modular Level 0 kit without moving world authority into the renderer.
+- The project should continue shipping vertical slices in which incomplete systems are exposed honestly rather than hidden behind fabricated polish.
