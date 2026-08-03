@@ -1,88 +1,84 @@
 import { migrateSave, type SaveData } from './types.js';
 
-export interface SaveStore {
-  load(): Promise<SaveData | undefined>;
-  save(data: SaveData): Promise<void>;
-  clear(): Promise<void>;
-}
-
 const DB_NAME = 'project-noclip';
-const STORE_NAME = 'saves';
+const STORE_NAME = 'journey';
 const SAVE_KEY = 'local-character';
+const FALLBACK_KEY = 'project-noclip-save-v2';
 
-export class IndexedDbSaveStore implements SaveStore {
-  private database?: Promise<IDBDatabase>;
-  private fallbackValue?: SaveData;
+export class IndexedDbSaveStore {
+  private memory?: SaveData;
+  private writeChain: Promise<void> = Promise.resolve();
 
-  private fallbackLoad(): SaveData | undefined {
+  async load(): Promise<SaveData | undefined> {
     try {
-      const raw = globalThis.localStorage?.getItem(SAVE_KEY);
-      if (raw) return migrateSave(JSON.parse(raw));
-    } catch { /* opaque or restricted origin */ }
-    return this.fallbackValue ? structuredClone(this.fallbackValue) : undefined;
+      const db = await this.open();
+      const value = await new Promise<unknown>((resolve, reject) => {
+        const request = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).get(SAVE_KEY);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const migrated = migrateSave(value);
+      if (migrated) return structuredClone(migrated);
+    } catch {
+      // Restricted origins and privacy modes may block IndexedDB.
+    }
+    try {
+      const raw = localStorage.getItem(FALLBACK_KEY);
+      if (raw) {
+        const migrated = migrateSave(JSON.parse(raw));
+        if (migrated) return structuredClone(migrated);
+      }
+    } catch {
+      // Storage may also be denied. Memory fallback keeps the session playable.
+    }
+    return this.memory ? structuredClone(this.memory) : undefined;
   }
 
-  private fallbackSave(data: SaveData): void {
-    this.fallbackValue = structuredClone(data);
-    try { globalThis.localStorage?.setItem(SAVE_KEY, JSON.stringify(data)); } catch { /* memory fallback remains */ }
+  save(save: SaveData): Promise<void> {
+    const snapshot = structuredClone(save);
+    this.writeChain = this.writeChain.then(async () => {
+      this.memory = snapshot;
+      try {
+        const db = await this.open();
+        await new Promise<void>((resolve, reject) => {
+          const transaction = db.transaction(STORE_NAME, 'readwrite');
+          transaction.objectStore(STORE_NAME).put(snapshot, SAVE_KEY);
+          transaction.oncomplete = () => resolve();
+          transaction.onerror = () => reject(transaction.error);
+        });
+        return;
+      } catch {
+        try { localStorage.setItem(FALLBACK_KEY, JSON.stringify(snapshot)); } catch { /* memory fallback already set */ }
+      }
+    });
+    return this.writeChain;
   }
 
-  private fallbackClear(): void {
-    this.fallbackValue = undefined;
-    try { globalThis.localStorage?.removeItem(SAVE_KEY); } catch { /* restricted origin */ }
+  async clear(): Promise<void> {
+    await this.writeChain;
+    this.memory = undefined;
+    try {
+      const db = await this.open();
+      await new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction(STORE_NAME, 'readwrite');
+        transaction.objectStore(STORE_NAME).delete(SAVE_KEY);
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+      });
+    } catch { /* ignore */ }
+    try { localStorage.removeItem(FALLBACK_KEY); } catch { /* ignore */ }
   }
 
   private open(): Promise<IDBDatabase> {
-    if (this.database) return this.database;
-    this.database = new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, 1);
+    if (typeof indexedDB === 'undefined') return Promise.reject(new Error('IndexedDB unavailable'));
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, 2);
       request.onupgradeneeded = () => {
         const db = request.result;
         if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
       };
       request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error ?? new Error('Could not open save database'));
-    });
-    return this.database;
-  }
-
-  async load(): Promise<SaveData | undefined> {
-    let db: IDBDatabase;
-    try { db = await this.open(); } catch { return this.fallbackLoad(); }
-    const raw = await new Promise<unknown>((resolve, reject) => {
-      const request = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).get(SAVE_KEY);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error ?? new Error('Could not read save'));
-    });
-    return migrateSave(raw);
-  }
-
-  async save(data: SaveData): Promise<void> {
-    let db: IDBDatabase;
-    try { db = await this.open(); } catch { this.fallbackSave(data); return; }
-    await new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction(STORE_NAME, 'readwrite');
-      transaction.objectStore(STORE_NAME).put(structuredClone(data), SAVE_KEY);
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error ?? new Error('Could not write save'));
+      request.onerror = () => reject(request.error);
     });
   }
-
-  async clear(): Promise<void> {
-    let db: IDBDatabase;
-    try { db = await this.open(); } catch { this.fallbackClear(); return; }
-    await new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction(STORE_NAME, 'readwrite');
-      transaction.objectStore(STORE_NAME).delete(SAVE_KEY);
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error ?? new Error('Could not clear save'));
-    });
-  }
-}
-
-export class MemorySaveStore implements SaveStore {
-  private value?: SaveData;
-  async load(): Promise<SaveData | undefined> { return this.value ? structuredClone(this.value) : undefined; }
-  async save(data: SaveData): Promise<void> { this.value = structuredClone(data); }
-  async clear(): Promise<void> { this.value = undefined; }
 }

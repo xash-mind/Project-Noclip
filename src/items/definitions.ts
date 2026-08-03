@@ -1,25 +1,10 @@
 export type ItemDefinitionId =
-  | 'flashlight'
-  | 'battery'
-  | 'almond-water'
-  | 'marker'
-  | 'paper-note'
-  | 'glow-stick'
-  | 'string-spool'
-  | 'empty-can'
-  | 'pry-tool';
-
+  | 'flashlight' | 'battery' | 'almond-water' | 'marker' | 'paper-note'
+  | 'glow-stick' | 'string-spool' | 'empty-can' | 'pry-tool';
 export interface ItemDefinition {
-  id: ItemDefinitionId;
-  name: string;
-  description: string;
-  starterWeight: number;
-  worldWeight: number;
-  highValue: boolean;
-  tradeable: boolean;
-  color: [number, number, number];
+  id: ItemDefinitionId; name: string; description: string; starterWeight: number;
+  worldWeight: number; highValue: boolean; tradeable: boolean; color: [number, number, number];
 }
-
 export const ITEM_DEFINITIONS: Record<ItemDefinitionId, ItemDefinition> = {
   flashlight: { id: 'flashlight', name: 'Flashlight', description: 'A battered torch. Its battery is never as full as it looks.', starterWeight: 8, worldWeight: 7, highValue: true, tradeable: true, color: [0.15, 0.16, 0.16] },
   battery: { id: 'battery', name: 'Battery', description: 'A compatible cell with uncertain remaining charge.', starterWeight: 11, worldWeight: 12, highValue: false, tradeable: true, color: [0.16, 0.19, 0.12] },

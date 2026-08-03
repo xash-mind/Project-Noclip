@@ -1,40 +1,64 @@
 declare module 'playcanvas' {
-  export class Color { constructor(r?: number, g?: number, b?: number, a?: number); r: number; g: number; b: number; a: number; }
-  export class Vec3 { constructor(x?: number, y?: number, z?: number); x: number; y: number; z: number; clone(): Vec3; copy(v: Vec3): Vec3; set(x: number, y: number, z: number): Vec3; add(v: Vec3): Vec3; sub(v: Vec3): Vec3; scale(v: number): Vec3; normalize(): Vec3; length(): number; dot(v: Vec3): number; }
-  export class Quat { setFromEulerAngles(x: number, y: number, z: number): Quat; transformVector(v: Vec3, out?: Vec3): Vec3; }
-  export class StandardMaterial { diffuse: Color; emissive: Color; emissiveIntensity: number; gloss: number; metalness: number; opacity: number; blendType: number; depthWrite: boolean; update(): void; }
+  export const RESOLUTION_AUTO: string;
+  export const FILLMODE_FILL_WINDOW: string;
+  export const ADDRESS_REPEAT: number;
+  export const FILTER_LINEAR: number;
+  export const FILTER_LINEAR_MIPMAP_LINEAR: number;
+  export const FOG_LINEAR: string;
+  export class Color { constructor(r?: number, g?: number, b?: number, a?: number); }
+  export class Vec2 { constructor(x?: number, y?: number); x: number; y: number; }
+  export class Texture {
+    constructor(device: unknown, options?: Record<string, unknown>);
+    setSource(source: CanvasImageSource): void;
+    addressU: number;
+    addressV: number;
+    minFilter: number;
+    magFilter: number;
+  }
+  export class StandardMaterial {
+    diffuse: Color;
+    emissive: Color;
+    emissiveIntensity: number;
+    gloss: number;
+    metalness: number;
+    opacity: number;
+    diffuseMap?: Texture;
+    diffuseMapTiling?: Vec2;
+    update(): void;
+  }
   export class Entity {
     constructor(name?: string);
     name: string;
     enabled: boolean;
-    camera?: any;
-    light?: any;
-    render?: any;
+    render?: { material: StandardMaterial };
+    light?: { intensity: number; range: number; color: Color };
     addComponent(type: string, data?: Record<string, unknown>): void;
-    addChild(entity: Entity): void;
-    destroy(): void;
-    setPosition(x: number | Vec3, y?: number, z?: number): void;
-    setLocalPosition(x: number | Vec3, y?: number, z?: number): void;
-    getPosition(): Vec3;
+    addChild(child: Entity): void;
+    setPosition(x: number, y: number, z: number): void;
+    setLocalPosition(x: number, y: number, z: number): void;
+    setLocalScale(x: number, y: number, z: number): void;
     setEulerAngles(x: number, y: number, z: number): void;
     setLocalEulerAngles(x: number, y: number, z: number): void;
-    setLocalScale(x: number, y: number, z: number): void;
-    getRotation(): Quat;
-    forward: Vec3;
+    getPosition(): { x: number; y: number; z: number };
+    destroy(): void;
   }
   export class Application {
     constructor(canvas: HTMLCanvasElement, options?: Record<string, unknown>);
     root: Entity;
-    scene: any;
-    graphicsDevice: any;
-    stats: any;
-    setCanvasResolution(mode: number): void;
-    setCanvasFillMode(mode: number): void;
+    scene: {
+      ambientLight: Color;
+      skyboxIntensity: number;
+      fog?: string;
+      fogColor?: Color;
+      fogStart?: number;
+      fogEnd?: number;
+    };
+    graphicsDevice: unknown;
+    stats?: { drawCalls?: { total?: number } };
+    setCanvasResolution(mode: string): void;
+    setCanvasFillMode(mode: string): void;
+    resizeCanvas(): void;
+    on(event: string, callback: (dt: number) => void): void;
     start(): void;
-    on(name: string, callback: (dt: number) => void): void;
-    resizeCanvas(width?: number, height?: number): void;
   }
-  export const FILLMODE_FILL_WINDOW: number;
-  export const RESOLUTION_AUTO: number;
-  export const BLEND_NORMAL: number;
 }

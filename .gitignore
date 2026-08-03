@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .test-dist/
+.local-dist/
 .vercel/
 *.log
 .DS_Store

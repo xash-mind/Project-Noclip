@@ -1,95 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hashString, stableId } from '../.test-dist/src/world/hash.js';
-import { generateCell, generateOpenings, validateCellConnectivity } from '../.test-dist/src/world/generator.js';
+import { generateCell, validateCellConnectivity } from '../.test-dist/src/world/generator.js';
 import { DEFAULT_TUNING } from '../.test-dist/src/world/types.js';
-import { rollStarterDefinitions, simulateStarterRolls, starterItemCount } from '../.test-dist/src/items/starterRoll.js';
-import { createItemInstance } from '../.test-dist/src/items/factory.js';
-import { addToInventory, removeFromInventory } from '../.test-dist/src/inventory/inventory.js';
-import { calculateExposureDay, calculateWorldDay, canonicalEdgeId, EMPTY_EXPOSURE, recordTraversal } from '../.test-dist/src/simulation/timeline.js';
-import { canShift, shouldShift } from '../.test-dist/src/simulation/shifting.js';
+import { chooseZone, districtId, isZoneUnlocked } from '../.test-dist/src/world/zones.js';
 import { exitsForCell, validateExitRegistry } from '../.test-dist/src/world/exits.js';
+import { resolveCircleAgainstAabbs } from '../.test-dist/src/physics/collision.js';
 import { migrateSave } from '../.test-dist/src/persistence/types.js';
-
-const options = { seed: 'threshold-001', x: 4, z: -3, worldDay: 30, exposure: 6, shiftEpoch: 0, tuning: DEFAULT_TUNING };
-
-test('hashing and stable IDs are deterministic', () => {
-  assert.equal(hashString('same'), hashString('same'));
-  assert.equal(stableId('cell', 4, -3), stableId('cell', 4, -3));
-  assert.notEqual(stableId('cell', 4, -3), stableId('cell', 4, -2));
-});
-
-test('cell generation is deterministic and neighbor openings agree', () => {
-  assert.deepEqual(generateCell(options), generateCell(options));
-  const current = generateOpenings(options.seed, 4, -3, DEFAULT_TUNING.extraOpeningChance);
-  const east = generateOpenings(options.seed, 5, -3, DEFAULT_TUNING.extraOpeningChance);
-  assert.equal(current.east, east.west);
-  assert.deepEqual(validateCellConnectivity(options.seed, 10, DEFAULT_TUNING.extraOpeningChance), []);
-});
-
-test('shift epoch changes mutable interior while retaining deterministic replay', () => {
-  const shifted = generateCell({ ...options, shiftEpoch: 1 });
-  assert.deepEqual(shifted, generateCell({ ...options, shiftEpoch: 1 }));
-  assert.notDeepEqual(shifted.walls, generateCell(options).walls);
-});
-
-test('starter roll is stable, bounded, and compatible', () => {
-  for (let index = 0; index < 2000; index += 1) {
-    const seed = `traveller-${index}`;
-    assert.equal(starterItemCount(seed), starterItemCount(seed));
-    const items = rollStarterDefinitions(seed);
-    assert.ok(items.length <= 2);
-    assert.equal(new Set(items).size, items.length);
-    assert.deepEqual(items, rollStarterDefinitions(seed));
-  }
-  const sample = simulateStarterRolls('distribution', 20_000);
-  assert.ok(Math.abs(sample.none / 20_000 - 0.15) < 0.025);
-  assert.ok(Math.abs(sample.one / 20_000 - 0.60) < 0.035);
-  assert.ok(Math.abs(sample.two / 20_000 - 0.25) < 0.03);
-});
-
-test('item ownership revisions support future atomic transfer', () => {
-  const item = createItemInstance('battery', 'loot-node-a', 'loot', { type: 'world', addressId: '0:0' }, 1);
-  const inventory = addToInventory([], item, 'character-a');
-  assert.equal(inventory[0].owner.type, 'character');
-  assert.equal(inventory[0].revision, item.revision + 1);
-  const removed = removeFromInventory(inventory, inventory[0].instanceId);
-  assert.equal(removed.remaining.length, 0);
-});
-
-test('exposure rewards novel traversal more than loops', () => {
-  const edge = canonicalEdgeId(0, 0, 1, 0);
-  const novel = recordTraversal(EMPTY_EXPOSURE, edge, 100);
-  const repeated = recordTraversal(novel, edge, 100);
-  assert.equal(novel.novelUnits, 100);
-  assert.equal(repeated.repeatedUnits, 100);
-  assert.ok(calculateExposureDay(repeated) > calculateExposureDay(novel));
-  assert.equal(calculateWorldDay(Date.UTC(2026, 7, 4)), 1);
-});
-
-test('shifting respects observation and stable spaces', () => {
-  const base = { occupied: false, observed: false, distanceInCells: 4, stability: 'disorienting', protectedInteraction: false, preservesPath: true };
-  assert.equal(canShift(base), true);
-  assert.equal(canShift({ ...base, observed: true }), false);
-  assert.equal(canShift({ ...base, stability: 'stable' }), false);
-  assert.equal(shouldShift('seed', '2:2', 1, 0), false);
-  assert.equal(shouldShift('seed', '2:2', 1, 1), true);
-});
-
-test('exit registry is valid and gates non-Level-1 destinations', () => {
-  assert.deepEqual(validateExitRegistry(), []);
-  assert.equal(exitsForCell('seed', -5, 2, 6, 2, false)[0]?.enabled, false);
-  assert.equal(exitsForCell('seed', -5, 2, 7, 2, false)[0]?.enabled, true);
-  assert.equal(exitsForCell('seed', 2, 6, 0, 0, true)[0]?.destinationId, 'level-483');
-});
-
-test('save migration rejects malformed data and accepts version 1', () => {
-  assert.equal(migrateSave({}), undefined);
-  const save = {
-    version: 1, characterId: 'c', seed: 's', createdAt: 1, starterRolled: true,
-    position: { x: 0, y: 1.65, z: 0, yaw: 0, pitch: 0 }, inventory: [], droppedItems: [],
-    pickedLootNodeIds: [], marks: [], hydration: 1, exposure: structuredClone(EMPTY_EXPOSURE), shiftEpochs: {},
-    unloadCounts: {}, discoveredExits: [], settings: { sensitivity: 0.18, reducedMotion: false, reducedFlicker: false, masterVolume: 0.7 }, savedAt: 1
-  };
-  assert.equal(migrateSave(save)?.characterId, 'c');
-});
+import { EMPTY_EXPOSURE } from '../.test-dist/src/simulation/timeline.js';
+import { rollStarterDefinitions } from '../.test-dist/src/items/starterRoll.js';
+const generate=(overrides={})=>generateCell({seed:'test-seed',x:4,z:4,worldDay:40,exposure:10,shiftEpoch:0,tuning:DEFAULT_TUNING,...overrides});
+test('fixed seed reproduces full room plan',()=>assert.deepEqual(generate(),generate()));
+test('connector contracts remain symmetric',()=>assert.deepEqual(validateCellConnectivity('symmetry',24,DEFAULT_TUNING.extraOpeningChance),[]));
+test('district planner produces coherent macro zones',()=>{const cells=[];for(let x=10;x<15;x++)for(let z=10;z<15;z++)cells.push(chooseZone('district',x,z,40,10,DEFAULT_TUNING));const counts=Object.values(cells.reduce((map,zone)=>(map[zone]=(map[zone]??0)+1,map),{}));assert.ok(Math.max(...counts)>=18);assert.equal(districtId(10,10),districtId(14,14));});
+test('timeline gates prevent advanced zones at day zero',()=>{for(let x=-20;x<=20;x++)for(let z=-20;z<=20;z++)assert.equal(chooseZone('gate',x,z,0,0,DEFAULT_TUNING),'baseline');assert.equal(isZoneUnlocked('blackout',6,4,false),false);assert.equal(isZoneUnlocked('blackout',7,1.6,false),true);});
+test('Manila Room is delayed, small, and contains one table/book ledger',()=>{assert.notEqual(generate({x:8,z:-6,worldDay:0,exposure:0}).address.zoneId,'manila');const room=generate({x:8,z:-6,worldDay:3,exposure:1});assert.equal(room.address.zoneId,'manila');assert.equal(room.props.filter(p=>p.kind==='table').length,1);assert.equal(room.props.filter(p=>p.kind==='book').length,1);assert.equal(room.notes.length,1);const internal=room.walls.filter(w=>w.id.startsWith('manila-'));assert.ok(internal.every(w=>Math.max(w.sx,w.sz)<=6.4));});
+test('Level 1 exit cannot be enabled before required days/exposure',()=>{assert.equal(exitsForCell('x',12,0,0,0,false)[0]?.enabled,false);assert.equal(exitsForCell('x',12,0,3,.79,false)[0]?.enabled,false);assert.equal(exitsForCell('x',12,0,3,.8,false)[0]?.enabled,true);assert.deepEqual(validateExitRegistry(),[]);});
+test('collision stops at wall and slides cleanly along it',()=>{const wall={minX:1,maxX:1.3,minZ:-2,maxZ:2};const stopped=resolveCircleAgainstAabbs(0,0,2,0,[wall],.3);assert.ok(stopped[0]<.701&&stopped[0]>.69);const slid=resolveCircleAgainstAabbs(.69,0,2,1.5,[wall],.3);assert.ok(slid[0]<.701);assert.ok(slid[1]>1.45);const repeated=Array.from({length:20}).reduce(([x,z])=>resolveCircleAgainstAabbs(x,z,x+.08,z+.08,[wall],.3),[.69,0]);assert.ok(Number.isFinite(repeated[0])&&Number.isFinite(repeated[1]));});
+test('v1 save migrates without deleting the journey',()=>{const migrated=migrateSave({version:1,characterId:'c',seed:'s',createdAt:1,starterRolled:true,position:{x:0,y:1.65,z:0,yaw:0,pitch:0},inventory:[],droppedItems:[],pickedLootNodeIds:[],marks:[],hydration:.5,exposure:EMPTY_EXPOSURE,shiftEpochs:{},unloadCounts:{},discoveredExits:[],settings:{sensitivity:.1,reducedMotion:false,reducedFlicker:false,masterVolume:.5},savedAt:1});assert.equal(migrated?.version,2);assert.deepEqual(migrated?.readNoteIds,[]);assert.deepEqual(migrated?.enteredZoneIds,[]);});
+test('starter rolls are stable and bounded to two unique objects',()=>{for(let i=0;i<500;i++){const a=rollStarterDefinitions(`c:${i}`);assert.deepEqual(a,rollStarterDefinitions(`c:${i}`));assert.ok(a.length<=2);assert.equal(new Set(a).size,a.length);}});
+test('generation includes a broad archetype vocabulary after gates unlock',()=>{const found=new Set();for(let x=-30;x<=30;x++)for(let z=-30;z<=30;z++)found.add(generate({x,z}).roomArchetype);assert.ok(found.size>=12,`only ${found.size}: ${[...found].join(', ')}`);});

@@ -1,11 +1,1 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
-
-rmSync('dist', { recursive: true, force: true });
-execFileSync('tsc', ['-p', 'tsconfig.local.json'], { stdio: 'inherit' });
-mkdirSync('dist', { recursive: true });
-const html = readFileSync('index.html', 'utf8').replace('/src/main.ts', '/src/main.js');
-writeFileSync('dist/index.html', html);
-if (existsSync('public')) cpSync('public', 'dist', { recursive: true });
-cpSync('src/styles.css', 'dist/src/styles.css');
-console.log('Local fallback build completed in dist/.');
+import {cpSync,mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';import {spawnSync} from 'node:child_process';rmSync('.local-dist',{recursive:true,force:true});rmSync('dist',{recursive:true,force:true});const compile=spawnSync('tsc',['-p','tsconfig.local.json'],{stdio:'inherit'});if(compile.status!==0)process.exit(compile.status??1);mkdirSync('dist',{recursive:true});cpSync('.local-dist/src','dist/src',{recursive:true});const mainPath='dist/src/main.js';writeFileSync(mainPath,readFileSync(mainPath,'utf8').replace("import './styles.css';\n",''));cpSync('src/styles.css','dist/styles.css');writeFileSync('dist/index.html',`<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#17150e"><meta name="description" content="Project Noclip — a living procedural Backrooms world."><title>Project Noclip — Level 0</title><link rel="stylesheet" href="/styles.css"><script type="importmap">{"imports":{"playcanvas":"https://cdn.jsdelivr.net/npm/playcanvas@2.21.3/build/playcanvas.mjs"}}</script></head><body><canvas id="game-canvas" aria-label="Project Noclip game view"></canvas><div id="ui-root"></div><script type="module" src="/src/main.js"></script></body></html>`);console.log('Static fallback build created in dist/.');

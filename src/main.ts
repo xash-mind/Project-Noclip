@@ -1,8 +1,11 @@
+import './styles.css';
 import { ProjectNoclipGame } from './app/ProjectNoclipGame.js';
 
 const game = new ProjectNoclipGame();
-void game.initialize().catch((error: unknown) => {
+void game.initialize().then(() => {
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('autostart')) (document.querySelector('[data-action="new"]') as HTMLButtonElement | null)?.click();
+}).catch((error) => {
   console.error(error);
-  const root = document.querySelector<HTMLElement>('#ui-root');
-  if (root) root.innerHTML = `<div class="title-screen"><div class="title-card ui-panel"><p class="eyebrow">Project Noclip failed safely</p><h1>LOAD ERROR</h1><p class="subtitle">${error instanceof Error ? error.message : 'Unknown initialization error'}</p></div></div>`;
+  document.body.innerHTML = `<main class="fatal"><h1>LEVEL 0 FAILED TO RESOLVE</h1><p>${String(error instanceof Error ? error.message : error)}</p></main>`;
 });

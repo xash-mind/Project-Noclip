@@ -1,10 +1,8 @@
 name: Project Noclip CI
-
 on:
   push:
     branches: [main]
   pull_request:
-
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -14,13 +12,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
-      - name: Typecheck
-        run: npm run typecheck
-      - name: Deterministic tests
-        run: npm test
-      - name: Generator benchmark
-        run: node scripts/benchmark.mjs
-      - name: Production build
-        run: npm run build
+      - run: npm install --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run benchmark
+      - run: npm run build

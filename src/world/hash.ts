@@ -11,29 +11,22 @@ export function hashString(input: string): number {
   hash += hash << 5;
   return hash >>> 0;
 }
-
-export function unitFloat(key: string): number {
-  return hashString(key) / 0xffffffff;
+export function unitFloat(input: string): number { return hashString(input) / 0x100000000; }
+export function intInRange(input: string, min: number, maxExclusive: number): number {
+  return min + Math.floor(unitFloat(input) * Math.max(1, maxExclusive - min));
 }
-
-export function intInRange(key: string, min: number, maxInclusive: number): number {
-  const span = maxInclusive - min + 1;
-  return min + (hashString(key) % span);
+export function stableId(...parts: Array<string | number>): string {
+  const raw = parts.join(':');
+  return `${String(parts[0] ?? 'id')}-${hashString(raw).toString(36)}-${hashString(`${raw}:b`).toString(36)}`;
 }
-
-export function stableId(namespace: string, ...parts: Array<string | number>): string {
-  const raw = `${namespace}:${parts.join(':')}`;
-  return `${namespace}_${hashString(raw).toString(36).padStart(7, '0')}`;
-}
-
-export function weightedChoice<T extends { weight: number }>(key: string, entries: readonly T[]): T {
-  if (entries.length === 0) throw new Error('weightedChoice requires at least one entry');
+export function weightedChoice<T>(seed: string, entries: ReadonlyArray<{ value: T; weight: number }>): { value: T; weight: number } {
   const total = entries.reduce((sum, entry) => sum + Math.max(0, entry.weight), 0);
-  if (total <= 0) return entries[0]!;
-  let cursor = unitFloat(key) * total;
+  if (!entries.length || total <= 0) throw new Error('weightedChoice requires positive entries');
+  let roll = unitFloat(seed) * total;
   for (const entry of entries) {
-    cursor -= Math.max(0, entry.weight);
-    if (cursor <= 0) return entry;
+    roll -= Math.max(0, entry.weight);
+    if (roll <= 0) return entry;
   }
   return entries[entries.length - 1]!;
 }
+export function floorDiv(value: number, divisor: number): number { return Math.floor(value / divisor); }
