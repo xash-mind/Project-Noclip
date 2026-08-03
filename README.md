@@ -2,6 +2,8 @@
 
 A browser-first living Backrooms project focused on immense deterministic spaces, environmental consistency, scarce found objects, evolving timelines, and rare human connection.
 
+**Live Level 0 foundation:** https://project-noclip.vercel.app
+
 ## Current playable foundation
 
 The first Level 0 vertical slice includes:
@@ -29,7 +31,7 @@ Then open the displayed local URL and choose **Begin new local journey**.
 ```bash
 npm run typecheck
 npm test
-node scripts/benchmark.mjs
+npm run benchmark
 npm run build
 npm run preview
 ```
@@ -51,5 +53,3 @@ npm run preview
 ## Project memory
 
 Start implementation sessions with [`START_BUILD_PROMPT.md`](START_BUILD_PROMPT.md). The authoritative handoff is [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md), followed by the vision, Level 0 specification, decisions, and content ledger.
-
-Target browser deployment: `https://project-noclip.vercel.app`
