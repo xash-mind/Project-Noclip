@@ -16,6 +16,7 @@ import {
   type LootNode,
   type NoteSpec,
   type Openings,
+  type PropSpec,
   type RoomArchetype,
   type WallSpec,
   type WorldAddress,
@@ -29,6 +30,18 @@ const DIRECTIONS: Record<Direction, [number, number]> = {
   south: [0, 1],
   west: [-1, 0]
 };
+
+const PLAYER_ARRIVAL_CLEARANCE = 0.82;
+const LOOT_CLEARANCE = 0.38;
+const LOOT_PLACEMENT_ATTEMPTS = 48;
+
+interface PlacementBounds {
+  id: string;
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
 
 function parentOf(seed: string, x: number, z: number): [number, number] | undefined {
   if (x === 0 && z === 0) return undefined;
@@ -72,23 +85,92 @@ function maybeNotes(seed: string, x: number, z: number, archetype: RoomArchetype
   return [makeNote(stableId('note', seed, x, z), key, -4.4 + unitFloat(`${seed}:note-x:${x}:${z}`) * 8.8, -4.4 + unitFloat(`${seed}:note-z:${x}:${z}`) * 8.8, source)];
 }
 
-function lootForCell(seed: string, x: number, z: number, lootChance: number, archetype: RoomArchetype): LootNode[] {
+function wallBounds(wall: WallSpec): PlacementBounds {
+  return {
+    id: wall.id,
+    minX: wall.cx - wall.sx / 2,
+    maxX: wall.cx + wall.sx / 2,
+    minZ: wall.cz - wall.sz / 2,
+    maxZ: wall.cz + wall.sz / 2
+  };
+}
+
+function propBounds(prop: PropSpec): PlacementBounds {
+  const rotated = Math.abs((prop.rotationY ?? 0) % 180) > 45;
+  const sizeX = rotated ? prop.scale.z : prop.scale.x;
+  const sizeZ = rotated ? prop.scale.x : prop.scale.z;
+  return {
+    id: prop.id,
+    minX: prop.position.x - sizeX / 2,
+    maxX: prop.position.x + sizeX / 2,
+    minZ: prop.position.z - sizeZ / 2,
+    maxZ: prop.position.z + sizeZ / 2
+  };
+}
+
+function circleOverlapsBounds(x: number, z: number, radius: number, bounds: PlacementBounds): boolean {
+  return x + radius > bounds.minX && x - radius < bounds.maxX && z + radius > bounds.minZ && z - radius < bounds.maxZ;
+}
+
+function isClear(x: number, z: number, radius: number, occupied: readonly PlacementBounds[]): boolean {
+  return occupied.every((bounds) => !circleOverlapsBounds(x, z, radius, bounds));
+}
+
+function reserveOriginArrival(x: number, z: number, walls: readonly WallSpec[], props: readonly PropSpec[]): { walls: WallSpec[]; props: PropSpec[] } {
+  if (x !== 0 || z !== 0) return { walls: [...walls], props: [...props] };
+  return {
+    walls: walls.filter((wall) => !circleOverlapsBounds(0, 0, PLAYER_ARRIVAL_CLEARANCE, wallBounds(wall))),
+    props: props.filter((prop) => !prop.solid || !circleOverlapsBounds(0, 0, PLAYER_ARRIVAL_CLEARANCE, propBounds(prop)))
+  };
+}
+
+function solidBounds(walls: readonly WallSpec[], props: readonly PropSpec[]): PlacementBounds[] {
+  return [
+    ...walls.map(wallBounds),
+    ...props.filter((prop) => prop.solid).map(propBounds)
+  ];
+}
+
+function lootCandidate(id: string, attempt: number): { x: number; y: number; z: number } {
+  const xKey = attempt === 0 ? `${id}:x` : `${id}:placement:${attempt}:x`;
+  const zKey = attempt === 0 ? `${id}:z` : `${id}:placement:${attempt}:z`;
+  return {
+    x: -4.8 + unitFloat(xKey) * 9.6,
+    y: 0.28,
+    z: -4.8 + unitFloat(zKey) * 9.6
+  };
+}
+
+function findSafeLootPosition(id: string, occupied: readonly PlacementBounds[]): { x: number; y: number; z: number } | undefined {
+  for (let attempt = 0; attempt < LOOT_PLACEMENT_ATTEMPTS; attempt += 1) {
+    const candidate = lootCandidate(id, attempt);
+    if (isClear(candidate.x, candidate.z, LOOT_CLEARANCE, occupied)) return candidate;
+  }
+  return undefined;
+}
+
+function lootForCell(seed: string, x: number, z: number, lootChance: number, archetype: RoomArchetype, walls: readonly WallSpec[], props: readonly PropSpec[]): LootNode[] {
   const nodes: LootNode[] = [];
+  const occupied = solidBounds(walls, props);
   const weights = Object.values(ITEM_DEFINITIONS).map((definition) => ({ value: definition.id, weight: definition.worldWeight }));
   const count = archetype === 'wide-lobby' || archetype === 'maintenance-bay' ? 3 : 2;
   for (let index = 0; index < count; index += 1) {
     const id = stableId('loot', seed, x, z, index);
     const bonus = archetype === 'maintenance-bay' ? 1.2 : archetype === 'open-office' ? 1.05 : 0.85;
     const spawn = unitFloat(`${id}:spawn`) < lootChance * bonus * (index === 0 ? 1 : 0.42);
-    const node: LootNode = {
-      id,
-      localPosition: {
-        x: -4.8 + unitFloat(`${id}:x`) * 9.6,
-        y: 0.28,
-        z: -4.8 + unitFloat(`${id}:z`) * 9.6
-      }
-    };
-    if (spawn) node.spawnedDefinitionId = weightedChoice(`${id}:item`, weights).value as ItemDefinitionId;
+    const originalPosition = lootCandidate(id, 0);
+    const safePosition = spawn ? findSafeLootPosition(id, occupied) : originalPosition;
+    const node: LootNode = { id, localPosition: safePosition ?? originalPosition };
+    if (spawn && safePosition) {
+      node.spawnedDefinitionId = weightedChoice(`${id}:item`, weights).value as ItemDefinitionId;
+      occupied.push({
+        id,
+        minX: safePosition.x - LOOT_CLEARANCE,
+        maxX: safePosition.x + LOOT_CLEARANCE,
+        minZ: safePosition.z - LOOT_CLEARANCE,
+        maxZ: safePosition.z + LOOT_CLEARANCE
+      });
+    }
     nodes.push(node);
   }
   return nodes;
@@ -120,6 +202,7 @@ export function generateCell(options: GenerateCellOptions): CellDescriptor {
   for (const direction of Object.keys(DIRECTIONS) as Direction[]) walls.push(...boundaryWallParts(seed, x, z, direction, openings[direction], materialVariant));
   const layout = layoutFor(seed, x, z, archetype, shiftEpoch, variant);
   walls.push(...layout.walls);
+  const arrivalSafe = reserveOriginArrival(x, z, walls, layout.props);
   const noteSpecs = [...layout.notes, ...maybeNotes(seed, x, z, archetype)];
 
   return {
@@ -130,17 +213,41 @@ export function generateCell(options: GenerateCellOptions): CellDescriptor {
     variant,
     roomArchetype: archetype,
     roomLabel: layout.label,
-    walls,
-    props: layout.props,
+    walls: arrivalSafe.walls,
+    props: arrivalSafe.props,
     floorPatches: layout.patches,
     notes: noteSpecs,
-    lootNodes: zoneId === 'manila' ? [] : lootForCell(seed, x, z, tuning.lootChance, archetype),
+    lootNodes: zoneId === 'manila' ? [] : lootForCell(seed, x, z, tuning.lootChance, archetype, arrivalSafe.walls, arrivalSafe.props),
     exits,
     lightFailure: zoneId === 'blackout' || unitFloat(`${addressId(address)}:light`) < 0.045,
     lightTemperature: 0.82 + unitFloat(`${addressId(address)}:temperature`) * 0.24,
     ceilingPattern: intInRange(`${seed}:ceiling:${x}:${z}`, 0, 4),
     hallucinationAnchor: profile.stability === 'disorienting' && unitFloat(`${seed}:hallucination:${x}:${z}`) < 0.032
   };
+}
+
+export function validateCellPlacement(cell: CellDescriptor): string[] {
+  const errors: string[] = [];
+  const occupied = solidBounds(cell.walls, cell.props);
+  if (cell.address.cellX === 0 && cell.address.cellZ === 0) {
+    for (const bounds of occupied) {
+      if (circleOverlapsBounds(0, 0, PLAYER_ARRIVAL_CLEARANCE, bounds)) errors.push(`Arrival overlaps ${bounds.id}`);
+    }
+  }
+  const spawned = cell.lootNodes.filter((node) => node.spawnedDefinitionId);
+  for (const node of spawned) {
+    for (const bounds of occupied) {
+      if (circleOverlapsBounds(node.localPosition.x, node.localPosition.z, LOOT_CLEARANCE, bounds)) errors.push(`Loot ${node.id} overlaps ${bounds.id}`);
+    }
+  }
+  for (let left = 0; left < spawned.length; left += 1) {
+    for (let right = left + 1; right < spawned.length; right += 1) {
+      const a = spawned[left]!;
+      const b = spawned[right]!;
+      if (Math.hypot(a.localPosition.x - b.localPosition.x, a.localPosition.z - b.localPosition.z) < LOOT_CLEARANCE * 2) errors.push(`Loot ${a.id} overlaps loot ${b.id}`);
+    }
+  }
+  return errors;
 }
 
 export function validateCellConnectivity(seed: string, radius: number, extraOpeningChance: number): string[] {
