@@ -1,5 +1,6 @@
 import { ITEM_DEFINITIONS } from '../items/definitions.js';
 import type { ItemInstance } from '../items/types.js';
+import { filterObjectCatalog, OBJECT_CATALOG, OBJECT_CATALOG_CATEGORIES } from '../renderer/objectCatalog.js';
 import type { TimelineSnapshot } from '../simulation/timeline.js';
 import type { WorldTuning, ZoneId } from '../world/types.js';
 
@@ -13,6 +14,8 @@ export interface UIHandlers {
   onSeedChange(seed: string): void;
   onSimulateStarter(): void;
   onExportTuning(): void;
+  onSpawnLabObjects(entryIds: readonly string[]): void;
+  onClearLabObjects(): void;
 }
 
 export class GameUI {
@@ -35,6 +38,10 @@ export class GameUI {
   private noteOverlay!: HTMLElement;
   private noteTitle!: HTMLElement;
   private noteBody!: HTMLElement;
+  private objectSearch!: HTMLInputElement;
+  private objectCategory!: HTMLSelectElement;
+  private objectSelect!: HTMLSelectElement;
+  private catalogStatus!: HTMLElement;
 
   constructor(private readonly handlers: UIHandlers) {
     const root = document.querySelector<HTMLElement>('#ui-root');
@@ -87,20 +94,39 @@ export class GameUI {
       </section>
       <aside class="world-lab ui-panel" data-ui="lab">
         <p class="eyebrow">Development authority / local only</p><h2>World Lab</h2>
-        <div class="lab-grid">
-          <label class="full">Seed<input data-lab="seed" value="threshold-001" /></label>
-          <label>Zone<select data-lab="zone"><option value="">Procedural districts</option><option value="baseline">Baseline</option><option value="arch">Arch</option><option value="pillar">Pillar</option><option value="blackout">Blackout</option><option value="holes">Holes</option><option value="manila">Manila</option><option value="exit-threshold">Threshold</option></select></label>
-          <label>Active radius<input data-lab="radius" type="number" min="1" max="4" value="3" /></label>
-          <label>Room variation<input data-lab="variation" type="number" min=".25" max="2" step=".05" value="1" /></label>
-          <label>World Day<input data-lab="world-day" type="number" min="0" max="9999" placeholder="Authority" /></label>
-          <label>Exposure<input data-lab="exposure" type="number" min="0" max="999" step=".25" placeholder="Authority" /></label>
-          <label>Loot chance<input data-lab="loot" type="number" min="0" max=".5" step=".01" value=".085" /></label>
-          <label>Shift chance<input data-lab="shift" type="number" min="0" max="1" step=".01" value=".18" /></label>
-          <label class="full"><span><input data-lab="bypass" type="checkbox" /> Bypass timeline gates locally</span></label>
-          <button data-action="apply-seed">Regenerate with seed</button>
-          <button data-action="simulate">Simulate 1,000 starters</button>
-          <button class="full" data-action="export">Export tuning JSON</button>
-        </div>
+        <section class="lab-section">
+          <h3>World controls</h3>
+          <div class="lab-grid">
+            <label class="full">Seed<input data-lab="seed" value="threshold-001" /></label>
+            <label>Zone<select data-lab="zone"><option value="">Procedural districts</option><option value="baseline">Baseline</option><option value="arch">Arch</option><option value="pillar">Pillar</option><option value="blackout">Blackout</option><option value="holes">Holes</option><option value="manila">Manila</option><option value="exit-threshold">Threshold</option></select></label>
+            <label>Active radius<input data-lab="radius" type="number" min="1" max="4" value="3" /></label>
+            <label>Room variation<input data-lab="variation" type="number" min=".25" max="2" step=".05" value="1" /></label>
+            <label>World Day<input data-lab="world-day" type="number" min="0" max="9999" placeholder="Authority" /></label>
+            <label>Exposure<input data-lab="exposure" type="number" min="0" max="999" step=".25" placeholder="Authority" /></label>
+            <label>Loot chance<input data-lab="loot" type="number" min="0" max=".5" step=".01" value=".085" /></label>
+            <label>Shift chance<input data-lab="shift" type="number" min="0" max="1" step=".01" value=".18" /></label>
+            <label class="full"><span><input data-lab="bypass" type="checkbox" /> Bypass timeline gates locally</span></label>
+            <button data-action="apply-seed">Regenerate with seed</button>
+            <button data-action="simulate">Simulate 1,000 starters</button>
+            <button class="full" data-action="export">Export tuning JSON</button>
+          </div>
+        </section>
+        <section class="lab-section object-catalog">
+          <div class="lab-section-heading"><h3>Object showcase</h3><span>${OBJECT_CATALOG.length} registered</span></div>
+          <p class="lab-copy">Disposable local models for visual QA. Spawning here never changes the journey save or canonical world generation.</p>
+          <div class="catalog-controls">
+            <label>Search<input type="search" data-lab="object-search" placeholder="flashlight, chair, pipe…" autocomplete="off" /></label>
+            <label>Category<select data-lab="object-category"><option value="">All categories</option></select></label>
+            <label class="full">Object<select data-lab="object-select"></select></label>
+          </div>
+          <div class="catalog-actions">
+            <button data-action="spawn-selected-object">Spawn selected</button>
+            <button data-action="spawn-filtered-objects">Spawn filtered</button>
+            <button data-action="spawn-all-objects">Spawn all</button>
+            <button class="danger" data-action="clear-lab-objects">Clear showcase</button>
+          </div>
+          <p class="catalog-status" data-ui="catalog-status" aria-live="polite">No showcase objects spawned.</p>
+        </section>
         <pre class="metrics" data-ui="metrics"></pre>
         <pre class="metrics" data-ui="starter-stats">Starter simulation not run.</pre>
       </aside>`;
@@ -123,6 +149,15 @@ export class GameUI {
     this.noteOverlay = this.required('[data-ui="note"]');
     this.noteTitle = this.required('[data-ui="note-title"]');
     this.noteBody = this.required('[data-ui="note-body"]');
+    this.objectSearch = this.required<HTMLInputElement>('[data-lab="object-search"]');
+    this.objectCategory = this.required<HTMLSelectElement>('[data-lab="object-category"]');
+    this.objectSelect = this.required<HTMLSelectElement>('[data-lab="object-select"]');
+    this.catalogStatus = this.required('[data-ui="catalog-status"]');
+
+    for (const category of OBJECT_CATALOG_CATEGORIES) {
+      const option = document.createElement('option'); option.value = category.id; option.textContent = category.label; this.objectCategory.appendChild(option);
+    }
+    this.refreshCatalogOptions();
 
     this.required('[data-action="new"]').addEventListener('click', () => this.handlers.onNewGame(this.seedInput.value.trim() || 'threshold-001'));
     this.continueButton.addEventListener('click', () => this.handlers.onContinue());
@@ -132,6 +167,18 @@ export class GameUI {
     this.required('[data-action="apply-seed"]').addEventListener('click', () => this.handlers.onSeedChange(this.required<HTMLInputElement>('[data-lab="seed"]').value.trim() || 'threshold-001'));
     this.required('[data-action="simulate"]').addEventListener('click', () => this.handlers.onSimulateStarter());
     this.required('[data-action="export"]').addEventListener('click', () => this.handlers.onExportTuning());
+    this.objectSearch.addEventListener('input', () => this.refreshCatalogOptions());
+    this.objectCategory.addEventListener('change', () => this.refreshCatalogOptions());
+    this.required('[data-action="spawn-selected-object"]').addEventListener('click', () => {
+      if (this.objectSelect.value) this.handlers.onSpawnLabObjects([this.objectSelect.value]);
+    });
+    this.required('[data-action="spawn-filtered-objects"]').addEventListener('click', () => {
+      this.handlers.onSpawnLabObjects(this.filteredCatalogIds());
+    });
+    this.required('[data-action="spawn-all-objects"]').addEventListener('click', () => {
+      this.handlers.onSpawnLabObjects(OBJECT_CATALOG.map((entry) => entry.id));
+    });
+    this.required('[data-action="clear-lab-objects"]').addEventListener('click', () => this.handlers.onClearLabObjects());
 
     const bindNumber = (selector: string, key: keyof WorldTuning) => this.required<HTMLInputElement>(selector).addEventListener('change', (event) => this.handlers.onTuningChange({ [key]: Number((event.target as HTMLInputElement).value) }));
     bindNumber('[data-lab="radius"]', 'activeRadius');
@@ -159,6 +206,22 @@ export class GameUI {
     return element;
   }
 
+  private filteredCatalogIds(): string[] {
+    return filterObjectCatalog(this.objectSearch.value, this.objectCategory.value).map((entry) => entry.id);
+  }
+
+  private refreshCatalogOptions(): void {
+    const previous = this.objectSelect.value;
+    const entries = filterObjectCatalog(this.objectSearch.value, this.objectCategory.value);
+    this.objectSelect.replaceChildren();
+    for (const entry of entries) {
+      const option = document.createElement('option'); option.value = entry.id; option.textContent = entry.label; this.objectSelect.appendChild(option);
+    }
+    if (entries.some((entry) => entry.id === previous)) this.objectSelect.value = previous;
+    this.objectSelect.disabled = entries.length === 0;
+    this.updateCatalogStatus(entries.length === 0 ? 'No objects match this filter.' : `${entries.length} object${entries.length === 1 ? '' : 's'} match this filter.`);
+  }
+
   setContinueAvailable(available: boolean): void { this.continueButton.disabled = !available; }
   showGame(): void { this.title.hidden = true; this.hud.hidden = false; }
   setPaused(paused: boolean): void { this.pause.classList.toggle('visible', paused); }
@@ -166,6 +229,7 @@ export class GameUI {
   isLabOpen(): boolean { return this.lab.classList.contains('visible'); }
   isNoteOpen(): boolean { return this.noteOverlay.classList.contains('visible'); }
   setMarkerMode(active: boolean): void { this.markerMode.classList.toggle('visible', active); }
+  updateCatalogStatus(text: string): void { this.catalogStatus.textContent = text; }
 
   showNote(title: string, body: string, attribution?: string): void {
     this.noteTitle.textContent = title.slice(0, 120);
@@ -200,8 +264,9 @@ export class GameUI {
       if (item) {
         const definition = ITEM_DEFINITIONS[item.definitionId];
         const state = item.charge === undefined ? `Condition ${Math.round(item.condition * 100)}%` : `Charge ${Math.round(item.charge * 100)}%`;
-        button.innerHTML = `<strong>${index + 1}. ${definition.name}</strong><small>${state}</small>`;
-        button.title = definition.description;
+        const strong = document.createElement('strong'); strong.textContent = `${index + 1}. ${definition.name}`;
+        const small = document.createElement('small'); small.textContent = state;
+        button.append(strong, small); button.title = definition.description;
         button.addEventListener('click', () => this.handlers.onSelectItem(item.instanceId));
       } else button.textContent = `${index + 1}. Empty`;
       this.inventory.appendChild(button);
