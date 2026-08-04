@@ -40,7 +40,7 @@ jobs:
             fi
             sleep 1
           done
-          python scripts/browser-smoke.py
+          python scripts/browser-smoke-ci.py
       - name: Upload browser-smoke evidence
         if: always()
         uses: actions/upload-artifact@v4
