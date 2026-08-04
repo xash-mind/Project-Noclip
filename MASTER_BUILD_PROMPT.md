@@ -1,33 +1,57 @@
-# MASTER IMPLEMENTATION PROMPT — PROJECT NOCLIP ITERATION 3
+# PROJECT NOCLIP — ITERATION 3 EXECUTION BRIEF
 
-Act as product director, procedural-generation engineer, rendering/performance engineer, gameplay engineer, technical artist, QA engineer, multiplayer/economy architect, documentation owner and Vercel release owner.
+Use this file as project-specific Iteration 3 context, not as a replacement for the shared operating system.
+
+## Required orientation
+
+1. Read `AGENTS.md`, `PROJECT.md`, and `STATUS.md`.
+2. Read `docs/VISION.md` and relevant existing specs.
+3. Read relevant open GitHub Issues and recent Pull Requests.
+4. Read the implementation playbook, Engineering Standards, and Run Checklist in `xash-mind/project-operations`.
+5. Verify the current repository, deployment, and browser state before trusting this brief.
 
 ## Mission
 
-Turn the richer Level 0 Alpha 0.2 into a performance-conscious exploration build with meaningful transition capsules and stronger spatial storytelling. Read `docs/CURRENT_STATE.md` first and preserve verified systems.
+Turn Level 0 Alpha 0.2 into a performance-conscious exploration build with verified browser behaviour, meaningful transition foundations, and stronger spatial storytelling. Preserve verified systems and do not expand scope before release-critical uncertainty is resolved.
 
-## Priorities
+## Priority order
 
-1. **Verify installed PlayCanvas in unrestricted Chromium**: pointer lock, textures, fog, spot light, notes, marker lines, glow-stick light, save reload and direct refresh. Fix real API/runtime failures before feature work.
-2. **Renderer efficiency**: profile draw calls and entities during a 20-minute traversal. Batch/instance walls, floors, ceilings, skirting, fixtures and repeated props while preserving stable surface IDs and collision data.
-3. **Planned exploration**: add district landmarks, district-to-district transition grammar, rarity budgets, controlled vistas and repetition metrics. Do not return to per-cell random zones.
-4. **Finish object stories**: persistent string trails, editable moderated-note schema/UI, pryable tagged surfaces and better item models. Preserve stable ownership/revision fields for future atomic trading.
-5. **Transition capsules**: build short Level 1 and Level 27 arrival capsules; pending transitions must survive reload and become traversable without implementing full destination levels.
-6. **World Lab**: add topology map, district/landmark visualization, tuning JSON import with strict schema/size validation, and a generation repetition report.
-7. **Persistence**: add migration fixtures, save recovery UI, queued revisions and duplicate-drop protection.
+1. **Verify installed PlayCanvas in unrestricted Chromium:** pointer lock, textures, fog, spotlight, notes, marker lines, glow-stick lighting, save reload, direct refresh, and source-to-deployment parity. Fix real runtime failures before feature work.
+2. **Renderer efficiency:** profile draw calls, entities, memory, and frame time during a sustained traversal. Batch or instance repeated geometry where this preserves stable surface IDs and collision data.
+3. **Persistence confidence:** add migration fixtures, save recovery UI, queued revisions, duplicate-drop protection, and fresh-browser/corruption recovery tests.
+4. **Planned exploration:** improve district landmarks, transition grammar, rarity budgets, controlled vistas, and repetition metrics without returning to per-cell random zones.
+5. **Transition foundations:** build short Level 1 and Level 27 arrival capsules; pending transitions must survive reload without implementing full destination levels.
+6. **Object stories:** persistent string trails, editable moderated-note foundations, pryable tagged surfaces, and better item models only after runtime, performance, and persistence are stable.
+7. **World Lab:** topology map, district/landmark visualization, strictly validated tuning import, and generation repetition reporting.
 
 ## Constraints
 
 - No routine monster or combat loop.
-- Offline and Connected World authority remain separate.
-- Do not weaken timeline gates to make content immediately visible; use World Lab bypass for testing.
-- No production multiplayer, voice, subscriptions or user-uploaded images yet.
-- Keep `main` runnable and deploy only a verified preview before production.
+- Offline and future Connected World authority remain separate.
+- Do not weaken World Day or Exposure gates to expose content; use World Lab bypasses for testing.
+- No production multiplayer, voice, subscriptions, or user-uploaded images yet.
+- Keep `main` runnable and promote only the same source that passed preview verification.
+- Select coherent work based on priority, dependencies, risk, rollback, and verification scope; do not bundle unrelated features.
 
-## Verification
+## Required workflow
 
-Run strict typecheck, deterministic/system tests, generator benchmark, production build, browser smoke, save/reload and long-traversal profiling. Fix root causes rather than weakening tests.
+- Represent selected work with GitHub Issues and acceptance criteria.
+- Use an issue-specific branch and Pull Request.
+- Run strict typecheck, deterministic/system tests, generator benchmark, production build, browser smoke, save/reload and relevant long-traversal profiling.
+- Record exact evidence, remaining risk, preview/production source, and rollback in the Pull Request.
+- Update `STATUS.md` with accepted verified state only.
+- Add durable technical decisions to `docs/adr/` and full audits to `docs/audits/`.
+- Create follow-up Issues for confirmed gaps rather than embedding an expanding task list here.
+- Do not update Notion. A dedicated portfolio-sync run handles compact summaries.
+- Do not automatically rewrite shared standards or playbooks. Create an evidence-backed proposal Issue in `project-operations` when a reusable improvement is proven.
 
-## Mandatory closure
+## Completion for this iteration
 
-Update `docs/CURRENT_STATE.md`, review `docs/VISION.md`, synchronize specs/decisions/content needs, rewrite this prompt for Iteration 4, update Notion project/tasks/decisions/handoff, commit, deploy one preview, verify it, then promote one production deployment.
+Iteration 3 is complete only when:
+
+- The deployed browser-critical journey is verified against an exact commit.
+- No confirmed release-blocking runtime or persistence defect remains open.
+- A useful renderer/performance baseline exists.
+- Implemented scope has automated and real-browser evidence.
+- GitHub Issues, Pull Requests, relevant docs, and `STATUS.md` agree on the accepted state.
+- Any remaining work is represented as clear ready, blocked, or decision-needed Issues.
