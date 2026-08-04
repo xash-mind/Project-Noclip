@@ -2,7 +2,7 @@ import * as pc from 'playcanvas';
 import type { DroppedItemState, SaveData, SurfaceMark } from '../persistence/types.js';
 import { resolveCircleAgainstAabbs } from '../physics/collision.js';
 import { CELL_SIZE, type CellDescriptor } from '../world/types.js';
-import type { ObjectCatalogEntry } from './objectCatalog.js';
+import { registerObjectCatalogShowcaseHost, type ObjectCatalogEntry } from './objectCatalog.js';
 import { canvasTexture, makeMaterial, markWorldPoint, clamp01, rayAabb, type CellVisual, type InteractionVisual, type TextureKind, type WorldItemVisual, type WorldWall } from './support.js';
 import { RendererCellBuilder } from './cellBuilder.js';
 export type { InteractionVisual, WorldItemVisual } from './support.js';
@@ -20,6 +20,7 @@ export class WorldRenderer {
 
   constructor(private readonly app: pc.Application, private readonly save: SaveData) {
     this.cellBuilder = new RendererCellBuilder(app, save, this.walls, this.interactions, this.getMaterial.bind(this), this.box.bind(this));
+    registerObjectCatalogShowcaseHost({ spawn: (entries) => this.spawnLabShowcase(entries), clear: () => this.clearLabShowcase() });
   }
   get loadedCellCount(): number { return this.loaded.size; }
   get wallCount(): number { return this.walls.size; }
@@ -83,9 +84,11 @@ export class WorldRenderer {
     visual.interactions.push(interaction);
   }
 
-  spawnLabShowcase(entries: readonly ObjectCatalogEntry[], origin: { x: number; z: number }, yaw: number): number {
+  spawnLabShowcase(entries: readonly ObjectCatalogEntry[]): number {
     this.clearLabShowcase();
     if (entries.length === 0) return 0;
+    const origin = { x: this.save.position.x, z: this.save.position.z };
+    const yaw = this.save.position.yaw;
     const root = new pc.Entity('world-lab-object-showcase');
     this.app.root.addChild(root);
     this.labShowcaseRoot = root;
