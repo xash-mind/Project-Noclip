@@ -65,15 +65,16 @@ Run the layers relevant to the change, including:
 
 Do not weaken timeline gates or deterministic tests simply to expose content or make a failing change pass. Use developer tooling for controlled verification.
 
-## GitHub records
+## GitHub records and final Notion closure
 
 - Technical work and confirmed findings belong in GitHub Issues.
 - Use issue-specific branches and pull requests.
 - Store full audits in `docs/audits/`.
 - Store durable technical decisions in `docs/adr/`.
 - Update `STATUS.md` only with verified accepted state.
-- Do not update Notion during ordinary implementation, testing, review, or release work.
 - Propose reusable shared standards/playbook improvements through issues in `xash-mind/project-operations`.
+- At the very end, follow `xash-mind/project-operations/playbooks/final-notion-update.md` and update only Project Noclip's mapped Notion page.
+- Never query a Notion database, search the workspace, or update another project's page.
 
 ## Human escalation
 

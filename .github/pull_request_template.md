@@ -42,7 +42,7 @@
 - [ ] `STATUS.md` reflects accepted verified state only.
 - [ ] An ADR was added for a durable technical decision when warranted.
 - [ ] Full audit evidence was stored under `docs/audits/` when applicable.
-- [ ] No ordinary project work was copied into Notion.
+- [ ] Final mapped Notion project page updated after GitHub work completed.
 
 ## Follow-up
 

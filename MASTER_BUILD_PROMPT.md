@@ -42,7 +42,7 @@ Turn Level 0 Alpha 0.2 into a performance-conscious exploration build with verif
 - Update `STATUS.md` with accepted verified state only.
 - Add durable technical decisions to `docs/adr/` and full audits to `docs/audits/`.
 - Create follow-up Issues for confirmed gaps rather than embedding an expanding task list here.
-- Do not update Notion. A dedicated portfolio-sync run handles compact summaries.
+- At the very end, follow `xash-mind/project-operations/playbooks/final-notion-update.md` and update only Project Noclip's mapped Notion page.
 - Do not automatically rewrite shared standards or playbooks. Create an evidence-backed proposal Issue in `project-operations` when a reusable improvement is proven.
 
 ## Completion for this iteration
@@ -54,4 +54,5 @@ Iteration 3 is complete only when:
 - A useful renderer/performance baseline exists.
 - Implemented scope has automated and real-browser evidence.
 - GitHub Issues, Pull Requests, relevant docs, and `STATUS.md` agree on the accepted state.
+- The mapped Notion project page contains the concise accepted result, blocker, next action, and any request for Sash.
 - Any remaining work is represented as clear ready, blocked, or decision-needed Issues.
