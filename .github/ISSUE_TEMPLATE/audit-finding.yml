@@ -1,0 +1,87 @@
+name: Audit finding
+description: Record a confirmed functional, UX, accessibility, security, performance, or release-readiness finding
+title: "Finding: "
+body:
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Critical
+        - Major
+        - Moderate
+        - Minor
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - Functionality
+        - Reliability
+        - UX or learnability
+        - Accessibility
+        - Responsive design
+        - Security or privacy
+        - Performance or stability
+        - Persistence or migration
+        - Release or deployment
+        - Documentation
+    validations:
+      required: true
+
+  - type: textarea
+    id: affected_user
+    attributes:
+      label: Affected user and journey
+      description: Who is affected and what were they trying to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Exact reproduction
+      description: Include commit, deployment, browser, save state, world seed, route, controls, and steps where relevant.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_actual
+    attributes:
+      label: Expected and actual result
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Include logs, screenshots, timings, profiler output, save fixture, or audit section.
+    validations:
+      required: true
+
+  - type: textarea
+    id: cause
+    attributes:
+      label: Likely system or root cause
+      description: Distinguish verified cause from inference.
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria and regression test
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmed
+    attributes:
+      label: Confirmation
+      options:
+        - label: This finding was reproduced against the current source or deployment.
+          required: true
+        - label: An existing issue was checked before creating this one.
+          required: true
