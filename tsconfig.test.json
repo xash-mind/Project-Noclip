@@ -13,6 +13,7 @@
     "src/inventory/**/*.ts",
     "src/persistence/types.ts",
     "src/simulation/**/*.ts",
-    "src/physics/**/*.ts"
+    "src/physics/**/*.ts",
+    "src/renderer/objectCatalog.ts"
   ]
 }
