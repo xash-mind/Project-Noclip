@@ -1,8 +1,8 @@
 # Project Status
 
 **Last verified:** 2026-08-05  
-**Verified renderer head:** `a957e075593530e34f06cc94f8a5afe2f7188a84` on PR #10  
-**Environment:** GitHub CI and Chromium/WebGL evidence passed; Vercel preview rejected before build by account rate limit
+**Accepted runtime merge:** `58389c13f7c35ed38e514d84c949e47d0368823c` from PR #10  
+**Environment:** GitHub CI and Chromium/WebGL evidence passed; Vercel production build rejected before execution by account rate limit
 
 ## Health
 
@@ -10,7 +10,7 @@
 
 ## Current milestone
 
-Merge the verified rendering-correctness work, then release current accepted `main` through Issue #8 once Vercel capacity resets. After production alignment, continue measured renderer optimization and native interaction QA rather than expanding content scope blindly.
+Release accepted runtime `58389c13` through Issue #8 once Vercel capacity resets. After production alignment, continue measured renderer optimization and native interaction QA rather than expanding content scope blindly.
 
 ## Working now
 
@@ -29,7 +29,7 @@ Merge the verified rendering-correctness work, then release current accepted `ma
 
 ## Latest meaningful change
 
-[PR #10](https://github.com/xash-mind/Project-Noclip/pull/10) fixes the visual defects recorded in [Issue #9](https://github.com/xash-mind/Project-Noclip/issues/9). Final run `30947402217` passed at `a957e075`. Browser evidence shows readable baseline carpet, discrete recessed holes and all 23 catalog objects on an intentional inspection shelf.
+Merged [PR #10](https://github.com/xash-mind/Project-Noclip/pull/10) as [`58389c13`](https://github.com/xash-mind/Project-Noclip/commit/58389c13f7c35ed38e514d84c949e47d0368823c), closing [Issue #9](https://github.com/xash-mind/Project-Noclip/issues/9). Runtime run `30947402217` and final-head run `30947735824` passed; browser artifact `8907536628` shows readable baseline carpet, discrete recessed holes and all 23 catalog objects on an intentional inspection shelf.
 
 Initial observations:
 
@@ -39,11 +39,11 @@ Initial observations:
 
 ## Top blocker
 
-Vercel rejected the commit-specific PR #10 preview before build execution because the account build-rate limit is active. Production at https://project-noclip.vercel.app still serves an older runtime. [Issue #8](https://github.com/xash-mind/Project-Noclip/issues/8) remains the single deployment follow-up.
+Vercel rejected both the commit-specific PR #10 preview and the merged-main production attempt before build execution because the account build-rate limit is active. Production at https://project-noclip.vercel.app still serves an older runtime. [Issue #8](https://github.com/xash-mind/Project-Noclip/issues/8) remains the single deployment follow-up.
 
 ## Next recommended action
 
-After Vercel capacity resets, build current accepted `main` once, verify the hashed runtime assets and public browser journey, then close Issue #8. The new runtime-aware Vercel ignore rule should prevent future test and documentation-only commits from consuming preview builds.
+After Vercel capacity resets, retry production for accepted runtime commit `58389c13`, verify generated asset hashes and the public browser journey, then close Issue #8. The new runtime-aware Vercel ignore rule should prevent future test and documentation-only commits from consuming preview builds.
 
 ## Decisions needed from Sash
 
