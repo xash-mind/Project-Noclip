@@ -246,10 +246,6 @@ def main() -> None:
         dispatch_change(driver, '[data-lab="bypass"]', True)
         dispatch_change(driver, '[data-lab="zone"]', "holes")
         wait_for_text(driver, '[data-ui="metrics"]', ("zone          Hole Section",), timeout=20, message="forced Hole Section")
-        driver.find_element(By.CSS_SELECTOR, '[data-action="spawn-all-objects"]').click()
-        catalog_status = wait_for_text(driver, '[data-ui="catalog-status"]', ("Spawned 23",), timeout=15, message="World Lab full object spawn")
-        report["catalogStatus"] = catalog_status
-        report["checks"].append("World Lab catalog registered and spawned all 23 current items and props")
         report["checks"].append("World Lab forced a Hole Section without changing the saved journey")
         screenshot(driver, "04-hole-catalog.png")
 
@@ -259,16 +255,55 @@ def main() -> None:
             lambda current: "visible" not in current.find_element(By.CSS_SELECTOR, '[data-ui="lab"]').get_attribute("class").split(),
             message="World Lab close",
         )
+        resume_button = driver.find_element(By.CSS_SELECTOR, '[data-action="resume"]')
+        if resume_button.is_displayed():
+            driver.execute_script("arguments[0].click();", resume_button)
+            wait_for(
+                driver,
+                lambda current: current.execute_script("return document.pointerLockElement === document.querySelector('#game-canvas')"),
+                timeout=7,
+                message="pointer lock for hole inspection",
+            )
+        driver.execute_script(
+            "const event = new MouseEvent('mousemove', {bubbles: true}); Object.defineProperty(event, 'movementY', {value: 230}); window.dispatchEvent(event);"
+        )
         time.sleep(2)
-        screenshot(driver, "05-hole-showcase.png")
+        screenshot(driver, "05-hole-floor.png")
+        report["checks"].append("forced Hole Section rendered for downward visual inspection")
+        driver.execute_script(
+            "const event = new MouseEvent('mousemove', {bubbles: true}); Object.defineProperty(event, 'movementY', {value: -230}); window.dispatchEvent(event);"
+        )
 
         toggle_lab(driver)
         wait_for(
             driver,
             lambda current: "visible" in current.find_element(By.CSS_SELECTOR, '[data-ui="lab"]').get_attribute("class").split(),
-            message="World Lab reopen",
+            message="World Lab reopen for showcase",
         )
-        driver.find_element(By.CSS_SELECTOR, '[data-action="clear-lab-objects"]').click()
+        spawn_all = driver.find_element(By.CSS_SELECTOR, '[data-action="spawn-all-objects"]')
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'}); arguments[0].click();", spawn_all)
+        catalog_status = wait_for_text(driver, '[data-ui="catalog-status"]', ("Spawned 23",), timeout=15, message="World Lab full object spawn")
+        report["catalogStatus"] = catalog_status
+        report["checks"].append("World Lab catalog registered and spawned all 23 current items and props")
+        screenshot(driver, "06-object-catalog.png")
+
+        toggle_lab(driver)
+        wait_for(
+            driver,
+            lambda current: "visible" not in current.find_element(By.CSS_SELECTOR, '[data-ui="lab"]').get_attribute("class").split(),
+            message="World Lab close after showcase spawn",
+        )
+        time.sleep(2)
+        screenshot(driver, "07-object-showcase.png")
+
+        toggle_lab(driver)
+        wait_for(
+            driver,
+            lambda current: "visible" in current.find_element(By.CSS_SELECTOR, '[data-ui="lab"]').get_attribute("class").split(),
+            message="World Lab reopen for showcase clear",
+        )
+        clear_button = driver.find_element(By.CSS_SELECTOR, '[data-action="clear-lab-objects"]')
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'}); arguments[0].click();", clear_button)
         wait_for_text(driver, '[data-ui="catalog-status"]', ("Showcase cleared",), timeout=10, message="showcase clear")
         report["checks"].append("World Lab cleared its non-persistent showcase")
 
@@ -289,7 +324,7 @@ def main() -> None:
         assert continued_save.get("characterId") == character_id
         assert continued_save.get("seed") == "threshold-001"
         report["checks"].append("direct refresh exposed Continue and restored the same journey")
-        screenshot(driver, "06-continued.png")
+        screenshot(driver, "08-continued.png")
 
         report["memory"] = driver.execute_script(
             "return performance.memory ? {usedJSHeapSize: performance.memory.usedJSHeapSize, totalJSHeapSize: performance.memory.totalJSHeapSize, jsHeapSizeLimit: performance.memory.jsHeapSizeLimit} : null"
