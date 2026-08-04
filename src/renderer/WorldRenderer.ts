@@ -2,7 +2,8 @@ import * as pc from 'playcanvas';
 import type { DroppedItemState, SaveData, SurfaceMark } from '../persistence/types.js';
 import { resolveCircleAgainstAabbs } from '../physics/collision.js';
 import { CELL_SIZE, type CellDescriptor } from '../world/types.js';
-import { canvasTexture, makeMaterial, markWorldPoint, clamp01, rayAabb, type CellVisual, type InteractionVisual, type WorldItemVisual, type WorldWall } from './support.js';
+import type { ObjectCatalogEntry } from './objectCatalog.js';
+import { canvasTexture, makeMaterial, markWorldPoint, clamp01, rayAabb, type CellVisual, type InteractionVisual, type TextureKind, type WorldItemVisual, type WorldWall } from './support.js';
 import { RendererCellBuilder } from './cellBuilder.js';
 export type { InteractionVisual, WorldItemVisual } from './support.js';
 
@@ -14,6 +15,8 @@ export class WorldRenderer {
   private readonly textures = new Map<string, pc.Texture>();
   private readonly markRoots = new Map<string, pc.Entity>();
   private readonly cellBuilder: RendererCellBuilder;
+  private labShowcaseRoot?: pc.Entity;
+  private labShowcaseCount = 0;
 
   constructor(private readonly app: pc.Application, private readonly save: SaveData) {
     this.cellBuilder = new RendererCellBuilder(app, save, this.walls, this.interactions, this.getMaterial.bind(this), this.box.bind(this));
@@ -21,8 +24,9 @@ export class WorldRenderer {
   get loadedCellCount(): number { return this.loaded.size; }
   get wallCount(): number { return this.walls.size; }
   get interactionCount(): number { return this.interactions.size; }
+  get labObjectCount(): number { return this.labShowcaseCount; }
 
-  private texture(kind: Parameters<typeof canvasTexture>[1], variant = 0): pc.Texture {
+  private texture(kind: TextureKind, variant = 0): pc.Texture {
     const key = `${kind}:${variant}`;
     const existing = this.textures.get(key);
     if (existing) return existing;
@@ -31,7 +35,7 @@ export class WorldRenderer {
     return created;
   }
 
-  private getMaterial(key: string, diffuse: [number, number, number], textureKind?: Parameters<typeof canvasTexture>[1], variant = 0, tiling: [number, number] = [1, 1], emissive?: [number, number, number], emissiveIntensity = 1): pc.StandardMaterial {
+  private getMaterial(key: string, diffuse: [number, number, number], textureKind?: TextureKind, variant = 0, tiling: [number, number] = [1, 1], emissive?: [number, number, number], emissiveIntensity = 1): pc.StandardMaterial {
     const fullKey = `${key}:${variant}:${tiling.join(',')}:${emissiveIntensity}`;
     const existing = this.materials.get(fullKey);
     if (existing) return existing;
@@ -77,6 +81,39 @@ export class WorldRenderer {
     const visual = this.loaded.get(`${cellX}:${cellZ}`); if (!visual) return;
     const interaction = this.cellBuilder.addItemVisual(visual.root, drop.item, drop.x, drop.y, drop.z, drop.x - cellX * CELL_SIZE, drop.z - cellZ * CELL_SIZE, undefined, drop.activatedAt);
     visual.interactions.push(interaction);
+  }
+
+  spawnLabShowcase(entries: readonly ObjectCatalogEntry[], origin: { x: number; z: number }, yaw: number): number {
+    this.clearLabShowcase();
+    if (entries.length === 0) return 0;
+    const root = new pc.Entity('world-lab-object-showcase');
+    this.app.root.addChild(root);
+    this.labShowcaseRoot = root;
+    const columns = Math.min(6, Math.max(1, entries.length));
+    const spacingX = 2.05;
+    const spacingZ = 2.1;
+    const radians = yaw * Math.PI / 180;
+    const forward = { x: -Math.sin(radians), z: -Math.cos(radians) };
+    const right = { x: Math.cos(radians), z: -Math.sin(radians) };
+    const firstRowCenter = { x: origin.x + forward.x * 5.2, z: origin.z + forward.z * 5.2 };
+    entries.forEach((entry, index) => {
+      const row = Math.floor(index / columns);
+      const column = index % columns;
+      const rowCount = Math.min(columns, entries.length - row * columns);
+      const lateral = (column - (rowCount - 1) / 2) * spacingX;
+      const depth = row * spacingZ;
+      const x = firstRowCenter.x + right.x * lateral + forward.x * depth;
+      const z = firstRowCenter.z + right.z * lateral + forward.z * depth;
+      this.cellBuilder.addCatalogVisual(root, entry, x, z);
+    });
+    this.labShowcaseCount = entries.length;
+    return entries.length;
+  }
+
+  clearLabShowcase(): void {
+    this.labShowcaseRoot?.destroy();
+    this.labShowcaseRoot = undefined;
+    this.labShowcaseCount = 0;
   }
 
   updateDynamicItems(now: number): void {
