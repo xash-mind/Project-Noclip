@@ -1,6 +1,6 @@
 import { ITEM_DEFINITIONS } from '../items/definitions.js';
 import type { ItemInstance } from '../items/types.js';
-import { filterObjectCatalog, OBJECT_CATALOG, OBJECT_CATALOG_CATEGORIES } from '../renderer/objectCatalog.js';
+import { clearObjectCatalogShowcase, filterObjectCatalog, OBJECT_CATALOG, OBJECT_CATALOG_CATEGORIES, spawnObjectCatalogEntries } from '../renderer/objectCatalog.js';
 import type { TimelineSnapshot } from '../simulation/timeline.js';
 import type { WorldTuning, ZoneId } from '../world/types.js';
 
@@ -14,8 +14,6 @@ export interface UIHandlers {
   onSeedChange(seed: string): void;
   onSimulateStarter(): void;
   onExportTuning(): void;
-  onSpawnLabObjects(entryIds: readonly string[]): void;
-  onClearLabObjects(): void;
 }
 
 export class GameUI {
@@ -170,15 +168,18 @@ export class GameUI {
     this.objectSearch.addEventListener('input', () => this.refreshCatalogOptions());
     this.objectCategory.addEventListener('change', () => this.refreshCatalogOptions());
     this.required('[data-action="spawn-selected-object"]').addEventListener('click', () => {
-      if (this.objectSelect.value) this.handlers.onSpawnLabObjects([this.objectSelect.value]);
+      if (this.objectSelect.value) this.spawnCatalogEntries([this.objectSelect.value]);
     });
     this.required('[data-action="spawn-filtered-objects"]').addEventListener('click', () => {
-      this.handlers.onSpawnLabObjects(this.filteredCatalogIds());
+      this.spawnCatalogEntries(this.filteredCatalogIds());
     });
     this.required('[data-action="spawn-all-objects"]').addEventListener('click', () => {
-      this.handlers.onSpawnLabObjects(OBJECT_CATALOG.map((entry) => entry.id));
+      this.spawnCatalogEntries(OBJECT_CATALOG.map((entry) => entry.id));
     });
-    this.required('[data-action="clear-lab-objects"]').addEventListener('click', () => this.handlers.onClearLabObjects());
+    this.required('[data-action="clear-lab-objects"]').addEventListener('click', () => {
+      const cleared = clearObjectCatalogShowcase();
+      this.updateCatalogStatus(cleared ? 'Showcase cleared. Canonical world state was not changed.' : 'Start or continue a journey before clearing the showcase.');
+    });
 
     const bindNumber = (selector: string, key: keyof WorldTuning) => this.required<HTMLInputElement>(selector).addEventListener('change', (event) => this.handlers.onTuningChange({ [key]: Number((event.target as HTMLInputElement).value) }));
     bindNumber('[data-lab="radius"]', 'activeRadius');
@@ -208,6 +209,11 @@ export class GameUI {
 
   private filteredCatalogIds(): string[] {
     return filterObjectCatalog(this.objectSearch.value, this.objectCategory.value).map((entry) => entry.id);
+  }
+
+  private spawnCatalogEntries(entryIds: readonly string[]): void {
+    const count = spawnObjectCatalogEntries(entryIds);
+    this.updateCatalogStatus(count === 0 ? 'Start or continue a journey, or choose at least one matching object.' : `Spawned ${count} local showcase object${count === 1 ? '' : 's'} in front of the player.`);
   }
 
   private refreshCatalogOptions(): void {
