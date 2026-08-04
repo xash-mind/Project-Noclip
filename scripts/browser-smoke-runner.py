@@ -4,7 +4,6 @@ import importlib.util
 import sys
 import time
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 SCRIPT = Path(__file__).with_name("browser-smoke-ci.py")
@@ -16,52 +15,36 @@ sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 
 
-class NativeChromeActions:
-    """Minimal ActionChains-compatible adapter using Chrome DevTools key events."""
+class WindowKeyActions:
+    """Minimal ActionChains-compatible adapter for the game's window key listener."""
 
     def __init__(self, driver: Any) -> None:
         self.driver = driver
         self.duration = 0.0
 
-    def key_down(self, key: str) -> "NativeChromeActions":
+    def key_down(self, key: str) -> "WindowKeyActions":
         if key.lower() != "w":
             raise ValueError(f"Unsupported smoke-test key: {key}")
-        self.driver.execute_cdp_cmd(
-            "Input.dispatchKeyEvent",
-            {
-                "type": "keyDown",
-                "key": "w",
-                "code": "KeyW",
-                "text": "w",
-                "unmodifiedText": "w",
-                "windowsVirtualKeyCode": 87,
-                "nativeVirtualKeyCode": 87,
-            },
+        self.driver.execute_script(
+            "window.dispatchEvent(new KeyboardEvent('keydown', {key: 'w', code: 'KeyW', bubbles: true}));"
         )
         return self
 
-    def pause(self, seconds: float) -> "NativeChromeActions":
+    def pause(self, seconds: float) -> "WindowKeyActions":
         self.duration = seconds
         return self
 
-    def key_up(self, key: str) -> "NativeChromeActions":
+    def key_up(self, key: str) -> "WindowKeyActions":
         if key.lower() != "w":
             raise ValueError(f"Unsupported smoke-test key: {key}")
         return self
 
     def perform(self) -> None:
         time.sleep(self.duration)
-        self.driver.execute_cdp_cmd(
-            "Input.dispatchKeyEvent",
-            {
-                "type": "keyUp",
-                "key": "w",
-                "code": "KeyW",
-                "windowsVirtualKeyCode": 87,
-                "nativeVirtualKeyCode": 87,
-            },
+        self.driver.execute_script(
+            "window.dispatchEvent(new KeyboardEvent('keyup', {key: 'w', code: 'KeyW', bubbles: true}));"
         )
 
 
-module.ActionChains = NativeChromeActions
+module.ActionChains = WindowKeyActions
 module.main()
