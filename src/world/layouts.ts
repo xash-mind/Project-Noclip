@@ -1,4 +1,4 @@
-import { intInRange, stableId, unitFloat, weightedChoice } from './hash.js';
+import { stableId, weightedChoice } from './hash.js';
 import { makeNote } from './notes.js';
 import { CELL_SIZE, DOOR_WIDTH, WALL_HEIGHT, WALL_THICKNESS, type Direction, type FloorPatchSpec, type NoteSpec, type PropSpec, type RoomArchetype, type WallSpec, type ZoneId } from './types.js';
 
@@ -11,7 +11,7 @@ function prop(id: string, kind: PropSpec['kind'], x: number, y: number, z: numbe
 }
 
 function patch(id: string, kind: FloorPatchSpec['kind'], x: number, z: number, sx: number, sz: number): FloorPatchSpec {
-  return { id, kind, position: { x, y: 0.015, z }, scale: { x: sx, y: 0.03, z: sz } };
+  return { id, kind, position: { x, y: 0.004, z }, scale: { x: sx, y: 0.008, z: sz } };
 }
 
 export function boundaryWallParts(seed: string, x: number, z: number, direction: Direction, open: boolean, materialVariant: number): WallSpec[] {
@@ -168,13 +168,13 @@ export function layoutFor(seed: string, x: number, z: number, archetype: RoomArc
       return { walls, props, patches, notes, label: 'Unpowered maintenance bay' };
     case 'flooded-corridor':
       walls.push(wall(stableId('flood-l', key), -2.6, WALL_HEIGHT / 2, 0, WALL_THICKNESS, WALL_HEIGHT, 10, 'x', true, mv));
-      walls.push(wall(stableId('flood-r', key), 2.6, WALL_HEIGHT / 2, 0, WALL_THICKNESS, WALL_HEIGHT, 10, 'x', true, mv));
-      patches.push(patch(stableId('flood', key), 'dark', 0, 0, 4.8, 10.8));
+      walls.push(wall(stableId('flood-r', key), 2.6, WALL_HEIGHT / 2, 0, WALL_THICKNESS, WALL_HEIGHT, 10, 'x', true, mv + 1));
+      patches.push(patch(stableId('flood', key), 'damp', 0, 0, 4.8, 10.8));
       return { walls, props, patches, notes, label: 'Flooded service corridor' };
     case 'hole-gallery':
     case 'broken-floor':
       for (const [index, [px, pz]] of ([[-3.6, -2.8], [0.8, 2.4], [3.7, -0.7], [-1.4, 4.1]] as Array<[number, number]>).entries()) {
-        patches.push(patch(stableId('hole', key, index), 'dark', px, pz, archetype === 'broken-floor' ? 2.2 : 1.45, archetype === 'broken-floor' ? 2.2 : 1.45));
+        patches.push(patch(stableId('hole', key, index), 'hole', px, pz, archetype === 'broken-floor' ? 2.2 : 1.45, archetype === 'broken-floor' ? 2.2 : 1.45));
       }
       if (archetype === 'hole-gallery') props.push(prop(stableId('rail', key, 0), 'wall-panel', 0, 0.55, -4.5, 8.2, 1.1, 0.1, 0, false, mv));
       return { walls, props, patches, notes, label: archetype === 'broken-floor' ? 'Broken floor field' : 'Hole gallery' };
