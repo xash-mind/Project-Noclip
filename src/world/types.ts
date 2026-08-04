@@ -24,21 +24,26 @@ export type RoomArchetype =
   | 'manila-room'
   | 'transition-foyer';
 
-export type PropKind =
-  | 'table'
-  | 'chair'
-  | 'cabinet'
-  | 'box'
-  | 'divider'
-  | 'pipe'
-  | 'column'
-  | 'bench'
-  | 'book'
-  | 'wall-panel'
-  | 'ceiling-gap'
-  | 'stain'
-  | 'carpet-patch'
-  | 'sign';
+export const PROP_KINDS = [
+  'table',
+  'chair',
+  'cabinet',
+  'box',
+  'divider',
+  'pipe',
+  'column',
+  'bench',
+  'book',
+  'wall-panel',
+  'ceiling-gap',
+  'stain',
+  'carpet-patch',
+  'sign'
+] as const;
+export type PropKind = typeof PROP_KINDS[number];
+
+export const FLOOR_PATCH_KINDS = ['damp', 'worn', 'dark', 'dry', 'hole'] as const;
+export type FloorPatchKind = typeof FLOOR_PATCH_KINDS[number];
 
 export interface WorldAddress {
   worldSeed: string;
@@ -90,7 +95,7 @@ export interface FloorPatchSpec {
   id: string;
   position: LocalPoint;
   scale: LocalPoint;
-  kind: 'damp' | 'worn' | 'dark' | 'dry';
+  kind: FloorPatchKind;
 }
 
 export interface NoteSpec {
