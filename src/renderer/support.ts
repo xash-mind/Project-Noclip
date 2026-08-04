@@ -2,6 +2,8 @@ import * as pc from 'playcanvas';
 import type { ItemInstance } from '../items/types.js';
 import type { NoteSpec, CellDescriptor } from '../world/types.js';
 
+export type TextureKind = 'wall' | 'carpet' | 'ceiling' | 'concrete' | 'wood' | 'paper';
+
 export interface WorldCollider {
   id: string;
   cellId: string;
@@ -63,40 +65,69 @@ export function color(tuple: [number, number, number], multiplier = 1): pc.Color
   return new pc.Color(tuple[0] * multiplier, tuple[1] * multiplier, tuple[2] * multiplier);
 }
 
-export function canvasTexture(app: pc.Application, kind: 'wall' | 'carpet' | 'ceiling' | 'concrete' | 'wood', variant: number): pc.Texture {
+function noiseValue(x: number, y: number, variant: number): number {
+  return ((x * 92837111 + y * 689287499 + variant * 283923481) >>> 0) % 255;
+}
+
+export function canvasTexture(app: pc.Application, kind: TextureKind, variant: number): pc.Texture {
   const canvas = document.createElement('canvas');
   canvas.width = 128;
   canvas.height = 128;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Canvas texture unavailable');
-  const noise = (x: number, y: number) => ((x * 92837111 + y * 689287499 + variant * 283923481) >>> 0) % 255;
+  const noise = (x: number, y: number) => noiseValue(x, y, variant);
+
   if (kind === 'wall') {
-    context.fillStyle = variant % 3 === 0 ? '#9d8c45' : variant % 3 === 1 ? '#a89753' : '#948342';
+    context.fillStyle = variant % 3 === 0 ? '#d8ca82' : variant % 3 === 1 ? '#d1c47c' : '#c9bb70';
     context.fillRect(0, 0, 128, 128);
-    context.strokeStyle = 'rgba(76,63,22,.22)';
-    context.lineWidth = 2;
-    for (let x = 7 + variant; x < 128; x += 17) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x + (variant % 2 ? 3 : -2), 128); context.stroke(); }
-    context.strokeStyle = 'rgba(235,218,130,.16)';
-    context.lineWidth = 1;
-    for (let y = 5; y < 128; y += 11) { context.beginPath(); context.moveTo(0, y); context.lineTo(128, y + Math.sin(y) * 2); context.stroke(); }
-  } else if (kind === 'carpet') {
-    context.fillStyle = '#3d351d'; context.fillRect(0, 0, 128, 128);
-    for (let y = 0; y < 128; y += 2) for (let x = 0; x < 128; x += 2) {
-      const n = noise(x, y); context.fillStyle = `rgba(${70 + n % 25},${58 + n % 18},${28 + n % 13},.35)`; context.fillRect(x, y, 2, 2);
+    for (let y = 0; y < 128; y += 4) for (let x = 0; x < 128; x += 4) {
+      const n = noise(x, y);
+      context.fillStyle = `rgba(${98 + n % 22},${86 + n % 18},${42 + n % 12},${0.018 + (n % 6) / 500})`;
+      context.fillRect(x, y, 4, 4);
     }
+    context.lineWidth = 1;
+    for (let x = 0; x <= 128; x += 16) {
+      context.strokeStyle = 'rgba(76,65,28,.16)';
+      context.beginPath(); context.moveTo(x + 4, 0); context.lineTo(x + 4, 128); context.stroke();
+      context.strokeStyle = 'rgba(255,244,177,.13)';
+      context.beginPath(); context.moveTo(x + 11, 0); context.lineTo(x + 11, 128); context.stroke();
+    }
+  } else if (kind === 'carpet') {
+    context.fillStyle = variant % 2 === 0 ? '#9b8b58' : '#91814f';
+    context.fillRect(0, 0, 128, 128);
+    for (let y = 0; y < 128; y += 2) for (let x = 0; x < 128; x += 2) {
+      const n = noise(x, y);
+      context.fillStyle = `rgba(${76 + n % 30},${66 + n % 25},${34 + n % 18},${0.08 + (n % 8) / 100})`;
+      context.fillRect(x, y, 1 + n % 2, 2);
+    }
+    context.strokeStyle = 'rgba(228,205,129,.08)';
+    context.lineWidth = 1;
+    for (let y = 3 + variant; y < 128; y += 9) { context.beginPath(); context.moveTo(0, y); context.lineTo(128, y); context.stroke(); }
   } else if (kind === 'ceiling') {
-    context.fillStyle = '#a7a483'; context.fillRect(0, 0, 128, 128);
-    context.strokeStyle = 'rgba(47,48,38,.45)'; context.lineWidth = 3;
+    context.fillStyle = '#d5d2b4'; context.fillRect(0, 0, 128, 128);
+    context.strokeStyle = 'rgba(47,48,38,.32)'; context.lineWidth = 2;
     for (let x = 0; x <= 128; x += 32) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x, 128); context.stroke(); }
     for (let y = 0; y <= 128; y += 32) { context.beginPath(); context.moveTo(0, y); context.lineTo(128, y); context.stroke(); }
   } else if (kind === 'concrete') {
-    context.fillStyle = '#56564e'; context.fillRect(0, 0, 128, 128);
-    for (let index = 0; index < 250; index += 1) { const x = noise(index, 1) % 128; const y = noise(index, 2) % 128; context.fillStyle = `rgba(20,20,18,${0.04 + (noise(index, 3) % 9) / 100})`; context.fillRect(x, y, 2, 2); }
+    context.fillStyle = '#c1c0b5'; context.fillRect(0, 0, 128, 128);
+    for (let index = 0; index < 250; index += 1) {
+      const x = noise(index, 1) % 128; const y = noise(index, 2) % 128;
+      context.fillStyle = `rgba(30,30,26,${0.025 + (noise(index, 3) % 8) / 150})`;
+      context.fillRect(x, y, 2, 2);
+    }
+  } else if (kind === 'paper') {
+    context.fillStyle = '#eee2ba'; context.fillRect(0, 0, 128, 128);
+    for (let index = 0; index < 180; index += 1) {
+      const x = noise(index, 4) % 128; const y = noise(index, 5) % 128;
+      context.fillStyle = `rgba(70,55,26,${0.015 + (noise(index, 6) % 5) / 180})`;
+      context.fillRect(x, y, 1, 1);
+    }
   } else {
-    context.fillStyle = '#53331c'; context.fillRect(0, 0, 128, 128);
-    context.strokeStyle = 'rgba(22,10,4,.35)';
+    context.fillStyle = '#b77e50'; context.fillRect(0, 0, 128, 128);
+    context.strokeStyle = 'rgba(42,22,10,.25)';
     for (let y = 8; y < 128; y += 14) { context.beginPath(); context.moveTo(0, y); context.bezierCurveTo(30, y - 3, 70, y + 4, 128, y); context.stroke(); }
   }
+
   const texture = new pc.Texture(app.graphicsDevice, { mipmaps: true });
   texture.addressU = pc.ADDRESS_REPEAT;
   texture.addressV = pc.ADDRESS_REPEAT;

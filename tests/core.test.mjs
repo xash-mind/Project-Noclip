@@ -1,13 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateCell, validateCellConnectivity, validateCellPlacement } from '../.test-dist/src/world/generator.js';
-import { DEFAULT_TUNING } from '../.test-dist/src/world/types.js';
+import { DEFAULT_TUNING, PROP_KINDS } from '../.test-dist/src/world/types.js';
 import { chooseZone, districtId, isZoneUnlocked } from '../.test-dist/src/world/zones.js';
 import { exitsForCell, validateExitRegistry } from '../.test-dist/src/world/exits.js';
 import { resolveCircleAgainstAabbs } from '../.test-dist/src/physics/collision.js';
 import { migrateSave } from '../.test-dist/src/persistence/types.js';
 import { EMPTY_EXPOSURE } from '../.test-dist/src/simulation/timeline.js';
+import { ITEM_DEFINITIONS } from '../.test-dist/src/items/definitions.js';
 import { rollStarterDefinitions } from '../.test-dist/src/items/starterRoll.js';
+import { OBJECT_CATALOG, validateObjectCatalog } from '../.test-dist/src/renderer/objectCatalog.js';
 
 const generate = (overrides = {}) => generateCell({
   seed: 'test-seed',
@@ -134,4 +136,28 @@ test('arrival and spawned-loot placement remain valid across deterministic sweep
     }
   }
   assert.deepEqual(failures.slice(0, 20), []);
+});
+
+test('ordinary notes rest on the carpet while the Manila ledger remains on its table', () => {
+  const ordinary = generate({ seed: 'note-grounding', x: 1, z: 0, worldDay: 0, exposure: 0 });
+  assert.ok(ordinary.notes.length > 0);
+  assert.ok(ordinary.notes.every((note) => note.localPosition.y < 0.08));
+  const manila = generate({ x: 8, z: -6, worldDay: 3, exposure: 1 });
+  assert.equal(manila.notes.length, 1);
+  assert.ok(manila.notes[0].localPosition.y > 0.84);
+});
+
+test('forced Hole Sections use explicit hole patches instead of blackout floor patches', () => {
+  const cell = generate({ tuning: { ...DEFAULT_TUNING, zoneOverride: 'holes', gateBypass: true } });
+  assert.equal(cell.address.zoneId, 'holes');
+  assert.ok(cell.floorPatches.length >= 4);
+  assert.ok(cell.floorPatches.every((patch) => patch.kind === 'hole'));
+});
+
+test('World Lab object catalog covers every current item and prop kind exactly once', () => {
+  assert.deepEqual(validateObjectCatalog(), []);
+  const itemIds = OBJECT_CATALOG.flatMap((entry) => entry.itemDefinitionId ? [entry.itemDefinitionId] : []);
+  const propKinds = OBJECT_CATALOG.flatMap((entry) => entry.propKind ? [entry.propKind] : []);
+  assert.deepEqual(new Set(itemIds), new Set(Object.keys(ITEM_DEFINITIONS)));
+  assert.deepEqual(new Set(propKinds), new Set(PROP_KINDS));
 });

@@ -49,5 +49,6 @@ Decide which matters more before you crack it.`
 
 export function makeNote(id: string, key: keyof typeof NOTE_LIBRARY, x: number, z: number, source: NoteSpec['source']): NoteSpec {
   const note = NOTE_LIBRARY[key];
-  return { id, title: note.title, body: note.body, localPosition: { x, y: 0.83, z }, source };
+  const y = source === 'manila-book' ? 0.94 : 0.018;
+  return { id, title: note.title, body: note.body, localPosition: { x, y, z }, source };
 }

@@ -1,8 +1,10 @@
 import * as pc from 'playcanvas';
 import type { DroppedItemState, SaveData, SurfaceMark } from '../persistence/types.js';
 import { resolveCircleAgainstAabbs } from '../physics/collision.js';
-import { CELL_SIZE, type CellDescriptor } from '../world/types.js';
-import { canvasTexture, makeMaterial, markWorldPoint, clamp01, rayAabb, type CellVisual, type InteractionVisual, type WorldItemVisual, type WorldWall } from './support.js';
+import { CELL_SIZE, type CellDescriptor, type FloorPatchSpec } from '../world/types.js';
+import { ZONE_PROFILES } from '../world/zones.js';
+import { registerObjectCatalogShowcaseHost, type ObjectCatalogEntry } from './objectCatalog.js';
+import { canvasTexture, makeMaterial, markWorldPoint, clamp01, rayAabb, type CellVisual, type InteractionVisual, type TextureKind, type WorldItemVisual, type WorldWall } from './support.js';
 import { RendererCellBuilder } from './cellBuilder.js';
 export type { InteractionVisual, WorldItemVisual } from './support.js';
 
@@ -14,15 +16,19 @@ export class WorldRenderer {
   private readonly textures = new Map<string, pc.Texture>();
   private readonly markRoots = new Map<string, pc.Entity>();
   private readonly cellBuilder: RendererCellBuilder;
+  private labShowcaseRoot?: pc.Entity;
+  private labShowcaseCount = 0;
 
   constructor(private readonly app: pc.Application, private readonly save: SaveData) {
     this.cellBuilder = new RendererCellBuilder(app, save, this.walls, this.interactions, this.getMaterial.bind(this), this.box.bind(this));
+    registerObjectCatalogShowcaseHost({ spawn: (entries) => this.spawnLabShowcase(entries), clear: () => this.clearLabShowcase() });
   }
   get loadedCellCount(): number { return this.loaded.size; }
   get wallCount(): number { return this.walls.size; }
   get interactionCount(): number { return this.interactions.size; }
+  get labObjectCount(): number { return this.labShowcaseCount; }
 
-  private texture(kind: Parameters<typeof canvasTexture>[1], variant = 0): pc.Texture {
+  private texture(kind: TextureKind, variant = 0): pc.Texture {
     const key = `${kind}:${variant}`;
     const existing = this.textures.get(key);
     if (existing) return existing;
@@ -31,7 +37,7 @@ export class WorldRenderer {
     return created;
   }
 
-  private getMaterial(key: string, diffuse: [number, number, number], textureKind?: Parameters<typeof canvasTexture>[1], variant = 0, tiling: [number, number] = [1, 1], emissive?: [number, number, number], emissiveIntensity = 1): pc.StandardMaterial {
+  private getMaterial(key: string, diffuse: [number, number, number], textureKind?: TextureKind, variant = 0, tiling: [number, number] = [1, 1], emissive?: [number, number, number], emissiveIntensity = 1): pc.StandardMaterial {
     const fullKey = `${key}:${variant}:${tiling.join(',')}:${emissiveIntensity}`;
     const existing = this.materials.get(fullKey);
     if (existing) return existing;
@@ -54,6 +60,7 @@ export class WorldRenderer {
   loadCell(descriptor: CellDescriptor): void {
     if (this.loaded.has(descriptor.id)) return;
     const visual = this.cellBuilder.buildCell(descriptor);
+    if (descriptor.floorPatches.some((patch) => patch.kind === 'hole')) this.replaceHoleFloor(visual);
     this.loaded.set(descriptor.id, visual);
     this.renderMarksForCell(descriptor.id);
   }
@@ -77,6 +84,124 @@ export class WorldRenderer {
     const visual = this.loaded.get(`${cellX}:${cellZ}`); if (!visual) return;
     const interaction = this.cellBuilder.addItemVisual(visual.root, drop.item, drop.x, drop.y, drop.z, drop.x - cellX * CELL_SIZE, drop.z - cellZ * CELL_SIZE, undefined, drop.activatedAt);
     visual.interactions.push(interaction);
+  }
+
+  spawnLabShowcase(entries: readonly ObjectCatalogEntry[]): number {
+    this.clearLabShowcase();
+    if (entries.length === 0) return 0;
+    const rootNode = this.app.root as pc.Entity & { children?: pc.Entity[] };
+    const camera = rootNode.children?.find((child) => (child as pc.Entity & { name?: string }).name === 'player-camera') ?? this.app.root;
+    const root = new pc.Entity('world-lab-object-showcase');
+    camera.addChild(root);
+    this.labShowcaseRoot = root;
+
+    const stageEntry = (entry: ObjectCatalogEntry, x: number, y: number, z: number, scale: number): void => {
+      const wrapper = new pc.Entity(`lab-stage:${entry.id}`);
+      wrapper.setLocalPosition(x, y, z);
+      wrapper.setLocalScale(scale, scale, scale);
+      wrapper.setLocalEulerAngles(0, 180, 0);
+      root.addChild(wrapper);
+      this.cellBuilder.addCatalogVisual(wrapper, entry, 0, 0);
+    };
+
+    if (entries.length === 1) {
+      stageEntry(entries[0]!, 0, -1.62, -2.5, 1);
+      this.labShowcaseCount = 1;
+      return 1;
+    }
+
+    const columns = Math.min(6, entries.length);
+    const spacingX = 0.92; const spacingY = 0.68; const z = -3.75; const scale = 0.3;
+    const shelfMat = this.getMaterial('lab:shelf', [0.19, 0.18, 0.12], 'wood', 1, [2, 1], [0.14, 0.13, 0.07], 0.45);
+    const rows = Math.ceil(entries.length / columns);
+    for (let row = 0; row < rows; row += 1) {
+      const rowCount = Math.min(columns, entries.length - row * columns);
+      const width = Math.max(0.8, rowCount * spacingX);
+      const shelfY = -1.48 + row * spacingY;
+      this.box(`lab:shelf:${row}`, root, [0, shelfY, z], [width, 0.075, 0.46], shelfMat);
+    }
+    entries.forEach((entry, index) => {
+      const row = Math.floor(index / columns); const column = index % columns;
+      const rowCount = Math.min(columns, entries.length - row * columns);
+      const x = (column - (rowCount - 1) / 2) * spacingX;
+      const shelfTop = -1.42 + row * spacingY;
+      stageEntry(entry, x, shelfTop, z, scale);
+    });
+    const light = new pc.Entity('lab:inspection-light');
+    light.addComponent('light', { type: 'omni', color: new pc.Color(1, 0.93, 0.67), range: 6, intensity: 1.35, castShadows: false });
+    light.setLocalPosition(0, -0.1, -2.7);
+    root.addChild(light);
+    this.labShowcaseCount = entries.length;
+    return entries.length;
+  }
+
+  private replaceHoleFloor(visual: CellVisual): void {
+    const descriptor = visual.descriptor;
+    const holes = descriptor.floorPatches.filter((patch) => patch.kind === 'hole');
+    if (holes.length === 0) return;
+    const removableNames = new Set(['floor', ...holes.flatMap((hole) => [
+      `${hole.id}:void`, `${hole.id}:north-rim`, `${hole.id}:south-rim`, `${hole.id}:west-rim`, `${hole.id}:east-rim`
+    ])]);
+    const rootNode = visual.root as pc.Entity & { children?: pc.Entity[] };
+    for (const child of [...(rootNode.children ?? [])]) {
+      const name = (child as pc.Entity & { name?: string }).name;
+      if (name && removableNames.has(name)) child.destroy();
+    }
+
+    const profile = ZONE_PROFILES[descriptor.address.zoneId];
+    const floorMat = this.getMaterial(`floor:${profile.id}`, profile.floorTint, 'carpet', descriptor.variant % 3, [5, 5]);
+    this.addSegmentedFloor(visual.root, holes, floorMat);
+    for (const hole of holes) this.addRecessedHole(visual.root, hole, profile.floorTint);
+  }
+
+  private addSegmentedFloor(root: pc.Entity, holes: readonly FloorPatchSpec[], floorMat: pc.StandardMaterial): void {
+    const half = CELL_SIZE / 2;
+    const normalized = holes.map((hole) => ({
+      minX: Math.max(-half, hole.position.x - hole.scale.x / 2),
+      maxX: Math.min(half, hole.position.x + hole.scale.x / 2),
+      minZ: Math.max(-half, hole.position.z - hole.scale.z / 2),
+      maxZ: Math.min(half, hole.position.z + hole.scale.z / 2)
+    }));
+    const zEdges = [...new Set([-half, half, ...normalized.flatMap((entry) => [entry.minZ, entry.maxZ])])].sort((a, b) => a - b);
+    let pieceIndex = 0;
+    for (let zIndex = 1; zIndex < zEdges.length; zIndex += 1) {
+      const minZ = zEdges[zIndex - 1]!; const maxZ = zEdges[zIndex]!;
+      if (maxZ - minZ < 0.01) continue;
+      const centerZ = (minZ + maxZ) / 2;
+      const active = normalized.filter((entry) => centerZ > entry.minZ && centerZ < entry.maxZ);
+      const xEdges = [...new Set([-half, half, ...active.flatMap((entry) => [entry.minX, entry.maxX])])].sort((a, b) => a - b);
+      for (let xIndex = 1; xIndex < xEdges.length; xIndex += 1) {
+        const minX = xEdges[xIndex - 1]!; const maxX = xEdges[xIndex]!;
+        if (maxX - minX < 0.01) continue;
+        const centerX = (minX + maxX) / 2;
+        if (active.some((entry) => centerX > entry.minX && centerX < entry.maxX)) continue;
+        this.box(`floor-piece:${pieceIndex++}`, root, [centerX, -0.16, centerZ], [maxX - minX, 0.32, maxZ - minZ], floorMat);
+      }
+    }
+  }
+
+  private addRecessedHole(root: pc.Entity, hole: FloorPatchSpec, floorTint: [number, number, number]): void {
+    const voidMat = this.getMaterial('hole:void:recessed', [0.002, 0.002, 0.001]);
+    const sideMat = this.getMaterial('hole:side:recessed', [floorTint[0] * 0.28, floorTint[1] * 0.25, floorTint[2] * 0.18], 'concrete', hole.id.length % 3);
+    const rimMat = this.getMaterial('hole:rim:recessed', [floorTint[0] * 0.86, floorTint[1] * 0.8, floorTint[2] * 0.62], 'carpet', hole.id.length % 3);
+    const x = hole.position.x; const z = hole.position.z; const sx = hole.scale.x; const sz = hole.scale.z;
+    this.box(`${hole.id}:depth`, root, [x, -0.72, z], [sx * 0.92, 0.04, sz * 0.92], voidMat);
+    const sideDepth = 0.58; const sideY = -sideDepth / 2; const edge = 0.08;
+    this.box(`${hole.id}:north-side`, root, [x, sideY, z - sz / 2], [sx, sideDepth, edge], sideMat);
+    this.box(`${hole.id}:south-side`, root, [x, sideY, z + sz / 2], [sx, sideDepth, edge], sideMat);
+    this.box(`${hole.id}:west-side`, root, [x - sx / 2, sideY, z], [edge, sideDepth, sz], sideMat);
+    this.box(`${hole.id}:east-side`, root, [x + sx / 2, sideY, z], [edge, sideDepth, sz], sideMat);
+    const rim = 0.12;
+    this.box(`${hole.id}:north-rim`, root, [x, 0.028, z - sz / 2], [sx + rim, 0.056, rim], rimMat);
+    this.box(`${hole.id}:south-rim`, root, [x, 0.028, z + sz / 2], [sx + rim, 0.056, rim], rimMat);
+    this.box(`${hole.id}:west-rim`, root, [x - sx / 2, 0.028, z], [rim, 0.056, Math.max(0.1, sz - rim)], rimMat);
+    this.box(`${hole.id}:east-rim`, root, [x + sx / 2, 0.028, z], [rim, 0.056, Math.max(0.1, sz - rim)], rimMat);
+  }
+
+  clearLabShowcase(): void {
+    this.labShowcaseRoot?.destroy();
+    this.labShowcaseRoot = undefined;
+    this.labShowcaseCount = 0;
   }
 
   updateDynamicItems(now: number): void {
