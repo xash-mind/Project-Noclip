@@ -80,3 +80,30 @@ export function validateObjectCatalog(): string[] {
   }
   return errors;
 }
+
+export interface ObjectCatalogShowcaseHost {
+  spawn(entries: readonly ObjectCatalogEntry[]): number;
+  clear(): void;
+}
+
+let activeShowcaseHost: ObjectCatalogShowcaseHost | undefined;
+
+export function registerObjectCatalogShowcaseHost(host: ObjectCatalogShowcaseHost): void {
+  activeShowcaseHost?.clear();
+  activeShowcaseHost = host;
+}
+
+export function spawnObjectCatalogEntries(entryIds: readonly string[]): number {
+  if (!activeShowcaseHost) return 0;
+  const entries = entryIds.flatMap((id) => {
+    const entry = OBJECT_CATALOG_BY_ID.get(id);
+    return entry ? [entry] : [];
+  });
+  return activeShowcaseHost.spawn(entries);
+}
+
+export function clearObjectCatalogShowcase(): boolean {
+  if (!activeShowcaseHost) return false;
+  activeShowcaseHost.clear();
+  return true;
+}
