@@ -161,6 +161,19 @@ def main() -> None:
             message="Level 0 HUD",
         )
         time.sleep(2)
+        screenshot(driver, "02-post-launch.png")
+        startup_diagnostics = {
+            "watch": text_content(driver, '[data-ui="watch"]'),
+            "debug": read_debug(driver),
+            "pointerLocked": driver.execute_script("return document.pointerLockElement === document.querySelector('#game-canvas')"),
+            "documentHasFocus": driver.execute_script("return document.hasFocus()"),
+            "titleHidden": driver.execute_script("return document.querySelector('[data-ui=title]').hidden"),
+            "hudHidden": driver.execute_script("return document.querySelector('[data-ui=hud]').hidden"),
+        }
+        startup_errors = browser_log_errors(driver)
+        report["startupDiagnostics"] = startup_diagnostics
+        report["startupBrowserErrors"] = startup_errors
+        assert not startup_errors, f"Blocking startup browser console errors: {startup_errors}"
 
         canvas = driver.find_element(By.CSS_SELECTOR, "#game-canvas")
         assert canvas.size["width"] > 0 and canvas.size["height"] > 0
