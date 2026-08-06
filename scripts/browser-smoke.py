@@ -75,6 +75,11 @@ def read_save(driver: webdriver.Chrome) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
+def read_debug(driver: webdriver.Chrome) -> dict[str, Any]:
+    value = driver.execute_script("return window.__NOCLIP_DEBUG__ || {}")
+    return value if isinstance(value, dict) else {}
+
+
 def browser_log_errors(driver: webdriver.Chrome) -> list[dict[str, Any]]:
     ignored_fragments = ("favicon.ico", "AudioContext was not allowed to start")
     return [
@@ -141,7 +146,9 @@ def main() -> None:
         wait_for(driver, lambda current: current.execute_script("return document.readyState") == "complete", message="document load")
         new_button = wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="new"]'), message="new journey action")
         assert "Begin new local journey" in str(new_button.get_attribute("textContent"))
-        report["checks"].append("title screen and new-journey action rendered")
+        version_text = wait_for_text(driver, '[data-ui="version-indicator"]', ("v0.2.0-dev.1",), message="development version indicator")
+        report["version"] = version_text
+        report["checks"].append("title screen, new-journey action and development version indicator rendered")
         screenshot(driver, "01-title.png")
 
         new_button.click()
@@ -154,6 +161,19 @@ def main() -> None:
             message="Level 0 HUD",
         )
         time.sleep(2)
+        screenshot(driver, "02-post-launch.png")
+        startup_diagnostics = {
+            "watch": text_content(driver, '[data-ui="watch"]'),
+            "debug": read_debug(driver),
+            "pointerLocked": driver.execute_script("return document.pointerLockElement === document.querySelector('#game-canvas')"),
+            "documentHasFocus": driver.execute_script("return document.hasFocus()"),
+            "titleHidden": driver.execute_script("return document.querySelector('[data-ui=title]').hidden"),
+            "hudHidden": driver.execute_script("return document.querySelector('[data-ui=hud]').hidden"),
+        }
+        startup_errors = browser_log_errors(driver)
+        report["startupDiagnostics"] = startup_diagnostics
+        report["startupBrowserErrors"] = startup_errors
+        assert not startup_errors, f"Blocking startup browser console errors: {startup_errors}"
 
         canvas = driver.find_element(By.CSS_SELECTOR, "#game-canvas")
         assert canvas.size["width"] > 0 and canvas.size["height"] > 0
@@ -201,27 +221,36 @@ def main() -> None:
             report["warnings"].append("Headless Chromium did not grant pointer lock; manual pointer-lock coverage remains required.")
 
         if pointer_locked:
+            initial_debug = read_debug(driver)
+            initial_yaw = float(initial_debug.get("yaw", 0))
             driver.execute_script(
                 "window.dispatchEvent(new KeyboardEvent('keydown', {key: 'w', code: 'KeyW', bubbles: true}));"
             )
-            time.sleep(0.9)
             driver.execute_script(
-                "window.dispatchEvent(new KeyboardEvent('keyup', {key: 'w', code: 'KeyW', bubbles: true}));"
+                "const event = new MouseEvent('mousemove', {bubbles: true}); Object.defineProperty(event, 'movementX', {value: 85}); Object.defineProperty(event, 'movementY', {value: -12}); window.dispatchEvent(event);"
             )
-            time.sleep(2.2)
-            moved_save = read_save(driver)
-            if moved_save and moved_save.get("characterId") == character_id:
-                moved_position = moved_save.get("position") or {}
-                distance = (
-                    (float(moved_position.get("x", 0)) - float(initial_position.get("x", 0))) ** 2
-                    + (float(moved_position.get("z", 0)) - float(initial_position.get("z", 0))) ** 2
-                ) ** 0.5
-                if distance > 0.05:
-                    report["checks"].append(f"synthetic KeyW movement persisted ({distance:.2f} m)")
-                else:
-                    report["warnings"].append(
-                        "Headless synthetic KeyW did not move the player; native keyboard movement remains a manual regression check."
-                    )
+            wait_for(
+                driver,
+                lambda current: abs(float(read_debug(current).get("yaw", initial_yaw)) - initial_yaw) > 1,
+                timeout=8,
+                message="mouse look while KeyW is held",
+            )
+            driver.execute_script("window.dispatchEvent(new KeyboardEvent('keyup', {key: 'w', code: 'KeyW', bubbles: true}));")
+            report["checks"].append("mouse look remained responsive while a directional key was held")
+            time.sleep(1)
+
+            driver.execute_script("document.exitPointerLock()")
+            paused_debug = wait_for(
+                driver,
+                lambda current: read_debug(current) if read_debug(current).get("audio", {}).get("paused") is True else False,
+                timeout=8,
+                message="paused ambience state",
+            )
+            report["pausedAudio"] = paused_debug.get("audio")
+            report["checks"].append("pointer-lock pause muted procedural ambience")
+            resume_button = driver.find_element(By.CSS_SELECTOR, '[data-action="resume"]')
+            driver.execute_script("arguments[0].click();", resume_button)
+            wait_for(driver, lambda current: read_debug(current).get("audio", {}).get("paused") is False, timeout=8, message="ambience resume")
 
         toggle_lab(driver)
         wait_for(
@@ -241,13 +270,30 @@ def main() -> None:
         screenshot(driver, "03-world-lab.png")
 
         catalog_options = driver.find_elements(By.CSS_SELECTOR, '[data-lab="object-select"] option')
-        assert len(catalog_options) == 23, f"Expected 23 catalog objects, found {len(catalog_options)}"
+        assert len(catalog_options) == 24, f"Expected 24 catalog objects, found {len(catalog_options)}"
         dispatch_change(driver, '[data-lab="radius"]', "1")
         dispatch_change(driver, '[data-lab="bypass"]', True)
         dispatch_change(driver, '[data-lab="zone"]', "holes")
         wait_for_text(driver, '[data-ui="metrics"]', ("zone          Hole Section",), timeout=20, message="forced Hole Section")
         report["checks"].append("World Lab forced a Hole Section without changing the saved journey")
         screenshot(driver, "04-hole-catalog.png")
+
+        dispatch_change(driver, '[data-lab="zone"]', "pillar")
+        wait_for_text(driver, '[data-ui="metrics"]', ("zone          Pillar Field", "components"), timeout=20, message="modular Pillar Field")
+        pillar_metrics = text_content(driver, '[data-ui="metrics"]')
+        assert "pillar-lattice" in pillar_metrics
+        screenshot(driver, "04b-pillar-composition.png")
+        report["checks"].append("zone-weighted modular generation produced a pillar-lattice composition")
+
+        dispatch_change(driver, '[data-lab="zone"]', "arch")
+        wait_for_text(driver, '[data-ui="metrics"]', ("zone          Arch Rooms", "components"), timeout=20, message="modular Arch Rooms")
+        arch_metrics = text_content(driver, '[data-ui="metrics"]')
+        assert "arch-run" in arch_metrics
+        screenshot(driver, "04c-arch-composition.png")
+        report["checks"].append("zone-weighted modular generation produced curved arch components")
+
+        dispatch_change(driver, '[data-lab="zone"]', "holes")
+        wait_for_text(driver, '[data-ui="metrics"]', ("zone          Hole Section",), timeout=20, message="restore forced Hole Section")
 
         toggle_lab(driver)
         wait_for(
@@ -282,9 +328,9 @@ def main() -> None:
         )
         spawn_all = driver.find_element(By.CSS_SELECTOR, '[data-action="spawn-all-objects"]')
         driver.execute_script("arguments[0].scrollIntoView({block: 'center'}); arguments[0].click();", spawn_all)
-        catalog_status = wait_for_text(driver, '[data-ui="catalog-status"]', ("Spawned 23",), timeout=15, message="World Lab full object spawn")
+        catalog_status = wait_for_text(driver, '[data-ui="catalog-status"]', ("Spawned 24",), timeout=15, message="World Lab full object spawn")
         report["catalogStatus"] = catalog_status
-        report["checks"].append("World Lab catalog registered and spawned all 23 current items and props")
+        report["checks"].append("World Lab catalog registered and spawned all 24 current items and props")
         screenshot(driver, "06-object-catalog.png")
 
         toggle_lab(driver)

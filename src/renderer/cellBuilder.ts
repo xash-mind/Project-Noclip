@@ -4,9 +4,10 @@ import { ITEM_DEFINITIONS, type ItemDefinitionId } from '../items/definitions.js
 import type { ItemInstance } from '../items/types.js';
 import type { SaveData } from '../persistence/types.js';
 import { CELL_SIZE, WALL_HEIGHT, type CellDescriptor, type FloorPatchSpec, type PropSpec, type WallSpec } from '../world/types.js';
+import { lightFixturePositions } from '../world/lighting.js';
 import { ZONE_PROFILES, type ZoneProfile } from '../world/zones.js';
 import type { ObjectCatalogEntry } from './objectCatalog.js';
-import { color, type CellVisual, type ExitVisual, type InteractionVisual, type NoteVisual, type SeatVisual, type TextureKind, type WorldCollider, type WorldItemVisual } from './support.js';
+import { color, type CellVisual, type ExitVisual, type InteractionVisual, type NoteVisual, type SeatVisual, type TextureKind, type LightGroupVisual, type WorldCollider, type WorldItemVisual } from './support.js';
 
 export type MaterialFactory = (key: string, diffuse: [number, number, number], textureKind?: TextureKind, variant?: number, tiling?: [number, number], emissive?: [number, number, number], emissiveIntensity?: number) => pc.StandardMaterial;
 export type BoxFactory = (name: string, parent: pc.Entity, position: [number, number, number], scale: [number, number, number], material: pc.StandardMaterial, rotationY?: number) => pc.Entity;
@@ -25,7 +26,8 @@ const CATALOG_PROP_SCALE: Record<PropSpec['kind'], [number, number, number]> = {
   'ceiling-gap': [1.2, 0.06, 1.2],
   stain: [1.2, 0.02, 1.0],
   'carpet-patch': [1.2, 0.02, 1.0],
-  sign: [1.4, 0.65, 0.08]
+  sign: [1.4, 0.65, 0.08],
+  'arch-segment': [0.62, 0.24, 0.48]
 };
 
 export class RendererCellBuilder {
@@ -47,8 +49,6 @@ export class RendererCellBuilder {
     const ceilingMat = this.getMaterial(`ceiling:${profile.id}`, profile.ceilingTint, 'ceiling', descriptor.ceilingPattern, [4, 4]);
     const trimMat = this.getMaterial(`trim:${profile.id}`, profile.trimTint, 'wood', descriptor.variant % 2, [2, 2]);
     const concrete = this.getMaterial('concrete', [0.52, 0.52, 0.47], 'concrete', descriptor.variant % 3, [2, 2]);
-    const fixtureMat = this.getMaterial(`fixture:${profile.id}`, [0.69, 0.68, 0.53], undefined, 0, [1, 1], [0.84, 0.82, 0.61], descriptor.lightFailure ? 0.03 : 1.3 * profile.lightMultiplier * descriptor.lightTemperature);
-
     this.box('floor', root, [0, -0.12, 0], [CELL_SIZE, 0.24, CELL_SIZE], floorMat);
     this.box('ceiling', root, [0, WALL_HEIGHT + 0.12, 0], [CELL_SIZE, 0.24, CELL_SIZE], ceilingMat);
 
@@ -57,28 +57,58 @@ export class RendererCellBuilder {
       const wallLength = Math.max(wallSpec.sx, wallSpec.sz);
       const wallMat = descriptor.address.zoneId === 'exit-threshold'
         ? concrete
-        : this.getMaterial(`wall:${profile.id}`, profile.wallTint, 'wall', wallSpec.materialVariant ?? descriptor.variant % 4, [Math.max(1, wallLength / 2.6), 1]);
+        : this.getMaterial(`wall:${profile.id}`, profile.wallTint, 'wall', wallSpec.materialVariant ?? descriptor.variant % 4, [Math.max(1, wallLength / 2.6), Math.max(1, wallSpec.sy / WALL_HEIGHT)]);
       this.box(wallSpec.id, root, [wallSpec.cx, wallSpec.cy, wallSpec.cz], [wallSpec.sx, wallSpec.sy, wallSpec.sz], wallMat);
       const collider = this.toWorldCollider(descriptor, wallSpec);
       colliders.push(collider); this.walls.set(collider.id, collider);
       const horizontal = wallSpec.orientation === 'z';
-      this.box(`${wallSpec.id}:skirting`, root, [wallSpec.cx, 0.12, wallSpec.cz], [horizontal ? wallSpec.sx : wallSpec.sx + 0.035, 0.23, horizontal ? wallSpec.sz + 0.035 : wallSpec.sz], trimMat);
+      const trimLength = Math.max(0.08, wallLength - 0.045);
+      this.box(`${wallSpec.id}:skirting`, root, [wallSpec.cx, 0.115, wallSpec.cz], horizontal ? [trimLength, 0.22, wallSpec.sz + 0.012] : [wallSpec.sx + 0.012, 0.22, trimLength], trimMat);
+      this.box(`${wallSpec.id}:crown`, root, [wallSpec.cx, WALL_HEIGHT - 0.08, wallSpec.cz], horizontal ? [trimLength, 0.12, wallSpec.sz + 0.01] : [wallSpec.sx + 0.01, 0.12, trimLength], trimMat);
     }
 
-    this.addLighting(descriptor, root, fixtureMat);
+    const lightGroups = this.addLighting(descriptor, root, profile);
     for (const patch of descriptor.floorPatches) this.addFloorPatch(root, patch, profile);
     for (const prop of descriptor.props) this.addProp(descriptor, root, prop, colliders);
     const interactions = this.addInteractions(descriptor, root);
-    return { descriptor, root, colliders, interactions };
+    return { descriptor, root, colliders, interactions, lightGroups };
   }
 
-  private addLighting(descriptor: CellDescriptor, root: pc.Entity, fixtureMat: pc.StandardMaterial): void {
-    const positions = descriptor.roomArchetype.includes('corridor') || descriptor.roomArchetype === 'narrow-hall'
-      ? [[0, -3.8], [0, 0], [0, 3.8]]
-      : descriptor.address.zoneId === 'pillar'
-        ? [[-4.3, -4.3], [0, -4.3], [4.3, -4.3], [-4.3, 4.3], [0, 4.3], [4.3, 4.3]]
-        : [[-3.4, -2.4], [3.4, 2.4], [-3.4, 2.4], [3.4, -2.4]];
-    positions.forEach(([x, z], index) => this.box(`fixture:${index}`, root, [x!, WALL_HEIGHT - 0.08, z!], [2.2, 0.08, 0.38], fixtureMat, descriptor.ceilingPattern % 2 ? 90 : 0));
+  private addLighting(descriptor: CellDescriptor, root: pc.Entity, profile: ZoneProfile): LightGroupVisual[] {
+    const visuals: LightGroupVisual[] = [];
+    for (const group of descriptor.lightGroups) {
+      const on = group.state !== 'off';
+      const fixtureMat = this.getMaterial(
+        `fixture:${profile.id}:${group.state}`,
+        on ? [0.69, 0.68, 0.53] : [0.28, 0.28, 0.23],
+        undefined,
+        0,
+        [1, 1],
+        on ? [0.84, 0.82, 0.61] : [0.01, 0.01, 0.008],
+        on ? 1.05 * profile.lightMultiplier * group.temperature : 0.02
+      );
+      const housingMat = this.getMaterial(`fixture-housing:${profile.id}`, [0.34, 0.34, 0.29], 'concrete', 0, [1, 1]);
+      const fixtures = lightFixturePositions(group).map((position, index) => {
+        this.box(
+          `${group.id}:housing:${index}`,
+          root,
+          [position.x, group.position.y + 0.025, position.z],
+          group.axis === 'x' ? [2.18, 0.105, 0.46] : [0.46, 0.105, 2.18],
+          housingMat
+        );
+        const glow = this.box(
+          `${group.id}:fixture:${index}`,
+          root,
+          [position.x, group.position.y - 0.035, position.z],
+          group.axis === 'x' ? [1.96, 0.035, 0.27] : [0.27, 0.035, 1.96],
+          fixtureMat
+        );
+        glow.enabled = on;
+        return glow;
+      });
+      visuals.push({ spec: group, fixtures, lastValue: on ? 1 : 0 });
+    }
+    return visuals;
   }
 
   private addFloorPatch(root: pc.Entity, patch: FloorPatchSpec, profile: ZoneProfile): void {
@@ -120,7 +150,8 @@ export class RendererCellBuilder {
       'ceiling-gap': this.getMaterial('prop:void', [0.005, 0.005, 0.004]),
       stain: this.getMaterial('prop:stain', [0.12, 0.09, 0.045], 'carpet', prop.materialVariant ?? 0),
       'carpet-patch': this.getMaterial('prop:carpet', profile.floorTint, 'carpet', prop.materialVariant ?? 0),
-      sign: this.getMaterial('prop:sign', [0.15, 0.18, 0.13], undefined, 0, [1, 1], [0.08, 0.17, 0.07], 0.55)
+      sign: this.getMaterial('prop:sign', [0.15, 0.18, 0.13], undefined, 0, [1, 1], [0.08, 0.17, 0.07], 0.55),
+      'arch-segment': this.getMaterial('prop:arch', [profile.wallTint[0] * 0.92, profile.wallTint[1] * 0.91, profile.wallTint[2] * 0.86], 'concrete', prop.materialVariant ?? 0, [1, 1])
     };
   }
 
@@ -141,7 +172,7 @@ export class RendererCellBuilder {
   private addPropGeometry(parent: pc.Entity, prop: PropSpec, profile: ZoneProfile): pc.Entity {
     const container = new pc.Entity(prop.id);
     container.setLocalPosition(prop.position.x, prop.position.y, prop.position.z);
-    if (prop.rotationY) container.setLocalEulerAngles(0, prop.rotationY, 0);
+    if (prop.rotationX || prop.rotationY || prop.rotationZ) container.setLocalEulerAngles(prop.rotationX ?? 0, prop.rotationY ?? 0, prop.rotationZ ?? 0);
     parent.addChild(container);
     const material = this.materialsForProp(profile, prop)[prop.kind];
     const sx = prop.scale.x; const sy = prop.scale.y; const sz = prop.scale.z;

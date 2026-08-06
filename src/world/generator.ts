@@ -3,6 +3,7 @@ import { exitsForCell } from './exits.js';
 import { intInRange, stableId, unitFloat, weightedChoice } from './hash.js';
 import { boundaryWallParts, chooseArchetype, layoutFor } from './layouts.js';
 import { makeNote } from './notes.js';
+import { generateLightGroups, validateLightClearance } from './lighting.js';
 import { chooseZone, districtId, ZONE_PROFILES } from './zones.js';
 import {
   CELL_SIZE,
@@ -124,6 +125,26 @@ function reserveOriginArrival(x: number, z: number, walls: readonly WallSpec[], 
   };
 }
 
+
+function boundsOverlap(a: PlacementBounds, b: PlacementBounds, padding = 0.06): boolean {
+  return a.minX < b.maxX - padding && a.maxX > b.minX + padding && a.minZ < b.maxZ - padding && a.maxZ > b.minZ + padding;
+}
+
+function removeComponentOverlaps(walls: readonly WallSpec[], props: readonly PropSpec[]): PropSpec[] {
+  const wallOccupied = walls.map(wallBounds);
+  const acceptedSolid: PlacementBounds[] = [];
+  const accepted: PropSpec[] = [];
+  for (const prop of props) {
+    if (!prop.solid) { accepted.push(prop); continue; }
+    const bounds = propBounds(prop);
+    if (wallOccupied.some((wall) => boundsOverlap(bounds, wall, 0.1))) continue;
+    if (acceptedSolid.some((other) => boundsOverlap(bounds, other, 0.08))) continue;
+    accepted.push(prop);
+    acceptedSolid.push(bounds);
+  }
+  return accepted;
+}
+
 function solidBounds(walls: readonly WallSpec[], props: readonly PropSpec[]): PlacementBounds[] {
   return [
     ...walls.map(wallBounds),
@@ -198,12 +219,21 @@ export function generateCell(options: GenerateCellOptions): CellDescriptor {
   const variant = intInRange(`${seed}:variant:${x}:${z}:${shiftEpoch}`, 0, Math.max(10, Math.round(18 * tuning.roomVariation)));
   const archetype = chooseArchetype(seed, x, z, zoneId, shiftEpoch);
   const materialVariant = intInRange(`${seed}:wall-material:${x}:${z}`, 0, 5);
+  const layout = layoutFor(seed, x, z, archetype, zoneId, shiftEpoch, variant, tuning.roomVariation);
   const walls: WallSpec[] = [];
-  for (const direction of Object.keys(DIRECTIONS) as Direction[]) walls.push(...boundaryWallParts(seed, x, z, direction, openings[direction], materialVariant));
-  const layout = layoutFor(seed, x, z, archetype, shiftEpoch, variant);
+  for (const [direction, [dx, dz]] of Object.entries(DIRECTIONS) as Array<[Direction, [number, number]]>) {
+    const sameDistrict = districtId(x, z) === districtId(x + dx, z + dz);
+    const openingWidth = sameDistrict && layout.spatialProfile === 'sparse-vista' ? CELL_SIZE - 0.65
+      : sameDistrict && layout.spatialProfile === 'pillar-expanse' ? 8.4
+        : DOOR_WIDTH;
+    walls.push(...boundaryWallParts(seed, x, z, direction, openings[direction], materialVariant, openingWidth));
+  }
   walls.push(...layout.walls);
-  const arrivalSafe = reserveOriginArrival(x, z, walls, layout.props);
+  const composedProps = removeComponentOverlaps(walls, layout.props);
+  const arrivalSafe = reserveOriginArrival(x, z, walls, composedProps);
   const noteSpecs = [...layout.notes, ...maybeNotes(seed, x, z, archetype)];
+  const ceilingPattern = intInRange(`${seed}:ceiling:${x}:${z}`, 0, 4);
+  const lightGroups = generateLightGroups({ seed, x, z, shiftEpoch, zoneId, spatialProfile: layout.spatialProfile, ceilingPattern, props: arrivalSafe.props });
 
   return {
     id: cellId(x, z),
@@ -213,15 +243,19 @@ export function generateCell(options: GenerateCellOptions): CellDescriptor {
     variant,
     roomArchetype: archetype,
     roomLabel: layout.label,
+    spatialProfile: layout.spatialProfile,
+    componentIds: layout.componentIds,
+    compositionSignature: layout.compositionSignature,
     walls: arrivalSafe.walls,
     props: arrivalSafe.props,
     floorPatches: layout.patches,
     notes: noteSpecs,
     lootNodes: zoneId === 'manila' ? [] : lootForCell(seed, x, z, tuning.lootChance, archetype, arrivalSafe.walls, arrivalSafe.props),
     exits,
-    lightFailure: zoneId === 'blackout' || unitFloat(`${addressId(address)}:light`) < 0.045,
-    lightTemperature: 0.82 + unitFloat(`${addressId(address)}:temperature`) * 0.24,
-    ceilingPattern: intInRange(`${seed}:ceiling:${x}:${z}`, 0, 4),
+    lightGroups,
+    lightFailure: lightGroups.every((group) => group.state === 'off'),
+    lightTemperature: lightGroups.reduce((sum, group) => sum + group.temperature, 0) / Math.max(1, lightGroups.length),
+    ceilingPattern,
     hallucinationAnchor: profile.stability === 'disorienting' && unitFloat(`${seed}:hallucination:${x}:${z}`) < 0.032
   };
 }
@@ -240,6 +274,7 @@ export function validateCellPlacement(cell: CellDescriptor): string[] {
       if (circleOverlapsBounds(node.localPosition.x, node.localPosition.z, LOOT_CLEARANCE, bounds)) errors.push(`Loot ${node.id} overlaps ${bounds.id}`);
     }
   }
+  errors.push(...validateLightClearance(cell.lightGroups, cell.props));
   for (let left = 0; left < spawned.length; left += 1) {
     for (let right = left + 1; right < spawned.length; right += 1) {
       const a = spawned[left]!;

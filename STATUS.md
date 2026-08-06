@@ -1,69 +1,65 @@
 # Project Status
 
-**Last verified:** 2026-08-05  
-**Accepted runtime merge:** `58389c13f7c35ed38e514d84c949e47d0368823c` from PR #10  
-**Environment:** GitHub CI and Chromium/WebGL evidence passed; Vercel production build rejected before execution by account rate limit
+**Last verified:** 2026-08-06  
+**Current production:** older Alpha 0.2 runtime; release alignment tracked in Issue #8  
+**Active implementation:** [Issue #11](https://github.com/xash-mind/Project-Noclip/issues/11) / [PR #12](https://github.com/xash-mind/Project-Noclip/pull/12)  
+**Development version:** `0.2.0-dev.1`
 
 ## Health
 
-**Watch.** Level 0 Alpha 0.2 now has materially clearer procedural surfaces, grounded notes and item silhouettes, discrete recessed Hole Sections, and a searchable World Lab object showcase. Deterministic generation, stable identities and save schema v2 remain compatible. Production is still stale because Vercel build capacity is unavailable.
+**Active development.** The current branch rebuilds Level 0 sensory simulation and room composition while preserving save schema v2, stable world/item identities, connector laws and timeline gates. Production remains unchanged until the exact preview passes and is promoted once.
 
 ## Current milestone
 
-Release accepted runtime `58389c13` through Issue #8 once Vercel capacity resets. After production alignment, continue measured renderer optimization and native interaction QA rather than expanding content scope blindly.
+Verify and release the sensory/modular-generation slice: independent mouse look, true pause audio lifecycle, deterministic clustered fluorescent acoustics, mixed light states, corrected wall/arch/light placement, and zone-weighted modular room composition.
 
-## Working now
+## Implemented on the active branch
 
-- Deterministic 5×5 district planning with sixteen room archetypes
-- Procedural Level 0 materials with consistent wall density and brighter non-blackout carpet contrast
-- Flush damp, worn, dark and dry carpet treatments without repeated raised black slabs
-- Hole Sections rendered as distinct cut-through pits with visible rims, side depth and separated floor geometry
-- Grounded ordinary notes with the Manila ledger retained on its table
-- Recognizable deterministic primitive models for all current item definitions
-- Searchable World Lab catalog covering all 23 current items and prop kinds, with selected, filtered, all and clear actions
-- Disposable showcase models isolated from interactions, collisions, canonical generation and persistence
-- Swept-circle collision, stable loot-node IDs, timeline gates and IndexedDB save schema v2 preserved
-- Strict TypeScript, sixteen deterministic/system tests and the 10,000-cell benchmark passing
-- Chromium 150 with software WebGL passing new journey, forced Hole Section, full object showcase, clear and save/reload
-- No blocking browser-console errors in the accepted smoke
+- Frame-queued mouse look independent of held movement keys and sprint state.
+- Journey pause/focus/modal lifecycle freezes simulation and mutes procedural ambience.
+- Softer filtered fluorescent hum driven by nearby loaded light groups rather than one current-room switch.
+- Deterministic on/off/flicker fixture groups with one bounded light/audio contribution per group.
+- Light placement clearance against pillars and solid props.
+- Exact bottom/crown trim lengths to remove wall-end glitches and conceal wall-top UV seams.
+- Curved segmented arch modules below the ceiling instead of flat beams clipping into walls.
+- Deterministic modular room grammar with zone-weighted reusable components.
+- District-coherent sparse vistas and pillar expanses with widened open boundaries, plus thin channels and standard composites.
+- Canonical root `VERSION` and removable non-interactive development indicator.
+- Existing save schema v2 and persisted journey deltas unchanged.
 
-## Latest meaningful change
+## Current verification
 
-Merged [PR #10](https://github.com/xash-mind/Project-Noclip/pull/10) as [`58389c13`](https://github.com/xash-mind/Project-Noclip/commit/58389c13f7c35ed38e514d84c949e47d0368823c), closing [Issue #9](https://github.com/xash-mind/Project-Noclip/issues/9). Runtime run `30947402217` and final-head run `30947735824` passed; browser artifact `8907536628` shows readable baseline carpet, discrete recessed holes and all 23 catalog objects on an intentional inspection shelf.
+Local pre-publish gate:
 
-Initial observations:
+- strict local TypeScript: passed
+- deterministic/system tests: 21/21 passed
+- 10,000-cell benchmark: zero connector errors and zero placement errors
+- benchmark volume: 84,342 walls, 69,899 props, 1,175 spawned loot nodes
+- static fallback build: passed
 
-- normal radius-3 baseline: 49 loaded cells, 550 colliders, 7 interactions and 519 draw calls
-- forced Hole Section at radius 1 with showcase: 9 loaded cells, 59 colliders, 1 interaction and 292 draw calls
-- final used JavaScript heap: approximately 45.9 MB
+Exact installed-package TypeScript, production Vite build and Chromium/WebGL evidence remain the PR gate before merge.
 
 ## Top blocker
 
-Vercel rejected both the commit-specific PR #10 preview and the merged-main production attempt before build execution because the account build-rate limit is active. Production at https://project-noclip.vercel.app still serves an older runtime. [Issue #8](https://github.com/xash-mind/Project-Noclip/issues/8) remains the single deployment follow-up.
+No code blocker is currently known. Vercel build-rate capacity and the stale production deployment remain external release risks tracked in Issue #8. The implementation must not be declared deployed until the visible `v0.2.0-dev.1` indicator is verified on production.
 
 ## Next recommended action
 
-After Vercel capacity resets, retry production for accepted runtime commit `58389c13`, verify generated asset hashes and the public browser journey, then close Issue #8. The new runtime-aware Vercel ignore rule should prevent future test and documentation-only commits from consuming preview builds.
-
-## Decisions needed from Sash
-
-Only a Vercel retry or capacity action if the rate limit remains blocked when release work resumes. No product-direction decision is required.
+Complete PR #12 CI and browser evidence, verify one Vercel preview, merge once, promote/build current `main` once, confirm `v0.2.0-dev.1` on production, then update Project Noclip's mapped Notion page and the Projects manual-version dashboard line.
 
 ## Known risks and unverified claims
 
-- Hole rendering now creates visible recesses, but falling and terminal-hole physics are not implemented in this renderer-correctness change.
-- Headless Chromium grants pointer lock, but synthetic keyboard input still does not provide reliable native movement evidence.
-- Native note pickup, marker drawing and glow-stick use remain manual regression checks.
-- Primitive geometry is clearer but still placeholder-quality; imported art assets remain future work.
-- Sustained frame time, GPU pressure and long-session memory growth remain unmeasured.
-- Some generated props still use simple AABB collision.
-- Clean installation is not fully reproducible because the repository lacks a committed lockfile and CI uses `npm install`.
+- Native browser keyboard/pointer-lock behavior must pass the expanded Chromium test and still merits a physical-device check.
+- Clustered hum is intentionally bounded, but subjective loudness should be reviewed on headphones and laptop speakers.
+- Modular generation changes visual composition for deterministic cells but does not change canonical cell addresses or save deltas.
+- Primitive geometry remains placeholder-quality and sustained long-traversal GPU/frame-time profiling remains a follow-up.
+- Clean installation is still not fully locked because the repository lacks a committed package lockfile.
 
 ## Important links
 
 - Repository: https://github.com/xash-mind/Project-Noclip
-- Rendering PR: https://github.com/xash-mind/Project-Noclip/pull/10
-- Rendering issue: https://github.com/xash-mind/Project-Noclip/issues/9
+- Active issue: https://github.com/xash-mind/Project-Noclip/issues/11
+- Active PR: https://github.com/xash-mind/Project-Noclip/pull/12
 - Production release issue: https://github.com/xash-mind/Project-Noclip/issues/8
-- Production target: https://project-noclip.vercel.app
+- Production: https://project-noclip.vercel.app
 - Shared operations: https://github.com/xash-mind/project-operations

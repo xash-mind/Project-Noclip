@@ -1,6 +1,6 @@
 import * as pc from 'playcanvas';
 import type { ItemInstance } from '../items/types.js';
-import type { NoteSpec, CellDescriptor } from '../world/types.js';
+import type { NoteSpec, CellDescriptor, LightGroupSpec } from '../world/types.js';
 
 export type TextureKind = 'wall' | 'carpet' | 'ceiling' | 'concrete' | 'wood' | 'paper';
 
@@ -54,11 +54,20 @@ export interface SeatVisual { kind: 'seat'; id: string; entity: pc.Entity; x: nu
 export interface NoteVisual { kind: 'note'; id: string; entity: pc.Entity; note: NoteSpec; x: number; y: number; z: number; }
 export type InteractionVisual = WorldItemVisual | ExitVisual | SeatVisual | NoteVisual;
 
+
+export interface LightGroupVisual {
+  spec: LightGroupSpec;
+  fixtures: pc.Entity[];
+  light?: pc.Entity;
+  lastValue: number;
+}
+
 export interface CellVisual {
   descriptor: CellDescriptor;
   root: pc.Entity;
   colliders: WorldCollider[];
   interactions: InteractionVisual[];
+  lightGroups: LightGroupVisual[];
 }
 
 export function color(tuple: [number, number, number], multiplier = 1): pc.Color {

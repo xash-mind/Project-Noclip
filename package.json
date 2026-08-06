@@ -1,6 +1,6 @@
 {
   "name": "project-noclip",
-  "version": "0.2.0",
+  "version": "0.2.0-dev.1",
   "private": true,
   "type": "module",
   "description": "A deterministic browser-first living Backrooms simulation.",
@@ -15,7 +15,15 @@
     "check": "npm run typecheck && npm test && npm run benchmark && npm run build",
     "benchmark": "node scripts/benchmark.mjs"
   },
-  "dependencies": { "playcanvas": "2.21.3" },
-  "devDependencies": { "typescript": "^5.8.3", "vite": "^7.1.0" },
-  "engines": { "node": ">=22.12.0" }
+  "dependencies": {
+    "playcanvas": "2.21.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vite": "^7.1.0",
+    "@types/node": "^22.10.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
 }

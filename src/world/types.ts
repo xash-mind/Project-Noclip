@@ -38,12 +38,31 @@ export const PROP_KINDS = [
   'ceiling-gap',
   'stain',
   'carpet-patch',
-  'sign'
+  'sign',
+  'arch-segment'
 ] as const;
 export type PropKind = typeof PROP_KINDS[number];
 
 export const FLOOR_PATCH_KINDS = ['damp', 'worn', 'dark', 'dry', 'hole'] as const;
 export type FloorPatchKind = typeof FLOOR_PATCH_KINDS[number];
+
+export type SpatialProfile = 'standard' | 'sparse-vista' | 'thin-channel' | 'pillar-expanse';
+export type RoomComponentId =
+  | 'open-void'
+  | 'partition-cross'
+  | 'partition-offset'
+  | 'thin-corridor'
+  | 'desk-cluster'
+  | 'storage-corner'
+  | 'alcove-pair'
+  | 'service-bank'
+  | 'pillar-lattice'
+  | 'arch-run'
+  | 'bench-island'
+  | 'floor-wear'
+  | 'floor-damp'
+  | 'hole-field';
+export type LightState = 'on' | 'off' | 'flicker';
 
 export interface WorldAddress {
   worldSeed: string;
@@ -87,6 +106,8 @@ export interface PropSpec {
   position: LocalPoint;
   scale: LocalPoint;
   rotationY?: number;
+  rotationX?: number;
+  rotationZ?: number;
   solid?: boolean;
   materialVariant?: number;
 }
@@ -106,6 +127,20 @@ export interface NoteSpec {
   localPosition: LocalPoint;
   rotationY?: number;
   source: 'manila-book' | 'office-memo' | 'maintenance-note' | 'warning';
+}
+
+
+export interface LightGroupSpec {
+  id: string;
+  position: LocalPoint;
+  axis: 'x' | 'z';
+  fixtureCount: number;
+  spacing: number;
+  state: LightState;
+  intensity: number;
+  temperature: number;
+  flickerRate: number;
+  phase: number;
 }
 
 export interface LootNode {
@@ -133,12 +168,16 @@ export interface CellDescriptor {
   variant: number;
   roomArchetype: RoomArchetype;
   roomLabel: string;
+  spatialProfile: SpatialProfile;
+  componentIds: RoomComponentId[];
+  compositionSignature: string;
   walls: WallSpec[];
   props: PropSpec[];
   floorPatches: FloorPatchSpec[];
   notes: NoteSpec[];
   lootNodes: LootNode[];
   exits: ExitDescriptor[];
+  lightGroups: LightGroupSpec[];
   lightFailure: boolean;
   lightTemperature: number;
   ceilingPattern: number;
