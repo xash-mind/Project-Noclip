@@ -219,9 +219,12 @@ export class WorldRenderer {
         const distance = Math.hypot(worldX - playerX, worldZ - playerZ);
         const attenuation = Math.max(0, 1 - distance / LIGHT_AUDIO_RADIUS);
         const contribution = value * group.spec.intensity * attenuation * attenuation;
-        if (group.light.light) group.light.light.intensity = value * group.spec.intensity * ZONE_PROFILES[visual.descriptor.address.zoneId].lightMultiplier;
-        group.fixtures.forEach((fixture) => { fixture.enabled = value > 0.08; });
-        if (value > 0.08) activeGroups += 1;
+        const enabled = value > 0.08;
+        const wasEnabled = group.lastValue > 0.08;
+        const targetIntensity = value * group.spec.intensity * ZONE_PROFILES[visual.descriptor.address.zoneId].lightMultiplier;
+        if (group.light.light && Math.abs(group.light.light.intensity - targetIntensity) > 0.015) group.light.light.intensity = targetIntensity;
+        if (enabled !== wasEnabled) group.fixtures.forEach((fixture) => { fixture.enabled = enabled; });
+        if (enabled) activeGroups += 1;
         if (group.spec.state === 'flicker') { flickerGroups += 1; flickerPulse = Math.max(flickerPulse, Math.max(0, group.lastValue - value)); }
         energy += contribution;
         weightedTemperature += contribution * group.spec.temperature;

@@ -56,6 +56,7 @@ export class ProjectNoclipGame {
   private pendingMouseY = 0;
   private lightField = { energy: 0, activeGroups: 0, flickerGroups: 0, flickerPulse: 0, temperature: 0.94 };
   private sessionElapsed = 0;
+  private lightFieldAccumulator = 0;
 
   constructor() {
     const canvas = document.querySelector<HTMLCanvasElement>('#game-canvas');
@@ -169,9 +170,13 @@ export class ProjectNoclipGame {
       this.updateSimulation(dt);
       this.updateInteraction();
       this.renderer.updateDynamicItems(Date.now());
-      const position = this.camera.getPosition();
-      this.lightField = this.renderer.updateLightField(position.x, position.z, this.sessionElapsed, this.save.settings.reducedFlicker);
-      this.ambience.setLightField(this.lightField);
+      this.lightFieldAccumulator += dt;
+      if (this.lightFieldAccumulator >= 0.1) {
+        this.lightFieldAccumulator %= 0.1;
+        const position = this.camera.getPosition();
+        this.lightField = this.renderer.updateLightField(position.x, position.z, this.sessionElapsed, this.save.settings.reducedFlicker);
+        this.ambience.setLightField(this.lightField);
+      }
       this.saveAccumulator += dt;
       if (this.saveAccumulator >= SAVE_INTERVAL) { this.saveAccumulator = 0; void this.persist(); }
     }
