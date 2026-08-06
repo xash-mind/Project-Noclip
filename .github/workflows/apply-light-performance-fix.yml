@@ -1,0 +1,53 @@
+name: Apply bounded light-field update
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/issue-11-sensory-modular-generation
+          fetch-depth: 0
+      - name: Apply bounded renderer update
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          game = Path('src/app/ProjectNoclipGame.ts')
+          source = game.read_text()
+          source = source.replace(
+              '  private sessionElapsed = 0;\n',
+              '  private sessionElapsed = 0;\n  private lightFieldAccumulator = 0;\n',
+          )
+          old = '''      const position = this.camera.getPosition();\n      this.lightField = this.renderer.updateLightField(position.x, position.z, this.sessionElapsed, this.save.settings.reducedFlicker);\n      this.ambience.setLightField(this.lightField);\n      this.saveAccumulator += dt;\n'''
+          new = '''      this.lightFieldAccumulator += dt;\n      if (this.lightFieldAccumulator >= 0.1) {\n        this.lightFieldAccumulator %= 0.1;\n        const position = this.camera.getPosition();\n        this.lightField = this.renderer.updateLightField(position.x, position.z, this.sessionElapsed, this.save.settings.reducedFlicker);\n        this.ambience.setLightField(this.lightField);\n      }\n      this.saveAccumulator += dt;\n'''
+          if old not in source:
+              raise SystemExit('ProjectNoclipGame light-field target missing')
+          game.write_text(source.replace(old, new))
+
+          renderer = Path('src/renderer/WorldRenderer.ts')
+          source = renderer.read_text()
+          old = '''        const contribution = value * group.spec.intensity * attenuation * attenuation;\n        if (group.light.light) group.light.light.intensity = value * group.spec.intensity * ZONE_PROFILES[visual.descriptor.address.zoneId].lightMultiplier;\n        group.fixtures.forEach((fixture) => { fixture.enabled = value > 0.08; });\n        if (value > 0.08) activeGroups += 1;\n'''
+          new = '''        const contribution = value * group.spec.intensity * attenuation * attenuation;\n        const enabled = value > 0.08;\n        const wasEnabled = group.lastValue > 0.08;\n        const targetIntensity = value * group.spec.intensity * ZONE_PROFILES[visual.descriptor.address.zoneId].lightMultiplier;\n        if (group.light.light && Math.abs(group.light.light.intensity - targetIntensity) > 0.015) group.light.light.intensity = targetIntensity;\n        if (enabled !== wasEnabled) group.fixtures.forEach((fixture) => { fixture.enabled = enabled; });\n        if (enabled) activeGroups += 1;\n'''
+          if old not in source:
+              raise SystemExit('WorldRenderer light-field target missing')
+          renderer.write_text(source.replace(old, new))
+
+          Path('.github/workflows/apply-light-performance-fix.yml').unlink()
+          PY
+      - name: Commit coherent runtime repair
+        shell: bash
+        run: |
+          git config user.name "project-noclip-ci"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/app/ProjectNoclipGame.ts src/renderer/WorldRenderer.ts .github/workflows/apply-light-performance-fix.yml
+          git commit -m "Fix light-field renderer stall"
+          git push origin HEAD:agent/issue-11-sensory-modular-generation
