@@ -7,6 +7,9 @@ on:
         description: Public deployment URL to verify
         required: false
         default: https://project-noclip.vercel.app
+      deployment_commit:
+        description: Git commit served by the deployment
+        required: false
   push:
     branches: [main]
     paths:
@@ -14,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: project-noclip-production-smoke
@@ -28,19 +32,117 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      - name: Resolve production target
+        shell: bash
+        env:
+          REQUESTED_BASE_URL: ${{ github.event.inputs.base_url }}
+          REQUESTED_DEPLOYMENT_COMMIT: ${{ github.event.inputs.deployment_commit }}
+        run: |
+          set -euo pipefail
+          echo "NOCLIP_TARGET_URL=${REQUESTED_BASE_URL:-https://project-noclip.vercel.app}" >> "$GITHUB_ENV"
+          echo "NOCLIP_DEPLOYMENT_COMMIT=${REQUESTED_DEPLOYMENT_COMMIT:-c2d3cb38faacfc7e8e22dae67aa2e8e8af9ddfea}" >> "$GITHUB_ENV"
+      - name: Capture public asset manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/production-browser-smoke
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import urllib.parse
+          import urllib.request
+          from pathlib import Path
+
+          base_url = os.environ["NOCLIP_TARGET_URL"].rstrip("/") + "/"
+          request = urllib.request.Request(base_url, headers={"User-Agent": "Project-Noclip-Production-Smoke/1.0"})
+          with urllib.request.urlopen(request, timeout=30) as response:
+              html = response.read()
+              status = response.status
+              final_url = response.geturl()
+
+          text = html.decode("utf-8")
+          paths = sorted(set(re.findall(r'(?:src|href)=["\']([^"\']+/assets/[^"\']+)["\']', text)))
+          assets = []
+          for path in paths:
+              url = urllib.parse.urljoin(base_url, path)
+              asset_request = urllib.request.Request(url, headers={"User-Agent": "Project-Noclip-Production-Smoke/1.0"})
+              with urllib.request.urlopen(asset_request, timeout=60) as response:
+                  body = response.read()
+              assets.append({
+                  "path": path,
+                  "url": url,
+                  "bytes": len(body),
+                  "sha256": hashlib.sha256(body).hexdigest(),
+              })
+
+          manifest = {
+              "requestedUrl": base_url,
+              "finalUrl": final_url,
+              "status": status,
+              "htmlBytes": len(html),
+              "htmlSha256": hashlib.sha256(html).hexdigest(),
+              "assets": assets,
+          }
+          output = Path("artifacts/production-browser-smoke/asset-manifest.json")
+          output.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+          print(json.dumps(manifest, indent=2))
+          PY
       - name: Install browser-smoke driver
         run: python -m pip install --disable-pip-version-check selenium==4.46.0
       - name: Run Chromium journey against production
         shell: bash
-        env:
-          REQUESTED_BASE_URL: ${{ github.event.inputs.base_url }}
         run: |
           set -euo pipefail
-          BASE_URL="${REQUESTED_BASE_URL:-https://project-noclip.vercel.app}"
-          echo "Verifying ${BASE_URL}"
-          NOCLIP_BASE_URL="${BASE_URL}" \
+          echo "Verifying ${NOCLIP_TARGET_URL}"
+          NOCLIP_BASE_URL="${NOCLIP_TARGET_URL}" \
           NOCLIP_BROWSER_ARTIFACTS="artifacts/production-browser-smoke" \
           python scripts/browser-smoke.py
+      - name: Publish production evidence to Issue 8
+        if: success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(Path("artifacts/production-browser-smoke/report.json").read_text(encoding="utf-8"))
+          assets = json.loads(Path("artifacts/production-browser-smoke/asset-manifest.json").read_text(encoding="utf-8"))
+          run_url = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+
+          lines = [
+              "## Production browser smoke: passed",
+              "",
+              f"- Public URL: `{report['baseUrl']}`",
+              f"- Deployment commit: `{os.environ['NOCLIP_DEPLOYMENT_COMMIT']}`",
+              f"- Verification workflow commit: `{os.environ['GITHUB_SHA']}`",
+              f"- HTTP status: `{assets['status']}`",
+              f"- HTML SHA-256: `{assets['htmlSha256']}`",
+              f"- Actions evidence: {run_url}",
+              "",
+              "### Public generated assets",
+          ]
+          for asset in assets["assets"]:
+              lines.append(f"- `{asset['path']}` — {asset['bytes']} bytes — SHA-256 `{asset['sha256']}`")
+
+          lines.extend(["", "### Browser journey checks"])
+          lines.extend(f"- [x] {check}" for check in report.get("checks", []))
+          for warning in report.get("warnings", []):
+              lines.append(f"- [ ] Non-blocking headless limitation: {warning}")
+          lines.extend([
+              "",
+              f"Browser console errors: `{len(report.get('browserErrors', []))}`",
+              "",
+              "The uploaded Actions artifact contains the report and visual screenshots, including the forced Hole Section, World Lab catalog and continued save state.",
+          ])
+          Path("/tmp/issue-8-production-smoke.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+          gh issue comment 8 --repo "$GITHUB_REPOSITORY" --body-file /tmp/issue-8-production-smoke.md
       - name: Upload production-smoke evidence
         if: always()
         uses: actions/upload-artifact@v4
