@@ -9,7 +9,6 @@ permissions:
 
 jobs:
   apply:
-    if: ${{ hashFiles('.staging/ready') != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,6 +19,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test -f .staging/ready
           test "$(cat .staging/ready)" = "10346cdaef70117b7a96ffe690d4b14287ad6581c675ca9be5b3cbb3edb906e6"
           cat .staging/part-*.b64 | base64 --decode > /tmp/issue11-change.tar.gz
           echo "10346cdaef70117b7a96ffe690d4b14287ad6581c675ca9be5b3cbb3edb906e6  /tmp/issue11-change.tar.gz" | sha256sum --check --strict
