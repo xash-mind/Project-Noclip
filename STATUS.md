@@ -12,7 +12,7 @@
 
 ## Current milestone
 
-Level 0 Alpha 0.2 production alignment is complete. Issue #8 can close. The next bounded milestone is measured renderer and streaming performance work under Issue #11, beginning with review and benchmark validation of PR #12 rather than expanding content scope.
+Level 0 Alpha 0.2 production alignment is complete and Issue #8 is closed. The next bounded milestone is [Issue #14](https://github.com/xash-mind/Project-Noclip/issues/14): measure the accepted production renderer and streaming baseline before making further runtime or world-composition changes.
 
 ## Working now
 
@@ -62,11 +62,13 @@ None for Level 0 Alpha 0.2 production alignment.
 
 ## Next recommended action
 
-Review [PR #12](https://github.com/xash-mind/Project-Noclip/pull/12) against [Issue #11](https://github.com/xash-mind/Project-Noclip/issues/11) as a bounded profiling milestone. Require measured baseline-versus-candidate evidence for renderer cost, loaded-cell behavior, draw calls, memory and the 10,000-cell benchmark before accepting any optimization.
+Execute [Issue #14](https://github.com/xash-mind/Project-Noclip/issues/14) as a profiling-only milestone. Record reproducible frame-time/FPS distributions, draw calls, loaded cells, colliders, interactions, heap observations, bounded traversal/streaming behavior and the 10,000-cell benchmark before selecting one small optimization.
+
+[Issue #11](https://github.com/xash-mind/Project-Noclip/issues/11) and draft [PR #12](https://github.com/xash-mind/Project-Noclip/pull/12) combine input, audio, lighting, geometry, modular generation and versioning. They remain deferred and should be split or narrowed after the profiling evidence rather than merged as the immediate follow-up.
 
 ## Decisions needed from Sash
 
-No product-direction decision is required. Native keyboard interaction and real-device/browser QA can be scheduled as the next verification layer after the measured performance review.
+No product-direction decision is required. Native keyboard interaction and real-device/browser QA remain the next verification layer after measured performance work.
 
 ## Known risks and unverified claims
 
@@ -82,8 +84,9 @@ No product-direction decision is required. Native keyboard interaction and real-
 
 - Repository: https://github.com/xash-mind/Project-Noclip
 - Accepted rendering PR: https://github.com/xash-mind/Project-Noclip/pull/10
-- Production release issue: https://github.com/xash-mind/Project-Noclip/issues/8
-- Performance issue: https://github.com/xash-mind/Project-Noclip/issues/11
-- Performance PR: https://github.com/xash-mind/Project-Noclip/pull/12
+- Closed production release issue: https://github.com/xash-mind/Project-Noclip/issues/8
+- Selected profiling issue: https://github.com/xash-mind/Project-Noclip/issues/14
+- Deferred broad issue: https://github.com/xash-mind/Project-Noclip/issues/11
+- Deferred draft PR: https://github.com/xash-mind/Project-Noclip/pull/12
 - Production target: https://project-noclip.vercel.app
 - Shared operations: https://github.com/xash-mind/project-operations
