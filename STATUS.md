@@ -1,69 +1,89 @@
 # Project Status
 
-**Last verified:** 2026-08-05  
-**Accepted runtime merge:** `58389c13f7c35ed38e514d84c949e47d0368823c` from PR #10  
-**Environment:** GitHub CI and Chromium/WebGL evidence passed; Vercel production build rejected before execution by account rate limit
+**Last verified:** 2026-08-06  
+**Accepted runtime source:** `58389c13f7c35ed38e514d84c949e47d0368823c` from PR #10  
+**Production release commit:** `c2d3cb38faacfc7e8e22dae67aa2e8e8af9ddfea`  
+**Production deployment:** `dpl_C1FfCuvYVQ7aKaVG6bpUPT2o6Gmp` — READY and aliased to https://project-noclip.vercel.app  
+**Verification:** GitHub CI, Chromium/WebGL production journey and public asset hashing passed
 
 ## Health
 
-**Watch.** Level 0 Alpha 0.2 now has materially clearer procedural surfaces, grounded notes and item silhouettes, discrete recessed Hole Sections, and a searchable World Lab object showcase. Deterministic generation, stable identities and save schema v2 remain compatible. Production is still stale because Vercel build capacity is unavailable.
+**Healthy.** Level 0 Alpha 0.2 is aligned in production. The accepted renderer work, deterministic world core, save schema v2, grounded notes and object silhouettes, discrete recessed Hole Sections and searchable 23-object World Lab showcase are all present on the public deployment.
 
 ## Current milestone
 
-Release accepted runtime `58389c13` through Issue #8 once Vercel capacity resets. After production alignment, continue measured renderer optimization and native interaction QA rather than expanding content scope blindly.
+Level 0 Alpha 0.2 production alignment is complete. Issue #8 can close. The next bounded milestone is measured renderer and streaming performance work under Issue #11, beginning with review and benchmark validation of PR #12 rather than expanding content scope.
 
 ## Working now
 
+- Browser-first TypeScript/Vite runtime using PlayCanvas Engine
+- Renderer-independent deterministic world generation and stable identities
 - Deterministic 5×5 district planning with sixteen room archetypes
-- Procedural Level 0 materials with consistent wall density and brighter non-blackout carpet contrast
-- Flush damp, worn, dark and dry carpet treatments without repeated raised black slabs
-- Hole Sections rendered as distinct cut-through pits with visible rims, side depth and separated floor geometry
+- Procedural Level 0 materials with readable wall and carpet variation
+- Hole Sections rendered as distinct recessed structures with visible rims, depth and separated floor geometry
 - Grounded ordinary notes with the Manila ledger retained on its table
 - Recognizable deterministic primitive models for all current item definitions
-- Searchable World Lab catalog covering all 23 current items and prop kinds, with selected, filtered, all and clear actions
+- Searchable World Lab catalog covering all 23 current items and prop kinds
 - Disposable showcase models isolated from interactions, collisions, canonical generation and persistence
-- Swept-circle collision, stable loot-node IDs, timeline gates and IndexedDB save schema v2 preserved
-- Strict TypeScript, sixteen deterministic/system tests and the 10,000-cell benchmark passing
-- Chromium 150 with software WebGL passing new journey, forced Hole Section, full object showcase, clear and save/reload
-- No blocking browser-console errors in the accepted smoke
+- Swept-circle collision, timeline gates and IndexedDB save schema v2
+- Strict TypeScript, sixteen deterministic/system tests, production build and the 10,000-cell benchmark
+
+## Production parity evidence
+
+Vercel cloned and built release commit [`c2d3cb38`](https://github.com/xash-mind/Project-Noclip/commit/c2d3cb38faacfc7e8e22dae67aa2e8e8af9ddfea) from `main`. Comparing accepted runtime `58389c13` with that release commit shows only `STATUS.md` and formatting-only `vercel.json` changes; no application runtime source, package, Vite, HTML or build-script change was introduced.
+
+Public generated artifacts:
+
+- HTML SHA-256: `bc4a59bbc5e5e6014e3268c187edfd8343510430a11c065ff6ca104e109cad97`
+- `/assets/index-D5KeAnxQ.js` — 2,003,705 bytes — SHA-256 `a017e137be1b2dc2cbe115de49cef8865aaa3c5d159b68a458a6ffcd0f744d51`
+- `/assets/index-DGo8Q-G_.css` — 5,713 bytes — SHA-256 `fc8777569e0ece857de46d415717c4b894e932d71b216702d0fdbd42aa22d104`
+
+Production Chromium run [`31095089456`](https://github.com/xash-mind/Project-Noclip/actions/runs/31095089456) passed with artifact `8965151971`. It verified:
+
+- HTTP 200 and generated asset access
+- title screen and new local journey
+- WebGL context, HUD, watch and six inventory slots
+- save schema v2 creation in IndexedDB
+- pointer lock on the game canvas
+- World Lab diagnostics
+- forced discrete Hole Section rendering and downward visual inspection
+- all 23 World Lab showcase objects
+- non-persistent showcase cleanup
+- direct refresh and Continue restoring the same journey
+- zero blocking browser-console errors
 
 ## Latest meaningful change
 
-Merged [PR #10](https://github.com/xash-mind/Project-Noclip/pull/10) as [`58389c13`](https://github.com/xash-mind/Project-Noclip/commit/58389c13f7c35ed38e514d84c949e47d0368823c), closing [Issue #9](https://github.com/xash-mind/Project-Noclip/issues/9). Runtime run `30947402217` and final-head run `30947735824` passed; browser artifact `8907536628` shows readable baseline carpet, discrete recessed holes and all 23 catalog objects on an intentional inspection shelf.
-
-Initial observations:
-
-- normal radius-3 baseline: 49 loaded cells, 550 colliders, 7 interactions and 519 draw calls
-- forced Hole Section at radius 1 with showcase: 9 loaded cells, 59 colliders, 1 interaction and 292 draw calls
-- final used JavaScript heap: approximately 45.9 MB
+Merged [PR #13](https://github.com/xash-mind/Project-Noclip/pull/13) as [`19f24956`](https://github.com/xash-mind/Project-Noclip/commit/19f249569311f29354c6c3233cfc668085d997f5), preserving a reusable production Chromium smoke with public asset hashing. Vercel correctly ignored the workflow-only change, so it consumed no additional deployment.
 
 ## Top blocker
 
-Vercel rejected both the commit-specific PR #10 preview and the merged-main production attempt before build execution because the account build-rate limit is active. Production at https://project-noclip.vercel.app still serves an older runtime. [Issue #8](https://github.com/xash-mind/Project-Noclip/issues/8) remains the single deployment follow-up.
+None for Level 0 Alpha 0.2 production alignment.
 
 ## Next recommended action
 
-After Vercel capacity resets, retry production for accepted runtime commit `58389c13`, verify generated asset hashes and the public browser journey, then close Issue #8. The new runtime-aware Vercel ignore rule should prevent future test and documentation-only commits from consuming preview builds.
+Review [PR #12](https://github.com/xash-mind/Project-Noclip/pull/12) against [Issue #11](https://github.com/xash-mind/Project-Noclip/issues/11) as a bounded profiling milestone. Require measured baseline-versus-candidate evidence for renderer cost, loaded-cell behavior, draw calls, memory and the 10,000-cell benchmark before accepting any optimization.
 
 ## Decisions needed from Sash
 
-Only a Vercel retry or capacity action if the rate limit remains blocked when release work resumes. No product-direction decision is required.
+No product-direction decision is required. Native keyboard interaction and real-device/browser QA can be scheduled as the next verification layer after the measured performance review.
 
 ## Known risks and unverified claims
 
-- Hole rendering now creates visible recesses, but falling and terminal-hole physics are not implemented in this renderer-correctness change.
-- Headless Chromium grants pointer lock, but synthetic keyboard input still does not provide reliable native movement evidence.
+- Headless Chromium granted pointer lock, but synthetic `KeyW` did not produce reliable movement evidence; native keyboard movement remains a manual regression check.
 - Native note pickup, marker drawing and glow-stick use remain manual regression checks.
-- Primitive geometry is clearer but still placeholder-quality; imported art assets remain future work.
-- Sustained frame time, GPU pressure and long-session memory growth remain unmeasured.
+- Hole rendering is visually recessed, but falling and terminal-hole physics are not implemented in this renderer-correctness milestone.
+- Primitive geometry remains placeholder-quality; imported art assets are future work.
+- Sustained frame time, GPU pressure and long-session memory growth still require measured profiling.
 - Some generated props still use simple AABB collision.
 - Clean installation is not fully reproducible because the repository lacks a committed lockfile and CI uses `npm install`.
 
 ## Important links
 
 - Repository: https://github.com/xash-mind/Project-Noclip
-- Rendering PR: https://github.com/xash-mind/Project-Noclip/pull/10
-- Rendering issue: https://github.com/xash-mind/Project-Noclip/issues/9
+- Accepted rendering PR: https://github.com/xash-mind/Project-Noclip/pull/10
 - Production release issue: https://github.com/xash-mind/Project-Noclip/issues/8
+- Performance issue: https://github.com/xash-mind/Project-Noclip/issues/11
+- Performance PR: https://github.com/xash-mind/Project-Noclip/pull/12
 - Production target: https://project-noclip.vercel.app
 - Shared operations: https://github.com/xash-mind/project-operations
