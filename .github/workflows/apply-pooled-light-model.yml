@@ -1,0 +1,64 @@
+name: Apply pooled fluorescent lighting
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/issue-11-sensory-modular-generation
+          fetch-depth: 0
+      - name: Replace per-group omni lights with pooled illumination
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          support = Path('src/renderer/support.ts')
+          source = support.read_text()
+          old = '  light: pc.Entity;\n  lastValue: number;\n'
+          if old not in source:
+              raise SystemExit('LightGroupVisual target missing')
+          support.write_text(source.replace(old, '  light?: pc.Entity;\n  lastValue: number;\n'))
+
+          builder = Path('src/renderer/cellBuilder.ts')
+          source = builder.read_text()
+          old = '''      const light = new pc.Entity(`${group.id}:light`);\n      light.addComponent('light', {\n        type: 'omni',\n        color: new pc.Color(0.82 * group.temperature, 0.79 * group.temperature, 0.56),\n        range: 8.5,\n        intensity: on ? group.intensity * profile.lightMultiplier : 0,\n        castShadows: false\n      });\n      light.setLocalPosition(group.position.x, WALL_HEIGHT - 0.38, group.position.z);\n      root.addChild(light);\n      visuals.push({ spec: group, fixtures, light, lastValue: on ? 1 : 0 });\n'''
+          new = '''      visuals.push({ spec: group, fixtures, lastValue: on ? 1 : 0 });\n'''
+          if old not in source:
+              raise SystemExit('RendererCellBuilder point-light target missing')
+          builder.write_text(source.replace(old, new))
+
+          renderer = Path('src/renderer/WorldRenderer.ts')
+          source = renderer.read_text()
+          old = '''        const targetIntensity = value * group.spec.intensity * ZONE_PROFILES[visual.descriptor.address.zoneId].lightMultiplier;\n        if (group.light.light && Math.abs(group.light.light.intensity - targetIntensity) > 0.015) group.light.light.intensity = targetIntensity;\n        if (enabled !== wasEnabled) group.fixtures.forEach((fixture) => { fixture.enabled = enabled; });\n'''
+          new = '''        if (enabled !== wasEnabled) group.fixtures.forEach((fixture) => { fixture.enabled = enabled; });\n'''
+          if old not in source:
+              raise SystemExit('WorldRenderer dynamic-light target missing')
+          renderer.write_text(source.replace(old, new))
+
+          game = Path('src/app/ProjectNoclipGame.ts')
+          source = game.read_text()
+          old = '''        this.lightField = this.renderer.updateLightField(position.x, position.z, this.sessionElapsed, this.save.settings.reducedFlicker);\n        this.ambience.setLightField(this.lightField);\n'''
+          new = '''        this.lightField = this.renderer.updateLightField(position.x, position.z, this.sessionElapsed, this.save.settings.reducedFlicker);\n        this.ambience.setLightField(this.lightField);\n        if (this.localLight?.light) {\n          const energy = Math.max(0, Math.min(1, this.lightField.energy));\n          this.localLight.light.intensity = 0.08 + energy * 0.74;\n          this.localLight.light.color = new pc.Color(0.78 * this.lightField.temperature, 0.75 * this.lightField.temperature, 0.5);\n        }\n'''
+          if old not in source:
+              raise SystemExit('ProjectNoclipGame pooled-light target missing')
+          game.write_text(source.replace(old, new))
+
+          Path('.github/workflows/apply-pooled-light-model.yml').unlink()
+          PY
+      - name: Commit pooled-light repair
+        shell: bash
+        run: |
+          git config user.name "project-noclip-ci"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/app/ProjectNoclipGame.ts src/renderer/WorldRenderer.ts src/renderer/cellBuilder.ts src/renderer/support.ts .github/workflows/apply-pooled-light-model.yml
+          git commit -m "Pool fluorescent illumination for streamed rooms"
+          git push origin HEAD:agent/issue-11-sensory-modular-generation
