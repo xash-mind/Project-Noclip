@@ -106,17 +106,7 @@ export class RendererCellBuilder {
         glow.enabled = on;
         return glow;
       });
-      const light = new pc.Entity(`${group.id}:light`);
-      light.addComponent('light', {
-        type: 'omni',
-        color: new pc.Color(0.82 * group.temperature, 0.79 * group.temperature, 0.56),
-        range: 8.5,
-        intensity: on ? group.intensity * profile.lightMultiplier : 0,
-        castShadows: false
-      });
-      light.setLocalPosition(group.position.x, WALL_HEIGHT - 0.38, group.position.z);
-      root.addChild(light);
-      visuals.push({ spec: group, fixtures, light, lastValue: on ? 1 : 0 });
+      visuals.push({ spec: group, fixtures, lastValue: on ? 1 : 0 });
     }
     return visuals;
   }

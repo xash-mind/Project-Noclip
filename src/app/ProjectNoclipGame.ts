@@ -176,6 +176,11 @@ export class ProjectNoclipGame {
         const position = this.camera.getPosition();
         this.lightField = this.renderer.updateLightField(position.x, position.z, this.sessionElapsed, this.save.settings.reducedFlicker);
         this.ambience.setLightField(this.lightField);
+        if (this.localLight?.light) {
+          const energy = Math.max(0, Math.min(1, this.lightField.energy));
+          this.localLight.light.intensity = 0.08 + energy * 0.74;
+          this.localLight.light.color = new pc.Color(0.78 * this.lightField.temperature, 0.75 * this.lightField.temperature, 0.5);
+        }
       }
       this.saveAccumulator += dt;
       if (this.saveAccumulator >= SAVE_INTERVAL) { this.saveAccumulator = 0; void this.persist(); }

@@ -58,7 +58,7 @@ export type InteractionVisual = WorldItemVisual | ExitVisual | SeatVisual | Note
 export interface LightGroupVisual {
   spec: LightGroupSpec;
   fixtures: pc.Entity[];
-  light: pc.Entity;
+  light?: pc.Entity;
   lastValue: number;
 }
 
