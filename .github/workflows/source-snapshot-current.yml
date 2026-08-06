@@ -1,0 +1,22 @@
+name: Temporary current source snapshot
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package exact source tree
+        run: tar --exclude=.git --exclude=node_modules --exclude=dist --exclude=project-noclip-current-source.tar.gz -czf /tmp/project-noclip-current-source.tar.gz .
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-noclip-current-source-${{ github.event.pull_request.head.sha }}
+          path: /tmp/project-noclip-current-source.tar.gz
+          retention-days: 1
