@@ -1,5 +1,7 @@
 import * as pc from 'playcanvas';
 import { ProceduralAmbience } from '../audio/Ambience.js';
+import { applyLookDelta, MOVEMENT_CODES } from '../input/look.js';
+import { PROJECT_VERSION } from '../config/version.js';
 import { addToInventory, INVENTORY_CAPACITY, removeFromInventory, updateInventoryItem } from '../inventory/inventory.js';
 import { ITEM_DEFINITIONS } from '../items/definitions.js';
 import { createItemInstance, transferItem } from '../items/factory.js';
@@ -50,6 +52,10 @@ export class ProjectNoclipGame {
   private drawing = false;
   private activeMark?: SurfaceMark;
   private markedPointCount = 0;
+  private pendingMouseX = 0;
+  private pendingMouseY = 0;
+  private lightField = { energy: 0, activeGroups: 0, flickerGroups: 0, flickerPulse: 0, temperature: 0.94 };
+  private sessionElapsed = 0;
 
   constructor() {
     const canvas = document.querySelector<HTMLCanvasElement>('#game-canvas');
@@ -98,7 +104,7 @@ export class ProjectNoclipGame {
     this.currentCellX = worldToCell(save.position.x); this.currentCellZ = worldToCell(save.position.z);
     this.updateStreaming(true); this.updateCameraRotation(); this.started = true; this.paused = true;
     this.ui.showGame(); this.ui.updateInventory(save.inventory, save.selectedItemId); this.ui.setPaused(true);
-    await this.ambience.start(save.settings.masterVolume); this.requestPointerLock();
+    await this.ambience.start(save.settings.masterVolume); this.ambience.setPaused(true); this.requestPointerLock();
   }
 
   private setupEngine(): void {
@@ -120,38 +126,58 @@ export class ProjectNoclipGame {
 
   private installInput(): void {
     window.addEventListener('keydown', (event) => {
-      if (event.code === 'Backquote') { event.preventDefault(); this.ui.toggleLab(); if (this.ui.isLabOpen()) document.exitPointerLock(); return; }
+      if (event.code === 'Backquote') { event.preventDefault(); this.ui.toggleLab(); if (this.ui.isLabOpen()) document.exitPointerLock(); this.ambience.setPaused(true); return; }
       if (!this.started) return;
+      if (MOVEMENT_CODES.has(event.code) && document.pointerLockElement === this.canvas) event.preventDefault();
       if (event.code === 'Escape' && this.ui.isNoteOpen()) { this.ui.hideNote(); return; }
       if (event.code === 'KeyE') this.interact(); else if (event.code === 'KeyF') this.useSelectedItem(); else if (event.code === 'KeyG') this.dropSelectedItem(); else if (event.code === 'KeyM') this.toggleMarkerMode();
       else if (/^Digit[1-6]$/.test(event.code)) { const item = this.save?.inventory[Number(event.code.slice(-1)) - 1]; if (item) this.selectItem(item.instanceId); }
       this.keys.add(event.code);
     });
     window.addEventListener('keyup', (event) => this.keys.delete(event.code));
-    window.addEventListener('mousemove', (event) => {
+    const collectMouseDelta = (event: MouseEvent) => {
       if (document.pointerLockElement !== this.canvas || this.paused || this.ui.isLabOpen() || this.ui.isNoteOpen()) return;
-      const sensitivity = this.save?.settings.sensitivity ?? 0.095;
-      this.yaw -= event.movementX * sensitivity; this.pitch = Math.max(-84, Math.min(84, this.pitch - event.movementY * sensitivity)); this.updateCameraRotation();
-      if (this.drawing) this.sampleMark();
-    });
+      this.pendingMouseX += event.movementX;
+      this.pendingMouseY += event.movementY;
+    };
+    window.addEventListener('mousemove', collectMouseDelta, { passive: true });
     window.addEventListener('mousedown', (event) => { if (event.button === 0 && this.markerMode && document.pointerLockElement === this.canvas) this.beginMark(); });
     window.addEventListener('mouseup', (event) => { if (event.button === 0 && this.drawing) this.finishMark(); });
     document.addEventListener('pointerlockchange', () => {
       if (!this.started) return; this.paused = document.pointerLockElement !== this.canvas;
-      this.ui.setPaused(this.paused && !this.ui.isLabOpen() && !this.ui.isNoteOpen()); if (this.paused) this.keys.clear();
+      this.ui.setPaused(this.paused && !this.ui.isLabOpen() && !this.ui.isNoteOpen());
+      this.ambience.setPaused(this.paused || this.ui.isLabOpen() || this.ui.isNoteOpen());
+      if (this.paused) { this.keys.clear(); this.pendingMouseX = 0; this.pendingMouseY = 0; }
     });
     this.canvas.addEventListener('click', () => { if (this.started && !this.ui.isLabOpen() && !this.ui.isNoteOpen() && document.pointerLockElement !== this.canvas) this.requestPointerLock(); });
+    window.addEventListener('blur', () => { this.keys.clear(); this.pendingMouseX = 0; this.pendingMouseY = 0; this.ambience.setPaused(true); if (document.pointerLockElement === this.canvas) document.exitPointerLock(); });
   }
 
   private requestPointerLock(): void { if (this.started && !this.ui.isLabOpen() && !this.ui.isNoteOpen()) void this.canvas.requestPointerLock(); }
 
   private update(dt: number): void {
     if (!this.started || !this.save || !this.camera || !this.renderer) return;
-    if (!this.paused && !this.ui.isLabOpen() && !this.ui.isNoteOpen()) this.updateMovement(dt);
-    this.updateSimulation(dt); this.updateInteraction(); this.renderer.updateDynamicItems(Date.now());
-    this.saveAccumulator += dt; this.metricsAccumulator += dt;
-    if (this.saveAccumulator >= SAVE_INTERVAL) { this.saveAccumulator = 0; void this.persist(); }
+    const active = !this.paused && !this.ui.isLabOpen() && !this.ui.isNoteOpen() && document.hasFocus();
+    if (active) {
+      this.sessionElapsed += dt;
+      if (this.pendingMouseX !== 0 || this.pendingMouseY !== 0) {
+        const next = applyLookDelta({ yaw: this.yaw, pitch: this.pitch }, { x: this.pendingMouseX, y: this.pendingMouseY }, this.save.settings.sensitivity);
+        this.yaw = next.yaw; this.pitch = next.pitch; this.pendingMouseX = 0; this.pendingMouseY = 0;
+        this.updateCameraRotation(); if (this.drawing) this.sampleMark();
+      }
+      this.updateMovement(dt);
+      this.updateSimulation(dt);
+      this.updateInteraction();
+      this.renderer.updateDynamicItems(Date.now());
+      const position = this.camera.getPosition();
+      this.lightField = this.renderer.updateLightField(position.x, position.z, this.sessionElapsed, this.save.settings.reducedFlicker);
+      this.ambience.setLightField(this.lightField);
+      this.saveAccumulator += dt;
+      if (this.saveAccumulator >= SAVE_INTERVAL) { this.saveAccumulator = 0; void this.persist(); }
+    }
+    this.metricsAccumulator += dt;
     if (this.metricsAccumulator >= 0.25) { this.metricsAccumulator = 0; this.updateUI(); }
+    this.publishDebugState(active);
   }
 
   private updateMovement(dt: number): void {
@@ -192,7 +218,7 @@ export class ProjectNoclipGame {
     for (let x = this.currentCellX - radius; x <= this.currentCellX + radius; x += 1) for (let z = this.currentCellZ - radius; z <= this.currentCellZ + radius; z += 1) {
       const id = `${x}:${z}`; desired.add(id); const descriptor = generateCell({ seed: this.save.seed, x, z, worldDay, exposure, shiftEpoch: this.save.shiftEpochs[id] ?? 0, tuning: this.tuning });
       const existing = this.renderer.loaded.get(id)?.descriptor;
-      if (!existing) this.renderer.loadCell(descriptor); else if (force || existing.address.shiftEpoch !== descriptor.address.shiftEpoch || existing.address.zoneId !== descriptor.address.zoneId || existing.roomArchetype !== descriptor.roomArchetype) this.renderer.refreshCell(descriptor);
+      if (!existing) this.renderer.loadCell(descriptor); else if (force || existing.address.shiftEpoch !== descriptor.address.shiftEpoch || existing.address.zoneId !== descriptor.address.zoneId || existing.roomArchetype !== descriptor.roomArchetype || existing.compositionSignature !== descriptor.compositionSignature) this.renderer.refreshCell(descriptor);
       if (x === this.currentCellX && z === this.currentCellZ) this.currentCell = descriptor;
     }
     for (const [id, visual] of [...this.renderer.loaded.entries()]) {
@@ -214,7 +240,6 @@ export class ProjectNoclipGame {
     this.app.scene.ambientLight = new pc.Color(0.44 * profile.lightMultiplier, 0.42 * profile.lightMultiplier, 0.25 * profile.lightMultiplier);
     this.app.scene.fogStart = profile.id === 'pillar' ? 18 : profile.id === 'blackout' ? 8 : 26; this.app.scene.fogEnd = profile.id === 'pillar' ? 54 : profile.id === 'blackout' ? 28 : 78;
     if (this.localLight?.light) this.localLight.light.intensity = this.currentCell.lightFailure ? 0.12 : 0.82 * profile.lightMultiplier;
-    this.ambience.setZone(this.currentCell.address.zoneId === 'blackout', this.currentCell.lightFailure);
   }
 
   private updateInteraction(): void {
@@ -337,7 +362,22 @@ export class ProjectNoclipGame {
     const worldDay = this.tuning.worldDayOverride ?? calculateWorldDay(Date.now()); const exposureDay = this.tuning.exposureOverride ?? calculateExposureDay(this.save.exposure); const profile = ZONE_PROFILES[this.currentCell.address.zoneId]; const flashlight = this.getFlashlight();
     this.ui.updateWatch({ worldDay, exposureDay }, `LEVEL 0 / ${profile.label}\n${this.currentCell.roomLabel}`, profile.stability); this.ui.updateStatus(this.save.hydration, flashlight?.charge ?? 0); this.ui.updateInventory(this.save.inventory, this.save.selectedItemId);
     const position = this.camera.getPosition(); const drawCalls = this.app?.stats?.drawCalls?.total ?? 'n/a';
-    this.ui.updateMetrics([`seed          ${this.save.seed}`, `cell          ${this.currentCell.id} / district ${this.currentCell.address.districtId}`, `room          ${this.currentCell.roomArchetype}`, `zone          ${profile.label}`, `loaded cells  ${this.renderer.loadedCellCount}`, `colliders     ${this.renderer.wallCount}`, `interactions  ${this.renderer.interactionCount}`, `draw calls    ${drawCalls}`, `position      ${position.x.toFixed(1)}, ${position.z.toFixed(1)}`, `inventory     ${this.save.inventory.length}/${INVENTORY_CAPACITY}`, `marks         ${this.save.marks.length}`, `notes read    ${this.save.readNoteIds.length}`, `exits found   ${this.save.discoveredExits.join(', ') || 'none'}`].join('\n'));
+    this.ui.updateMetrics([`seed          ${this.save.seed}`, `cell          ${this.currentCell.id} / district ${this.currentCell.address.districtId}`, `room          ${this.currentCell.roomArchetype} / ${this.currentCell.spatialProfile}`, `components    ${this.currentCell.componentIds.join(', ')}`, `zone          ${profile.label}`, `loaded cells  ${this.renderer.loadedCellCount}`, `colliders     ${this.renderer.wallCount}`, `interactions  ${this.renderer.interactionCount}`, `light groups  ${this.renderer.lightGroupCount} / active ${this.lightField.activeGroups} / flicker ${this.lightField.flickerGroups}`, `light energy  ${this.lightField.energy.toFixed(3)}`, `draw calls    ${drawCalls}`, `position      ${position.x.toFixed(1)}, ${position.z.toFixed(1)}`, `look          yaw ${this.yaw.toFixed(1)} / pitch ${this.pitch.toFixed(1)}`, `inventory     ${this.save.inventory.length}/${INVENTORY_CAPACITY}`, `marks         ${this.save.marks.length}`, `notes read    ${this.save.readNoteIds.length}`, `exits found   ${this.save.discoveredExits.join(', ') || 'none'}`].join('\n'));
+  }
+
+  private publishDebugState(active: boolean): void {
+    (window as unknown as { __NOCLIP_DEBUG__?: unknown }).__NOCLIP_DEBUG__ = {
+      started: this.started,
+      active,
+      paused: this.paused,
+      yaw: this.yaw,
+      pitch: this.pitch,
+      heldKeys: [...this.keys],
+      lightField: this.lightField,
+      audio: this.ambience.getDebugState(),
+      composition: this.currentCell?.compositionSignature,
+      version: PROJECT_VERSION
+    };
   }
 
   private async persist(): Promise<void> { if (!this.save || !this.camera) return; const position = this.camera.getPosition(); this.save.position = { x: position.x, y: position.y, z: position.z, yaw: this.yaw, pitch: this.pitch }; this.save.savedAt = Date.now(); await this.store.save(this.save); this.ui.setContinueAvailable(true); }

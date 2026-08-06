@@ -36,3 +36,38 @@ Fixed test address: cell `8:-6`. It is a compact internal 6.3m square room with 
 ## Remaining
 
 Destination capsules, editable player notes, string geometry, pryable surfaces, renderer batching, topology map and production multiplayer remain deferred.
+
+## Modular room composition
+
+The hierarchy is now:
+
+`world seed → 5×5 district → zone profile → compatibility archetype → spatial profile → ordered component set → deterministic props/walls/lights → persistent deltas`
+
+Compatibility archetypes remain stable labels for analysis and tuning. They no longer define one complete fixed layout. Reusable components may appear across archetype families, while zone weights strongly favor appropriate components such as pillars in Pillar Fields and arches in Arch Rooms.
+
+Spatial profiles:
+
+- `standard`: bounded mixed composition.
+- `sparse-vista`: rare district-coherent open rooms with very wide already-valid connectors.
+- `thin-channel`: unusually narrow corridor compositions.
+- `pillar-expanse`: district-coherent aligned pillar fields with wider valid connectors.
+
+No spatial profile changes whether a canonical edge is open. It may only widen an edge already declared open by the topology law.
+
+## Fluorescent light groups
+
+Each cell deterministically derives zero or more fixture groups. A group has stable derived identity, position, axis, fixture count, temperature, intensity and state: `on`, `off` or `flicker`.
+
+- Solid-prop clearance is validated before a group is accepted.
+- One PlayCanvas light represents a group, not every individual tube.
+- Nearby loaded groups are reduced into one bounded light-field sample for procedural ambience.
+- Off groups contribute neither light nor hum.
+- Flicker groups use deterministic time slices; reduced-flicker mode forces a stable on value.
+- Light groups are regenerated from canonical state and are not persisted, so save schema v2 remains compatible.
+
+## Pause and input lifecycle
+
+- Mouse deltas are accumulated independently from keyboard movement state and applied once per frame.
+- Shift changes speed only and cannot gate camera look.
+- Pointer-lock loss, focus loss, notes, World Lab and explicit pause mute ambience and freeze journey simulation.
+- Resume restores the clustered ambience smoothly without restarting the journey.

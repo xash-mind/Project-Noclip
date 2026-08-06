@@ -1,6 +1,7 @@
 import * as pc from 'playcanvas';
 import './styles.css';
 import { ProjectNoclipGame } from './app/ProjectNoclipGame.js';
+import { mountDevelopmentVersionIndicator } from './ui/DevelopmentVersionIndicator.js';
 
 type FogParamsLike = {
   type: string;
@@ -59,6 +60,7 @@ function installPlayCanvasFogCompatibility(): void {
 }
 
 installPlayCanvasFogCompatibility();
+mountDevelopmentVersionIndicator();
 
 const game = new ProjectNoclipGame();
 void game.initialize().then(() => {

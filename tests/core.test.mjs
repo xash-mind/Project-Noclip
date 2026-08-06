@@ -10,6 +10,8 @@ import { EMPTY_EXPOSURE } from '../.test-dist/src/simulation/timeline.js';
 import { ITEM_DEFINITIONS } from '../.test-dist/src/items/definitions.js';
 import { rollStarterDefinitions } from '../.test-dist/src/items/starterRoll.js';
 import { OBJECT_CATALOG, validateObjectCatalog } from '../.test-dist/src/renderer/objectCatalog.js';
+import { lightFlickerValue } from '../.test-dist/src/world/lighting.js';
+import { applyLookDelta } from '../.test-dist/src/input/look.js';
 
 const generate = (overrides = {}) => generateCell({
   seed: 'test-seed',
@@ -160,4 +162,79 @@ test('World Lab object catalog covers every current item and prop kind exactly o
   const propKinds = OBJECT_CATALOG.flatMap((entry) => entry.propKind ? [entry.propKind] : []);
   assert.deepEqual(new Set(itemIds), new Set(Object.keys(ITEM_DEFINITIONS)));
   assert.deepEqual(new Set(propKinds), new Set(PROP_KINDS));
+});
+
+
+test('mouse look remains independent from movement state', () => {
+  const base = { yaw: 12, pitch: -4 };
+  const delta = { x: 80, y: -30 };
+  const walking = applyLookDelta(base, delta, 0.1);
+  const sprinting = applyLookDelta(base, delta, 0.1);
+  assert.deepEqual(walking, sprinting);
+  assert.equal(walking.yaw, 4);
+  assert.equal(walking.pitch, -1);
+});
+
+test('modular composition produces deterministic cross-archetype diversity and bounded extremes', () => {
+  const signatures = new Set();
+  const profiles = new Set();
+  const components = new Set();
+  for (let x = -35; x <= 35; x += 1) {
+    for (let z = -35; z <= 35; z += 1) {
+      const cell = generate({ seed: 'modular-diversity', x, z, worldDay: 40, exposure: 10 });
+      signatures.add(cell.compositionSignature);
+      profiles.add(cell.spatialProfile);
+      cell.componentIds.forEach((component) => components.add(component));
+      assert.deepEqual(cell, generate({ seed: 'modular-diversity', x, z, worldDay: 40, exposure: 10 }));
+    }
+  }
+  assert.ok(signatures.size > 500, `only ${signatures.size} composition signatures`);
+  assert.deepEqual(profiles, new Set(['standard', 'sparse-vista', 'thin-channel', 'pillar-expanse']));
+  for (const required of ['arch-run', 'pillar-lattice', 'thin-corridor', 'desk-cluster', 'service-bank']) assert.ok(components.has(required), `missing ${required}`);
+});
+
+test('zone weighting favors pillars without excluding shared modules', () => {
+  let pillarModules = 0;
+  let totalPillarComponents = 0;
+  let baselinePillars = 0;
+  let totalBaselineComponents = 0;
+  for (let index = 0; index < 500; index += 1) {
+    const pillar = generate({ seed: `pillar-weight-${index}`, x: index % 31, z: Math.floor(index / 31), tuning: { ...DEFAULT_TUNING, zoneOverride: 'pillar', gateBypass: true } });
+    pillarModules += pillar.componentIds.filter((id) => id === 'pillar-lattice').length;
+    totalPillarComponents += pillar.componentIds.length;
+    const baseline = generate({ seed: `baseline-weight-${index}`, x: index % 31, z: Math.floor(index / 31), tuning: { ...DEFAULT_TUNING, zoneOverride: 'baseline', gateBypass: true } });
+    baselinePillars += baseline.componentIds.filter((id) => id === 'pillar-lattice').length;
+    totalBaselineComponents += baseline.componentIds.length;
+  }
+  assert.ok(pillarModules / totalPillarComponents > baselinePillars / totalBaselineComponents * 2.5);
+});
+
+test('light groups are deterministic, mixed-state, flicker-safe, and clear of solid props', () => {
+  const states = new Set();
+  let flicker;
+  for (let x = -18; x <= 18; x += 1) for (let z = -18; z <= 18; z += 1) {
+    const cell = generate({ seed: 'light-field', x, z, worldDay: 40, exposure: 10 });
+    cell.lightGroups.forEach((group) => {
+      states.add(group.state);
+      if (!flicker && group.state === 'flicker') flicker = group;
+    });
+    assert.deepEqual(validateCellPlacement(cell), []);
+  }
+  assert.deepEqual(states, new Set(['on', 'off', 'flicker']));
+  assert.ok(flicker);
+  assert.equal(lightFlickerValue(flicker, 12.5, false), lightFlickerValue(flicker, 12.5, false));
+  assert.equal(lightFlickerValue(flicker, 12.5, true), 1);
+});
+
+test('arch components remain below the ceiling and use curved segments', () => {
+  let found;
+  for (let index = 0; index < 400 && !found; index += 1) {
+    const cell = generate({ seed: `arch-shape-${index}`, x: index % 20, z: Math.floor(index / 20), tuning: { ...DEFAULT_TUNING, zoneOverride: 'arch', gateBypass: true } });
+    if (cell.props.some((prop) => prop.kind === 'arch-segment')) found = cell;
+  }
+  assert.ok(found);
+  const segments = found.props.filter((prop) => prop.kind === 'arch-segment');
+  assert.ok(segments.length >= 9);
+  assert.ok(segments.every((segment) => segment.position.y + segment.scale.y / 2 < 3.18));
+  assert.ok(segments.some((segment) => Math.abs(segment.rotationX ?? segment.rotationZ ?? 0) > 5));
 });

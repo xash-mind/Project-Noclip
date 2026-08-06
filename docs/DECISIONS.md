@@ -21,3 +21,14 @@
 17. Activated glow sticks are persistent world lights with a ten-minute decay model.
 18. Hardcoded notes are temporary worldbuilding/UI validation content, not final lore lock.
 19. Only one verified preview should be produced before each production promotion.
+
+## 2026-08-06 — Sensory simulation and modular composition
+
+- Room archetypes remain compatibility-facing family labels; actual room contents are composed from deterministic reusable components.
+- District and zone identity remain the macro authority. Components are zone-weighted but may cross families so repeated archetypes do not imply repeated layouts.
+- Rare district-coherent `sparse-vista` and `pillar-expanse` profiles widen already-open boundaries without changing connector truth; `thin-channel` and `standard` remain cell-local profiles.
+- Light fixtures are deterministic groups with `on`, `off`, or `flicker` states. Rendering and audio consume the same group descriptors.
+- Fluorescent ambience is a bounded clustered field over loaded nearby groups, never one Web Audio graph per fixture.
+- Pause, modal UI and focus loss mute ambience and freeze journey simulation.
+- Save schema v2 remains unchanged because compositions and light groups are deterministic derivatives, not persisted state.
+- `VERSION` is the canonical manual-project version source; the visible development indicator is isolated and removable.

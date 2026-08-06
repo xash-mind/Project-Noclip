@@ -2,6 +2,7 @@ import * as pc from 'playcanvas';
 import type { DroppedItemState, SaveData, SurfaceMark } from '../persistence/types.js';
 import { resolveCircleAgainstAabbs } from '../physics/collision.js';
 import { CELL_SIZE, type CellDescriptor, type FloorPatchSpec } from '../world/types.js';
+import { LIGHT_AUDIO_RADIUS, lightFlickerValue, type LightFieldSample } from '../world/lighting.js';
 import { ZONE_PROFILES } from '../world/zones.js';
 import { registerObjectCatalogShowcaseHost, type ObjectCatalogEntry } from './objectCatalog.js';
 import { canvasTexture, makeMaterial, markWorldPoint, clamp01, rayAabb, type CellVisual, type InteractionVisual, type TextureKind, type WorldItemVisual, type WorldWall } from './support.js';
@@ -27,6 +28,7 @@ export class WorldRenderer {
   get wallCount(): number { return this.walls.size; }
   get interactionCount(): number { return this.interactions.size; }
   get labObjectCount(): number { return this.labShowcaseCount; }
+  get lightGroupCount(): number { return [...this.loaded.values()].reduce((sum, visual) => sum + visual.lightGroups.length, 0); }
 
   private texture(kind: TextureKind, variant = 0): pc.Texture {
     const key = `${kind}:${variant}`;
@@ -202,6 +204,38 @@ export class WorldRenderer {
     this.labShowcaseRoot?.destroy();
     this.labShowcaseRoot = undefined;
     this.labShowcaseCount = 0;
+  }
+
+
+  updateLightField(playerX: number, playerZ: number, elapsedSeconds: number, reducedFlicker: boolean): LightFieldSample {
+    let energy = 0; let activeGroups = 0; let flickerGroups = 0; let flickerPulse = 0; let weightedTemperature = 0;
+    for (const visual of this.loaded.values()) {
+      const originX = visual.descriptor.address.cellX * CELL_SIZE;
+      const originZ = visual.descriptor.address.cellZ * CELL_SIZE;
+      for (const group of visual.lightGroups) {
+        const value = lightFlickerValue(group.spec, elapsedSeconds, reducedFlicker);
+        const worldX = originX + group.spec.position.x;
+        const worldZ = originZ + group.spec.position.z;
+        const distance = Math.hypot(worldX - playerX, worldZ - playerZ);
+        const attenuation = Math.max(0, 1 - distance / LIGHT_AUDIO_RADIUS);
+        const contribution = value * group.spec.intensity * attenuation * attenuation;
+        if (group.light.light) group.light.light.intensity = value * group.spec.intensity * ZONE_PROFILES[visual.descriptor.address.zoneId].lightMultiplier;
+        group.fixtures.forEach((fixture) => { fixture.enabled = value > 0.08; });
+        if (value > 0.08) activeGroups += 1;
+        if (group.spec.state === 'flicker') { flickerGroups += 1; flickerPulse = Math.max(flickerPulse, Math.max(0, group.lastValue - value)); }
+        energy += contribution;
+        weightedTemperature += contribution * group.spec.temperature;
+        group.lastValue = value;
+      }
+    }
+    const boundedEnergy = Math.max(0, Math.min(1, 1 - Math.exp(-energy * 0.72)));
+    return {
+      energy: boundedEnergy,
+      activeGroups,
+      flickerGroups,
+      flickerPulse,
+      temperature: energy > 0.001 ? weightedTemperature / energy : 0.94
+    };
   }
 
   updateDynamicItems(now: number): void {
