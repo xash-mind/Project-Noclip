@@ -1,0 +1,51 @@
+name: Project Noclip Production Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Public deployment URL to verify
+        required: false
+        default: https://project-noclip.vercel.app
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/production-smoke.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: project-noclip-production-smoke
+  cancel-in-progress: false
+
+jobs:
+  verify-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install browser-smoke driver
+        run: python -m pip install --disable-pip-version-check selenium==4.46.0
+      - name: Run Chromium journey against production
+        shell: bash
+        env:
+          REQUESTED_BASE_URL: ${{ github.event.inputs.base_url }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${REQUESTED_BASE_URL:-https://project-noclip.vercel.app}"
+          echo "Verifying ${BASE_URL}"
+          NOCLIP_BASE_URL="${BASE_URL}" \
+          NOCLIP_BROWSER_ARTIFACTS="artifacts/production-browser-smoke" \
+          python scripts/browser-smoke.py
+      - name: Upload production-smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-browser-smoke-${{ github.sha }}
+          path: artifacts/production-browser-smoke
+          if-no-files-found: warn
+          retention-days: 30
