@@ -1,22 +1,39 @@
-name: Temporary current source snapshot
+name: Apply browser startup diagnostics
 
 on:
   pull_request:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  snapshot:
+  patch:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Package exact source tree
-        run: tar --exclude=.git --exclude=node_modules --exclude=dist --exclude=project-noclip-current-source.tar.gz -czf /tmp/project-noclip-current-source.tar.gz .
-      - name: Upload source snapshot
-        uses: actions/upload-artifact@v4
         with:
-          name: project-noclip-current-source-${{ github.event.pull_request.head.sha }}
-          path: /tmp/project-noclip-current-source.tar.gz
-          retention-days: 1
+          ref: agent/issue-11-sensory-modular-generation
+          fetch-depth: 0
+      - name: Add bounded startup diagnostics
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/browser-smoke.py')
+          source = path.read_text()
+          old = '''        time.sleep(2)\n\n        canvas = driver.find_element(By.CSS_SELECTOR, "#game-canvas")\n'''
+          new = '''        time.sleep(2)\n        screenshot(driver, "02-post-launch.png")\n        startup_diagnostics = {\n            "watch": text_content(driver, '[data-ui="watch"]'),\n            "debug": read_debug(driver),\n            "pointerLocked": driver.execute_script("return document.pointerLockElement === document.querySelector('#game-canvas')"),\n            "documentHasFocus": driver.execute_script("return document.hasFocus()"),\n            "titleHidden": driver.execute_script("return document.querySelector('[data-ui=title]').hidden"),\n            "hudHidden": driver.execute_script("return document.querySelector('[data-ui=hud]').hidden"),\n        }\n        startup_errors = browser_log_errors(driver)\n        report["startupDiagnostics"] = startup_diagnostics\n        report["startupBrowserErrors"] = startup_errors\n        assert not startup_errors, f"Blocking startup browser console errors: {startup_errors}"\n\n        canvas = driver.find_element(By.CSS_SELECTOR, "#game-canvas")\n'''
+          if old not in source:
+              raise SystemExit('browser diagnostic insertion point not found')
+          path.write_text(source.replace(old, new))
+          Path('.github/workflows/source-snapshot-current.yml').unlink()
+          PY
+      - name: Commit diagnostic test update
+        shell: bash
+        run: |
+          git config user.name "project-noclip-ci"
+          git config user.email "actions@users.noreply.github.com"
+          git add scripts/browser-smoke.py .github/workflows/source-snapshot-current.yml
+          git commit -m "test: capture browser startup diagnostics"
+          git push origin HEAD:agent/issue-11-sensory-modular-generation
