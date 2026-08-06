@@ -1,8 +1,8 @@
 name: Apply Issue 11 source bundle
 
 on:
-  push:
-    branches: [agent/issue-11-sensory-modular-generation]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
