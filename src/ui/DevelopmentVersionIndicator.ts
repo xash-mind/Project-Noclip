@@ -1,3 +1,4 @@
+import './development-version-indicator.css';
 import { PROJECT_VERSION } from '../version.js';
 
 const SHOW_DEVELOPMENT_VERSION = true;
