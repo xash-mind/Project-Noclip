@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
 import { ProceduralAmbience } from '../audio/Ambience.js';
+import { PlayerIntent } from '../input/PlayerIntent.js';
 import { addToInventory, INVENTORY_CAPACITY, removeFromInventory, updateInventoryItem } from '../inventory/inventory.js';
 import { ITEM_DEFINITIONS } from '../items/definitions.js';
 import { createItemInstance, transferItem } from '../items/factory.js';
@@ -21,10 +22,12 @@ const WALK_SPEED = 3.15;
 const SPRINT_SPEED = 5.15;
 const CROUCH_SPEED = 1.8;
 const SAVE_INTERVAL = 1.5;
+const TOUCH_LOOK_MULTIPLIER = 1.65;
 
 export class ProjectNoclipGame {
   private readonly store = new IndexedDbSaveStore();
   private readonly ambience = new ProceduralAmbience();
+  private readonly input = new PlayerIntent();
   private readonly canvas: HTMLCanvasElement;
   private readonly ui: GameUI;
   private app?: pc.Application;
@@ -34,11 +37,11 @@ export class ProjectNoclipGame {
   private renderer?: WorldRenderer;
   private save?: SaveData;
   private tuning: WorldTuning = { ...DEFAULT_TUNING };
-  private readonly keys = new Set<string>();
   private yaw = 0;
   private pitch = 0;
   private started = false;
   private paused = true;
+  private mobileInputActive = false;
   private currentCellX = 0;
   private currentCellZ = 0;
   private currentCell?: CellDescriptor;
@@ -57,8 +60,10 @@ export class ProjectNoclipGame {
     this.canvas = canvas;
     this.ui = new GameUI({
       onNewGame: (seed) => void this.startNew(seed), onContinue: () => void this.continueGame(), onReset: () => void this.resetGame(),
-      onResume: () => this.requestPointerLock(), onSelectItem: (id) => this.selectItem(id), onTuningChange: (patch) => this.updateTuning(patch),
-      onSeedChange: (seed) => void this.startNew(seed), onSimulateStarter: () => this.simulateStarters(), onExportTuning: () => this.exportTuning()
+      onResume: () => this.resumeInput(), onSelectItem: (id) => this.selectItem(id), onTuningChange: (patch) => this.updateTuning(patch),
+      onSeedChange: (seed) => void this.startNew(seed), onSimulateStarter: () => this.simulateStarters(), onExportTuning: () => this.exportTuning(),
+      onTouchMove: (forward, strafe) => this.handleTouchMove(forward, strafe), onTouchLook: (dx, dy) => this.handleTouchLook(dx, dy),
+      onTouchInteract: () => this.handleTouchInteract(), onTouchUse: () => this.handleTouchUse()
     });
   }
 
@@ -98,7 +103,7 @@ export class ProjectNoclipGame {
     this.currentCellX = worldToCell(save.position.x); this.currentCellZ = worldToCell(save.position.z);
     this.updateStreaming(true); this.updateCameraRotation(); this.started = true; this.paused = true;
     this.ui.showGame(); this.ui.updateInventory(save.inventory, save.selectedItemId); this.ui.setPaused(true);
-    await this.ambience.start(save.settings.masterVolume); this.requestPointerLock();
+    await this.ambience.start(save.settings.masterVolume); this.resumeInput();
   }
 
   private setupEngine(): void {
@@ -125,25 +130,69 @@ export class ProjectNoclipGame {
       if (event.code === 'Escape' && this.ui.isNoteOpen()) { this.ui.hideNote(); return; }
       if (event.code === 'KeyE') this.interact(); else if (event.code === 'KeyF') this.useSelectedItem(); else if (event.code === 'KeyG') this.dropSelectedItem(); else if (event.code === 'KeyM') this.toggleMarkerMode();
       else if (/^Digit[1-6]$/.test(event.code)) { const item = this.save?.inventory[Number(event.code.slice(-1)) - 1]; if (item) this.selectItem(item.instanceId); }
-      this.keys.add(event.code);
+      this.input.keyDown(event.code);
     });
-    window.addEventListener('keyup', (event) => this.keys.delete(event.code));
+    window.addEventListener('keyup', (event) => this.input.keyUp(event.code));
     window.addEventListener('mousemove', (event) => {
-      if (document.pointerLockElement !== this.canvas || this.paused || this.ui.isLabOpen() || this.ui.isNoteOpen()) return;
-      const sensitivity = this.save?.settings.sensitivity ?? 0.095;
-      this.yaw -= event.movementX * sensitivity; this.pitch = Math.max(-84, Math.min(84, this.pitch - event.movementY * sensitivity)); this.updateCameraRotation();
+      if (this.mobileInputActive || document.pointerLockElement !== this.canvas || this.paused || this.ui.isLabOpen() || this.ui.isNoteOpen()) return;
+      this.applyLookDelta(event.movementX, event.movementY);
       if (this.drawing) this.sampleMark();
     });
     window.addEventListener('mousedown', (event) => { if (event.button === 0 && this.markerMode && document.pointerLockElement === this.canvas) this.beginMark(); });
     window.addEventListener('mouseup', (event) => { if (event.button === 0 && this.drawing) this.finishMark(); });
+    window.addEventListener('blur', () => this.pauseForFocusLoss());
+    window.addEventListener('resize', () => this.syncTouchOrientation());
     document.addEventListener('pointerlockchange', () => {
-      if (!this.started) return; this.paused = document.pointerLockElement !== this.canvas;
-      this.ui.setPaused(this.paused && !this.ui.isLabOpen() && !this.ui.isNoteOpen()); if (this.paused) this.keys.clear();
+      if (!this.started || this.mobileInputActive) return; this.paused = document.pointerLockElement !== this.canvas;
+      this.ui.setPaused(this.paused && !this.ui.isLabOpen() && !this.ui.isNoteOpen()); if (this.paused) this.input.clearKeyboard();
     });
-    this.canvas.addEventListener('click', () => { if (this.started && !this.ui.isLabOpen() && !this.ui.isNoteOpen() && document.pointerLockElement !== this.canvas) this.requestPointerLock(); });
+    this.canvas.addEventListener('click', () => { if (this.started && !this.mobileInputActive && !this.ui.isLabOpen() && !this.ui.isNoteOpen() && document.pointerLockElement !== this.canvas) this.requestPointerLock(); });
   }
 
-  private requestPointerLock(): void { if (this.started && !this.ui.isLabOpen() && !this.ui.isNoteOpen()) void this.canvas.requestPointerLock(); }
+  private resumeInput(): void {
+    if (!this.started || this.ui.isLabOpen() || this.ui.isNoteOpen()) return;
+    if (this.ui.prefersTouchControls()) {
+      this.mobileInputActive = true; this.input.clearAll(); this.paused = !this.ui.isTouchLandscape(); this.ui.setPaused(false); return;
+    }
+    this.mobileInputActive = false; this.requestPointerLock();
+  }
+
+  private requestPointerLock(): void { if (this.started && !this.mobileInputActive && !this.ui.isLabOpen() && !this.ui.isNoteOpen()) void this.canvas.requestPointerLock(); }
+
+  private syncTouchOrientation(): void {
+    if (!this.started || !this.mobileInputActive) return;
+    this.input.clearTouch(); this.paused = !this.ui.isTouchLandscape(); this.ui.setPaused(false);
+  }
+
+  private pauseForFocusLoss(): void {
+    if (!this.started) return;
+    this.paused = true; this.input.clearAll();
+    if (!this.ui.isLabOpen() && !this.ui.isNoteOpen()) this.ui.setPaused(true);
+  }
+
+  private touchActionAllowed(): boolean {
+    return this.started && this.mobileInputActive && this.ui.isTouchLandscape() && !this.paused && !this.ui.isLabOpen() && !this.ui.isNoteOpen();
+  }
+
+  private handleTouchMove(forward: number, strafe: number): void {
+    if (!this.touchActionAllowed()) { this.input.clearTouch(); return; }
+    this.input.setTouchMovement(forward, strafe);
+  }
+
+  private handleTouchLook(deltaX: number, deltaY: number): void {
+    if (!this.touchActionAllowed()) return;
+    this.applyLookDelta(deltaX, deltaY, TOUCH_LOOK_MULTIPLIER);
+  }
+
+  private handleTouchInteract(): void { if (this.touchActionAllowed()) this.interact(); }
+  private handleTouchUse(): void { if (this.touchActionAllowed()) this.useSelectedItem(); }
+
+  private applyLookDelta(deltaX: number, deltaY: number, multiplier = 1): void {
+    const sensitivity = this.save?.settings.sensitivity ?? 0.095;
+    this.yaw -= deltaX * sensitivity * multiplier;
+    this.pitch = Math.max(-84, Math.min(84, this.pitch - deltaY * sensitivity * multiplier));
+    this.updateCameraRotation();
+  }
 
   private update(dt: number): void {
     if (!this.started || !this.save || !this.camera || !this.renderer) return;
@@ -156,14 +205,14 @@ export class ProjectNoclipGame {
 
   private updateMovement(dt: number): void {
     if (!this.camera || !this.renderer || !this.save) return;
-    const forwardInput = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0); const strafeInput = (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0);
+    const intent = this.input.movement(); const forwardInput = intent.forward; const strafeInput = intent.strafe;
     if (forwardInput === 0 && strafeInput === 0) return;
-    const crouching = this.keys.has('ControlLeft') || this.keys.has('KeyC'); const sprinting = this.keys.has('ShiftLeft') && !crouching; const speed = crouching ? CROUCH_SPEED : sprinting ? SPRINT_SPEED : WALK_SPEED;
+    const speed = intent.crouching ? CROUCH_SPEED : intent.sprinting ? SPRINT_SPEED : WALK_SPEED;
     const length = Math.max(1, Math.hypot(forwardInput, strafeInput)); const radians = this.yaw * Math.PI / 180;
     const fx = -Math.sin(radians), fz = -Math.cos(radians), rx = Math.cos(radians), rz = -Math.sin(radians); const current = this.camera.getPosition();
     const desiredX = current.x + (fx * forwardInput / length + rx * strafeInput / length) * speed * dt; const desiredZ = current.z + (fz * forwardInput / length + rz * strafeInput / length) * speed * dt;
     const [x, z] = this.renderer.resolveMovement(current.x, current.z, desiredX, desiredZ);
-    this.camera.setPosition(x, crouching ? 1.12 : PLAYER_HEIGHT, z); this.localLight?.setPosition(x, 2.6, z); this.ambience.step(speed / WALK_SPEED);
+    this.camera.setPosition(x, intent.crouching ? 1.12 : PLAYER_HEIGHT, z); this.localLight?.setPosition(x, 2.6, z); this.ambience.step(speed / WALK_SPEED);
     const nextCellX = worldToCell(x), nextCellZ = worldToCell(z);
     if (nextCellX !== this.currentCellX || nextCellZ !== this.currentCellZ) {
       this.save.exposure = recordTraversal(this.save.exposure, canonicalEdgeId(this.currentCellX, this.currentCellZ, nextCellX, nextCellZ), 140);

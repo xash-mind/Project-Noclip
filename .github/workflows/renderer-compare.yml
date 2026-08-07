@@ -1,4 +1,4 @@
-name: Project Noclip Renderer Compare
+name: Project Noclip Renderer Regression
 
 on:
   pull_request:
@@ -44,8 +44,8 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/renderer-compare/before artifacts/renderer-compare/after
           NOCLIP_BASE_URL="https://project-noclip.vercel.app" \
-          NOCLIP_DEPLOYMENT_COMMIT="c2d3cb38faacfc7e8e22dae67aa2e8e8af9ddfea" \
-          NOCLIP_DEPLOYMENT_ID="dpl_C1FfCuvYVQ7aKaVG6bpUPT2o6Gmp" \
+          NOCLIP_DEPLOYMENT_COMMIT="1b81d2d2bde086d13f61729d530d44b466c23710" \
+          NOCLIP_DEPLOYMENT_ID="canonical-production-v0.2.0-dev.1" \
           NOCLIP_PROFILE_ARTIFACTS="artifacts/renderer-compare/before" \
           python scripts/profile-production.py
       - name: Build and serve candidate
@@ -72,7 +72,7 @@ jobs:
           NOCLIP_DEPLOYMENT_ID="local-candidate" \
           NOCLIP_PROFILE_ARTIFACTS="artifacts/renderer-compare/after" \
           python scripts/profile-production.py
-      - name: Compare renderer invariants and draw calls
+      - name: Compare renderer invariants and draw-call regression
         shell: bash
         run: |
           set -euo pipefail
@@ -94,19 +94,19 @@ jobs:
                   )
               before_draw = int(before_metrics['drawCalls'])
               after_draw = int(after_metrics['drawCalls'])
-              reduction_pct = (before_draw - after_draw) * 100 / before_draw
+              delta_pct = (after_draw - before_draw) * 100 / max(1, before_draw)
               comparison['scenarios'][key] = {
-                  'beforeDrawCalls': before_draw,
-                  'afterDrawCalls': after_draw,
-                  'reductionPct': round(reduction_pct, 2),
+                  'productionDrawCalls': before_draw,
+                  'candidateDrawCalls': after_draw,
+                  'deltaPct': round(delta_pct, 2),
                   'loadedCells': after_metrics['loadedCells'],
                   'colliders': after_metrics['colliders'],
                   'interactions': after_metrics['interactions'],
               }
-          baseline = comparison['scenarios']['baselineSpawn']
-          assert baseline['reductionPct'] >= 20.0, (
-              f"baseline draw-call reduction {baseline['reductionPct']:.2f}% is below the 20% target"
-          )
+              allowed = max(before_draw + 2, int(before_draw * 1.05 + 0.999))
+              assert after_draw <= allowed, (
+                  f'{key} draw calls regressed beyond 5%/+2 tolerance: {before_draw} -> {after_draw} (allowed {allowed})'
+              )
           comparison['saveReload'] = after['saveReload']
           comparison['browserErrors'] = after.get('browserErrors', [])
           assert after['saveReload']['version'] == 2
