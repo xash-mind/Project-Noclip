@@ -28,6 +28,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: project-noclip-production-smoke-${{ github.ref }}
@@ -120,6 +121,58 @@ jobs:
           NOCLIP_BASE_URL="${NOCLIP_TARGET_URL}" \
           NOCLIP_BROWSER_ARTIFACTS="artifacts/production-browser-smoke" \
           python scripts/browser-smoke.py
+      - name: Publish production release evidence to Issue 16
+        if: success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCT_RELEASE_COMMIT: 1b81d2d2bde086d13f61729d530d44b466c23710
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path("artifacts/production-browser-smoke")
+          report = json.loads((root / "report.json").read_text(encoding="utf-8"))
+          assets = json.loads((root / "asset-manifest.json").read_text(encoding="utf-8"))
+          version = (root / "version.txt").read_text(encoding="utf-8").strip()
+          baseline = report.get("worldMetrics", {})
+          run_url = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+
+          lines = [
+              "## Issue #16 production release verification: passed",
+              "",
+              f"- Canonical production: `{report['baseUrl']}`",
+              f"- Product release commit: `{os.environ['PRODUCT_RELEASE_COMMIT']}`",
+              f"- Visible production version: **`{version}`**",
+              f"- Production verification run: {run_url}",
+              f"- HTTP status: `{assets['status']}`",
+              f"- HTML SHA-256: `{assets['htmlSha256']}`",
+              f"- Browser console errors: `{len(report.get('browserErrors', []))}`",
+              "",
+              "### Canonical journey evidence",
+          ]
+          lines.extend(f"- [x] {check}" for check in report.get("checks", []))
+          if baseline:
+              lines.extend([
+                  "",
+                  "### World metrics after launch",
+                  f"- Loaded cells: `{baseline.get('loadedCells', 'n/a')}`",
+                  f"- Colliders: `{baseline.get('colliders', 'n/a')}`",
+                  f"- Interactions: `{baseline.get('interactions', 'n/a')}`",
+                  f"- Draw calls: `{baseline.get('drawCalls', 'n/a')}`",
+              ])
+          for warning in report.get("warnings", []):
+              lines.append(f"- Non-blocking headless limitation: {warning}")
+          lines.extend([
+              "",
+              "The uploaded workflow artifact contains the exact visible-version screenshot, public asset manifest, browser report and journey screenshots. This is the release evidence required by the manual-project version policy.",
+          ])
+          Path("/tmp/issue-16-production.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+          gh issue comment 16 --repo "$GITHUB_REPOSITORY" --body-file /tmp/issue-16-production.md
       - name: Upload production-smoke evidence
         if: always()
         uses: actions/upload-artifact@v4
