@@ -15,6 +15,7 @@ let loot = 0;
 let placementErrors = 0;
 const placementSamples = [];
 const archetypes = new Set();
+const cells = 10000;
 
 for (let x = -50; x < 50; x += 1) {
   for (let z = -50; z < 50; z += 1) {
@@ -38,7 +39,7 @@ for (let x = -50; x < 50; x += 1) {
 const elapsed = performance.now() - start;
 const connectorErrors = validateCellConnectivity('benchmark-001', 28, DEFAULT_TUNING.extraOpeningChance);
 console.log(JSON.stringify({
-  cells: 10000,
+  cells,
   walls,
   props,
   notes,
@@ -48,7 +49,8 @@ console.log(JSON.stringify({
   placementErrors,
   placementSamples,
   elapsedMs: Number(elapsed.toFixed(2)),
-  microsecondsPerCell: Number((elapsed * 100).toFixed(2)),
+  microsecondsPerCell: Number((elapsed * 1000 / cells).toFixed(2)),
+  cellsPerSecond: Number((cells / (elapsed / 1000)).toFixed(2)),
   heapMb: Number((process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2))
 }, null, 2));
 
