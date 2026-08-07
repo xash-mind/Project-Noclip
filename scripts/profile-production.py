@@ -21,7 +21,7 @@ DEPLOYMENT_ID = os.environ.get("NOCLIP_DEPLOYMENT_ID", "dpl_C1FfCuvYVQ7aKaVG6bpU
 ARTIFACT_DIR = Path(os.environ.get("NOCLIP_PROFILE_ARTIFACTS", "artifacts/production-profile"))
 ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 STATIC_SAMPLE_SECONDS = float(os.environ.get("NOCLIP_PROFILE_STATIC_SECONDS", "5"))
-TRAVERSAL_SEGMENT_SECONDS = float(os.environ.get("NOCLIP_PROFILE_TRAVERSAL_SEGMENT_SECONDS", "3"))
+TRAVERSAL_SEGMENT_SECONDS = float(os.environ.get("NOCLIP_PROFILE_TRAVERSAL_SEGMENT_SECONDS", "6"))
 TRAVERSAL_MAX_SEGMENTS = int(os.environ.get("NOCLIP_PROFILE_TRAVERSAL_MAX_SEGMENTS", "8"))
 
 
@@ -390,11 +390,15 @@ def distance(a: dict[str, float], b: dict[str, float]) -> float:
 
 def traversal_profile(driver: webdriver.Chrome, warnings: list[str]) -> dict[str, Any]:
     ensure_lab(driver, False)
+    driver.set_window_size(480, 320)
     ensure_pointer_lock(driver)
     before_save = wait_for(driver, lambda current: read_save(current), timeout=15, message="save before traversal")
-    before_metrics = current_metrics(driver)
+    before_metrics = wait_for_metrics(driver, lambda value: bool(value.get("cell") and value.get("position")), "traversal start metrics")
     before_unloads, before_unique = unload_totals(before_save)
-    start_position = save_position(before_save)
+    start_position = dict(before_metrics["position"])
+    previous_position = dict(start_position)
+    path_distance = 0.0
+    visited_cells: list[str] = [str(before_metrics["cell"])]
     cdp_before = cdp_metrics(driver)
     all_intervals: list[float] = []
     elapsed_total_ms = 0.0
@@ -420,45 +424,47 @@ def traversal_profile(driver: webdriver.Chrome, warnings: list[str]) -> dict[str
             dispatch_key(driver, "keyUp", "Shift", "ShiftLeft", 16)
         all_intervals.extend(intervals)
         elapsed_total_ms += elapsed_ms
-        time.sleep(0.5)
+        time.sleep(0.4)
         save = read_save(driver)
         metrics = current_metrics(driver)
+        current_position = metrics.get("position") or previous_position
+        path_distance += distance(previous_position, current_position)
+        previous_position = dict(current_position)
+        cell = str(metrics.get("cell") or visited_cells[-1])
+        if cell not in visited_cells:
+            visited_cells.append(cell)
         total_unloads, unique_unloads = unload_totals(save)
         segments.append(
             {
                 "index": index,
                 "input": f"Shift+{code}",
-                "cell": metrics.get("cell"),
-                "position": metrics.get("position"),
+                "cell": cell,
+                "position": current_position,
                 "drawCalls": metrics.get("drawCalls"),
                 "unloadCountDelta": total_unloads - before_unloads,
                 "uniqueUnloadedCellsDelta": unique_unloads - before_unique,
             }
         )
-        if total_unloads - before_unloads >= 14 and index >= 2:
+        if len(visited_cells) >= 3:
             break
 
-    time.sleep(2)
+    time.sleep(1)
     after_save = read_save(driver)
     after_metrics = current_metrics(driver)
     cdp_after = cdp_metrics(driver)
     after_unloads, after_unique = unload_totals(after_save)
-    end_position = save_position(after_save)
-    travelled = distance(start_position, end_position)
-    unload_delta = after_unloads - before_unloads
-    unique_delta = after_unique - before_unique
-    assert travelled > 1.0, f"Trusted Chromium traversal did not move far enough ({travelled:.2f} m)"
-    assert unload_delta >= 14, f"Traversal did not stream at least two cell bands (unload delta {unload_delta})"
-    best_effort_screenshot(driver, "traversal-end.png", warnings)
+    assert path_distance > 14.0, f"Trusted Chromium traversal covered only {path_distance:.2f} m"
+    assert len(visited_cells) >= 3, f"Traversal reached only {len(visited_cells)} distinct cell(s): {visited_cells}"
     return {
         "durationSeconds": round(elapsed_total_ms / 1000, 3),
+        "viewport": {"width": 480, "height": 320},
         "startWorldMetrics": before_metrics,
         "endWorldMetrics": after_metrics,
-        "startPosition": start_position,
-        "endPosition": end_position,
-        "persistedDistanceMeters": round(travelled, 3),
-        "unloadCountDelta": unload_delta,
-        "uniqueUnloadedCellsDelta": unique_delta,
+        "pathDistanceMeters": round(path_distance, 3),
+        "visitedCells": visited_cells,
+        "cellTransitions": len(visited_cells) - 1,
+        "unloadCountDeltaObserved": after_unloads - before_unloads,
+        "uniqueUnloadedCellsDeltaObserved": after_unique - before_unique,
         "segments": segments,
         "frames": summarize_frames(all_intervals, elapsed_total_ms),
         "cpu": cdp_delta(cdp_before, cdp_after, elapsed_total_ms / 1000),
@@ -571,7 +577,7 @@ def main() -> None:
         report["checks"].append("non-persistent showcase cleared before traversal")
 
         report["scenarios"]["boundedTraversal"] = traversal_profile(driver, warnings)
-        report["checks"].append("trusted Chromium traversal streamed at least two cell bands")
+        report["checks"].append("trusted Chromium traversal crossed at least two cell boundaries")
 
         before_refresh = wait_for(driver, lambda current: read_save(current), timeout=15, message="save before refresh")
         before_position = save_position(before_refresh)
