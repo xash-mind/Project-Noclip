@@ -1,98 +1,115 @@
 # Project Status
 
-**Last verified:** 2026-08-07  
-**Accepted runtime source:** `1b81d2d2bde086d13f61729d530d44b466c23710` from PR #18  
-**Production release commit:** `1b81d2d2bde086d13f61729d530d44b466c23710`  
-**Production:** https://project-noclip.vercel.app — HTTP 200, canonical journey verified  
-**Visible deployed version:** `v0.2.0-dev.1`  
-**Latest repository change before this status sync:** `590447c95ed97bb124b22b3000d6bd34a0eb463b` release-evidence workflow update  
-**Verification:** final-head CI, same-run renderer comparison and canonical production browser/version smoke passed
+**Last verified:** 2026-08-08 (Asia/Kolkata)  
+**Accepted runtime source:** `06ea36bdcdf2da28718fdcc7b582028d5a2955d4` from PR #19  
+**Production release commit:** `06ea36bdcdf2da28718fdcc7b582028d5a2955d4`  
+**Production:** https://project-noclip.vercel.app — HTTP 200, desktop and landscape-touch journeys verified  
+**Visible deployed version:** `v0.2.0-dev.2`  
+**Latest repository change before this status sync:** `3164288ff21af49399edaf2c0c8423a147c6d5ba` generic production-evidence workflow update  
+**Verification:** final-head CI, renderer regression guard and canonical production desktop/mobile/version smoke passed
 
 ## Health
 
-**Healthy.** Level 0 Alpha 0.2 now runs the accepted static-geometry batching optimization in production. Deterministic world generation, stable identities, connector laws, timeline gates, collision truth and IndexedDB save schema v2 remain unchanged. The manual-project version indicator is installed as a small removable UI layer sourced from root `VERSION` and is visibly verified on canonical production as `v0.2.0-dev.1`.
+**Healthy.** Level 0 Alpha 0.2 is now minimally playable on a coarse/no-hover touch device in landscape while preserving the accepted deterministic world, static-render batching, collision path and IndexedDB save schema v2. Desktop keyboard/mouse/pointer-lock behavior remains in place. The root `VERSION` and removable development indicator are visibly aligned on canonical production at `v0.2.0-dev.2`.
 
 ## Current milestone
 
-[Issue #16](https://github.com/xash-mind/Project-Noclip/issues/16) is complete and deployed. The next bounded milestone is [Issue #17](https://github.com/xash-mind/Project-Noclip/issues/17): add basic **landscape mobile touch playability** for device testing — left-side touch movement, right-side touch-drag camera look without pointer lock, and only the minimum actions needed to test a journey — while preserving the same simulation, deterministic world laws and save schema.
+[Issue #17](https://github.com/xash-mind/Project-Noclip/issues/17) is complete and deployed through [PR #19](https://github.com/xash-mind/Project-Noclip/pull/19).
+
+The next bounded milestone is [Issue #20](https://github.com/xash-mind/Project-Noclip/issues/20): make procedural ambience follow journey pause/focus/modal lifecycle and soften the fluorescent hum without introducing deterministic fixture-group acoustics yet. Broad [Issue #11](https://github.com/xash-mind/Project-Noclip/issues/11) remains a backlog container and draft [PR #12](https://github.com/xash-mind/Project-Noclip/pull/12) must not be merged wholesale.
 
 ## Working now
 
 - Browser-first TypeScript/Vite runtime using PlayCanvas Engine
 - Renderer-independent deterministic world generation and stable identities
-- Deterministic 5×5 district planning with sixteen room archetypes
-- Procedural Level 0 materials with readable wall and carpet variation
-- Hole Sections rendered as distinct recessed structures with visible rims, depth and separated floor geometry
-- Grounded ordinary notes with the Manila ledger retained on its table
+- Deterministic 5×5 district planning with sixteen current room archetypes
+- Procedural Level 0 materials, recessed Hole Sections and grounded notes
 - Recognizable deterministic primitive models for all current item definitions
 - Searchable World Lab catalog covering all 23 current items and prop kinds
-- Disposable showcase models isolated from interactions, collisions, canonical generation and persistence
 - Swept-circle collision, timeline gates and IndexedDB save schema v2
-- Static PlayCanvas batching for compatible streamed Level 0 render geometry while interactive item/note/exit subtrees remain individually addressable
+- Static PlayCanvas batching for compatible streamed Level 0 render geometry
+- Shared device-neutral `PlayerIntent` for desktop keyboard and mobile touch movement
+- Landscape touch movement pad, right-side touch-drag look without pointer lock, and minimum Interact/Use actions
+- Portrait rotate-to-landscape notice and safe-area-aware compact mobile HUD
 - Root `VERSION` plus isolated removable development-version indicator
-- Strict TypeScript, deterministic/system tests, production build, Chromium journey and 10,000-cell deterministic benchmark
-- Reproducible production profiler and same-run before/after renderer comparison
-- Version-aware production smoke that waits for the exact visible canonical version before accepting a release
+- Strict TypeScript, deterministic/system tests, 10,000-cell benchmark, production build and desktop/mobile Chromium journeys
+- Current-production renderer regression guard rather than the obsolete one-time Issue #16 optimization target
+- Generic production release evidence publisher that resolves the product commit/merged PR/closing issue instead of hardcoding an issue number
 
-## Accepted renderer optimization
+## Accepted renderer baseline
 
-[PR #18](https://github.com/xash-mind/Project-Noclip/pull/18) was accepted after same-environment Chrome 150 / ANGLE SwiftShader comparison run [`31204466793`](https://github.com/xash-mind/Project-Noclip/actions/runs/31204466793).
+The [Issue #16](https://github.com/xash-mind/Project-Noclip/issues/16) optimization remains intact. Normal `threshold-001` radius 3 is **174 draw calls / 49 loaded cells / 550 colliders / 7 interactions**, down from the original 519-draw-call production baseline.
 
-Measured before/after at the normal `threshold-001` radius-3 baseline:
+Final Issue #17 renderer regression run [`31219214552`](https://github.com/xash-mind/Project-Noclip/actions/runs/31219214552) compared the current accepted production and the mobile candidate on the same Chrome/SwiftShader runner:
 
-- draw calls: **519 → 174**, a **66.47% reduction**
-- loaded cells: **49 → 49**
-- colliders: **550 → 550**
-- interactions: **7 → 7**
-- save schema: **v2 → v2**, same character/seed and `0.0000 m` reload-position delta
-- blocking browser-console errors: **0**
+- normal radius 3: **174 → 174 draw calls**, 49 / 550 / 7 unchanged
+- forced Hole Section radius 1: **37 → 37 draw calls**, 9 / 59 / 1 unchanged
+- save schema v2, character and seed preserved with `0.0000 m` reload-position delta
+- zero blocking browser-console errors
 
-The World Lab 23-object scenario fell from **523 → 171 draw calls** while preserving 49 loaded cells, 555 colliders and 7 canonical interactions. The deterministic streaming cycle remained `49 → 25 → 9 → 25 → 49`. The 10,000-cell deterministic benchmark still reports zero connector and placement errors.
+The regression guard now permits only a small 5%/+2 draw-call tolerance while still requiring exact loaded-cell/collider/interaction invariants. SwiftShader remains a relative renderer-stress signal, not a physical-GPU FPS claim.
 
-Absolute SwiftShader FPS/frame-time values remain software-renderer stress observations, not physical-GPU claims. The accepted optimization signal is the large draw-call reduction with unchanged canonical world metrics and passing visual/browser/save gates.
+## Mobile playability release
+
+[PR #19](https://github.com/xash-mind/Project-Noclip/pull/19) introduced a shared input-intent seam instead of a mobile-specific simulation path. Keyboard and touch therefore feed the same movement/collision logic; generation, active radius, timeline gates, stable IDs and persistence were untouched.
+
+Final-head CI run [`31219214726`](https://github.com/xash-mind/Project-Noclip/actions/runs/31219214726) passed typecheck, deterministic/system tests, 10,000-cell benchmark, build, existing desktop Chromium journey, exact version smoke and the new landscape touch journey. The first CI attempt exposed only a test-build boundary omission; `tsconfig.test.json` was corrected to compile the new input module rather than weakening the test.
+
+The mobile browser smoke uses trusted Chrome touch events at a 900×450 coarse/no-hover emulated device. It verifies:
+
+- left touch pad changes canonical player position
+- right-side touch drag changes and persists camera yaw
+- no pointer lock is required in touch mode
+- Interact and Use controls meet the 44px minimum target and essential HUD/version regions do not overlap
+- save schema v2 and seed `threshold-001` remain intact
+- zero blocking browser-console errors
+
+Responsive emulation proves browser behavior only; it does **not** establish physical-phone FPS or thermals.
 
 ## Production release evidence
 
-Product-changing merge [PR #18](https://github.com/xash-mind/Project-Noclip/pull/18) produced release commit [`1b81d2d2`](https://github.com/xash-mind/Project-Noclip/commit/1b81d2d2bde086d13f61729d530d44b466c23710). GitHub's Vercel status for that commit completed successfully.
+Product-changing merge [PR #19](https://github.com/xash-mind/Project-Noclip/pull/19) produced release commit [`06ea36bd`](https://github.com/xash-mind/Project-Noclip/commit/06ea36bdcdf2da28718fdcc7b582028d5a2955d4). GitHub's Vercel status for that commit completed successfully.
 
-Canonical production run [`31205504352`](https://github.com/xash-mind/Project-Noclip/actions/runs/31205504352), artifact `9004613203` (`sha256:fb335002d8fa3c460886757774129ae839dedd08898aea824b09e0f81cd83594`), then verified:
+Canonical production run [`31219837678`](https://github.com/xash-mind/Project-Noclip/actions/runs/31219837678), artifact `9010014248` (`sha256:0290f9a01a4863c7fcd23810ab0fbc3a485b8dc22fc39b14433d2852ff5c604d`), verified:
 
 - HTTP 200 at https://project-noclip.vercel.app
-- exact visible version **`v0.2.0-dev.1`**
-- generated JS `/assets/index-BtdAKpjO.js` — 2,004,848 bytes — SHA-256 `8a7e8185ee8497421470563c73db23ad879b2387eac20483a60c620cfe1aeb78`
-- generated CSS `/assets/index-CDHTlXM8.css` — 6,155 bytes — SHA-256 `28ab889cb290d8ea9a121ec754c8613dd91934ce39c2613db96df828a22ebba6`
-- title/new journey, WebGL/HUD/watch/inventory, pointer lock, World Lab diagnostics, forced Hole Section, all 23 showcase objects, showcase cleanup, save schema v2 and direct refresh/Continue
-- live normal-radius metrics **49 loaded cells / 550 colliders / 7 interactions / 174 draw calls**
-- zero blocking browser-console errors
+- exact visible version **`v0.2.0-dev.2`**
+- HTML SHA-256 `69a9d2c8a21b89d2b0300b7e9836c495db063dc8cded4ac7e0c7436b2a74a925`
+- desktop title/new journey, WebGL/HUD/watch/inventory, pointer lock, World Lab diagnostics, forced Hole Section, all 23 showcase objects, save v2 and Continue/reload
+- live world metrics **49 loaded cells / 550 colliders / 7 interactions / 174 draw calls**
+- landscape mobile touch movement `[0.0, 0.0] → [0.0, -0.8]`
+- landscape mobile touch-look yaw `0.0 → -13.167°`
+- desktop browser errors **0** and mobile browser errors **0**
 
-The connected Vercel API does not expose the provider deployment ID for this project, so no deployment ID is guessed here; the canonical URL, release commit status, generated asset hashes and visible-version/browser evidence are the accepted production identity.
+The connected Vercel API does not expose a reliable provider deployment ID for this project, so none is guessed. Release identity is grounded by the merge commit, Vercel commit status, canonical URL, exact visible version, public asset hash and browser evidence.
 
 ## Latest meaningful change
 
-Merged [PR #18](https://github.com/xash-mind/Project-Noclip/pull/18), closing Issue #16. It reduced normal-radius draw calls by 66.47% through isolated static render batching, added the canonical/manual version indicator path, and added same-run renderer and visible-production-version release gates without changing deterministic generation or persistence.
+Merged [PR #19](https://github.com/xash-mind/Project-Noclip/pull/19), closing Issue #17 and deploying basic landscape touch playability as `v0.2.0-dev.2` without changing deterministic world laws or save compatibility.
 
-Follow-up commit [`590447c9`](https://github.com/xash-mind/Project-Noclip/commit/590447c95ed97bb124b22b3000d6bd34a0eb463b) made successful production version/browser evidence publish directly back to the release issue. That commit is workflow-only and does not change the deployed runtime.
+Follow-up workflow-only commit [`3164288f`](https://github.com/xash-mind/Project-Noclip/commit/3164288ff21af49399edaf2c0c8423a147c6d5ba) made production release evidence generic: the smoke resolves the most recent deployment-significant product commit, its merged PR and closing issue, then publishes exact desktop/mobile/version evidence automatically. It does not change product runtime.
 
 ## Top blocker
 
-No release blocker is active. The next uncertainty is **real mobile/device input and physical-GPU behavior**: desktop/headless gates are strong, but landscape touch movement/look and actual phone performance have not yet been implemented or measured.
+No release blocker is active. The highest-value unresolved product defect is the procedural ambience lifecycle: the fluorescent hum should silence/mute correctly when the journey is paused, unfocused, in World Lab or in a modal, and should resume smoothly with a gentler tone. Physical Android/iOS performance remains unverified.
 
 ## Next recommended action
 
-Execute [Issue #17](https://github.com/xash-mind/Project-Noclip/issues/17) as the next bounded product milestone. Introduce a shared player-intent seam where needed, then add landscape-only touch movement and touch-drag camera look without requiring pointer lock. Keep desktop WASD/mouse behavior unchanged, do not reduce canonical world radius as a mobile shortcut, and add a landscape mobile browser smoke plus real-device evidence when available.
+Execute [Issue #20](https://github.com/xash-mind/Project-Noclip/issues/20) as the next bounded product milestone. Fix pause/focus/modal audio lifecycle and soften the existing hum first; keep deterministic fixture on/off/flicker groups, clustered cross-cell acoustics, geometry corrections and modular room composition as later independent slices.
 
-[Issue #11](https://github.com/xash-mind/Project-Noclip/issues/11) and draft [PR #12](https://github.com/xash-mind/Project-Noclip/pull/12) remain deferred. They still combine input, audio, lighting, geometry and modular-generation work and should be rebased/split into bounded follow-ups rather than merged wholesale.
+[Issue #11](https://github.com/xash-mind/Project-Noclip/issues/11) and draft [PR #12](https://github.com/xash-mind/Project-Noclip/pull/12) remain deferred. PR #12 currently combines too many risk classes and is not the release path.
 
 ## Decisions needed from Sash
 
-None for the next basic mobile-testing slice. A later decision may be needed if physical-device evidence justifies quality tiers or a broader mobile UX pass.
+None for Issue #20. A later decision may be useful after real physical-phone testing if device evidence justifies quality tiers or a broader mobile UX pass.
 
 ## Known risks and unverified claims
 
-- SwiftShader CI identifies renderer pressure and validates relative draw-call improvements but does not establish physical-device/GPU FPS.
-- Mobile landscape touch input and physical-phone performance are not yet implemented/verified; tracked in Issue #17.
-- Headless Chromium grants pointer lock, but synthetic keyboard movement remains nondeterministic; native desktop movement is still a manual regression check.
+- Physical Android/iOS FPS, thermals, battery use and native browser ergonomics have not yet been measured; responsive emulation is functional evidence only.
+- Headless Chromium grants pointer lock, but synthetic desktop `KeyW` movement remains nondeterministic; native keyboard movement remains a manual regression layer.
 - Native note pickup, marker drawing and glow-stick use remain manual regression checks.
+- Procedural ambience pause/modal lifecycle and hum comfort remain unresolved; tracked in Issue #20.
+- Deterministic fixture light groups and clustered cross-cell ambience are not yet implemented.
 - Hole rendering is visually recessed, but falling and terminal-hole physics are not implemented yet.
 - Primitive geometry remains placeholder-quality; imported art assets are future work.
 - Long-session memory growth remains unmeasured.
@@ -101,17 +118,17 @@ None for the next basic mobile-testing slice. A later decision may be needed if 
 
 ## Version policy state
 
-Project Noclip is opted into the manual-project version indicator policy. The canonical root `VERSION` is `0.2.0-dev.1`; the removable indicator is visibly verified on canonical production as **`v0.2.0-dev.1`** through production run `31205504352`. Project Noclip's mapped Notion page and the shared Projects version dashboard must therefore carry that exact verified value after the final synchronization step.
+Project Noclip is opted into the manual-project version indicator policy. The canonical root `VERSION` is `0.2.0-dev.2`; the removable indicator is visibly verified on canonical production as **`v0.2.0-dev.2`** through production run `31219837678`. The mapped Notion project page and shared Projects version dashboard must carry this exact verified value after the final synchronization step.
 
 ## Important links
 
 - Repository: https://github.com/xash-mind/Project-Noclip
-- Renderer optimization PR: https://github.com/xash-mind/Project-Noclip/pull/18
-- Closed renderer issue: https://github.com/xash-mind/Project-Noclip/issues/16
-- Selected mobile playability issue: https://github.com/xash-mind/Project-Noclip/issues/17
-- Production release verification: https://github.com/xash-mind/Project-Noclip/actions/runs/31205504352
-- Final renderer comparison: https://github.com/xash-mind/Project-Noclip/actions/runs/31204466793
-- Deferred broad issue: https://github.com/xash-mind/Project-Noclip/issues/11
+- Mobile playability PR: https://github.com/xash-mind/Project-Noclip/pull/19
+- Closed mobile playability issue: https://github.com/xash-mind/Project-Noclip/issues/17
+- Production release verification: https://github.com/xash-mind/Project-Noclip/actions/runs/31219837678
+- Renderer regression verification: https://github.com/xash-mind/Project-Noclip/actions/runs/31219214552
+- Next audio lifecycle issue: https://github.com/xash-mind/Project-Noclip/issues/20
+- Broad deferred issue: https://github.com/xash-mind/Project-Noclip/issues/11
 - Deferred draft PR: https://github.com/xash-mind/Project-Noclip/pull/12
 - Production target: https://project-noclip.vercel.app
 - Shared operations: https://github.com/xash-mind/project-operations
