@@ -20,7 +20,6 @@ DEPLOYMENT_COMMIT = os.environ.get("NOCLIP_DEPLOYMENT_COMMIT", "c2d3cb38faacfc7e
 DEPLOYMENT_ID = os.environ.get("NOCLIP_DEPLOYMENT_ID", "dpl_C1FfCuvYVQ7aKaVG6bpUPT2o6Gmp")
 ARTIFACT_DIR = Path(os.environ.get("NOCLIP_PROFILE_ARTIFACTS", "artifacts/production-profile"))
 ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
-
 STATIC_SAMPLE_SECONDS = float(os.environ.get("NOCLIP_PROFILE_STATIC_SECONDS", "5"))
 TRAVERSAL_SEGMENT_SECONDS = float(os.environ.get("NOCLIP_PROFILE_TRAVERSAL_SEGMENT_SECONDS", "3"))
 TRAVERSAL_MAX_SEGMENTS = int(os.environ.get("NOCLIP_PROFILE_TRAVERSAL_MAX_SEGMENTS", "8"))
@@ -55,11 +54,11 @@ def wait_for_text(
     timeout: float = 20.0,
     message: str = "text content",
 ) -> str:
-    def predicate(current: webdriver.Chrome) -> str | bool:
+    def ready(current: webdriver.Chrome) -> str | bool:
         value = text_content(current, selector)
         return value if all(fragment in value for fragment in required_fragments) else False
 
-    return str(wait_for(driver, predicate, timeout=timeout, message=message))
+    return str(wait_for(driver, ready, timeout=timeout, message=message))
 
 
 def read_save(driver: webdriver.Chrome) -> dict[str, Any] | None:
@@ -71,9 +70,7 @@ def read_save(driver: webdriver.Chrome) -> dict[str, Any] | None:
         request.onsuccess = () => {
           const db = request.result;
           if (!db.objectStoreNames.contains('journey')) {
-            db.close();
-            done(null);
-            return;
+            db.close(); done(null); return;
           }
           const read = db.transaction('journey', 'readonly').objectStore('journey').get('local-character');
           read.onerror = () => { db.close(); done({ error: String(read.error) }); };
@@ -85,12 +82,12 @@ def read_save(driver: webdriver.Chrome) -> dict[str, Any] | None:
 
 
 def browser_log_errors(driver: webdriver.Chrome) -> list[dict[str, Any]]:
-    ignored_fragments = ("favicon.ico", "AudioContext was not allowed to start")
+    ignored = ("favicon.ico", "AudioContext was not allowed to start")
     return [
         entry
         for entry in driver.get_log("browser")
         if entry.get("level") == "SEVERE"
-        and not any(fragment in entry.get("message", "") for fragment in ignored_fragments)
+        and not any(fragment in entry.get("message", "") for fragment in ignored)
     ]
 
 
@@ -103,14 +100,17 @@ def best_effort_screenshot(driver: webdriver.Chrome, name: str, warnings: list[s
 
 def build_driver() -> webdriver.Chrome:
     options = webdriver.ChromeOptions()
-    options.add_argument("--headless=new")
-    options.add_argument("--window-size=1440,900")
-    options.add_argument("--use-angle=swiftshader")
-    options.add_argument("--enable-webgl")
-    options.add_argument("--ignore-gpu-blocklist")
-    options.add_argument("--enable-precise-memory-info")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--no-sandbox")
+    for argument in (
+        "--headless=new",
+        "--window-size=1440,900",
+        "--use-angle=swiftshader",
+        "--enable-webgl",
+        "--ignore-gpu-blocklist",
+        "--enable-precise-memory-info",
+        "--disable-dev-shm-usage",
+        "--no-sandbox",
+    ):
+        options.add_argument(argument)
     options.set_capability("goog:loggingPrefs", {"browser": "ALL"})
     chrome_binary = shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("chromium-browser")
     if chrome_binary:
@@ -132,12 +132,6 @@ def dispatch_change(driver: webdriver.Chrome, selector: str, value: str | bool) 
     )
 
 
-def toggle_lab(driver: webdriver.Chrome) -> None:
-    driver.execute_script(
-        "window.dispatchEvent(new KeyboardEvent('keydown', {key: '`', code: 'Backquote', bubbles: true}));"
-    )
-
-
 def lab_is_open(driver: webdriver.Chrome) -> bool:
     classes = driver.find_element(By.CSS_SELECTOR, '[data-ui="lab"]').get_attribute("class").split()
     return "visible" in classes
@@ -145,7 +139,9 @@ def lab_is_open(driver: webdriver.Chrome) -> bool:
 
 def ensure_lab(driver: webdriver.Chrome, open_state: bool) -> None:
     if lab_is_open(driver) != open_state:
-        toggle_lab(driver)
+        driver.execute_script(
+            "window.dispatchEvent(new KeyboardEvent('keydown', {key: '`', code: 'Backquote', bubbles: true}));"
+        )
     wait_for(driver, lambda current: lab_is_open(current) == open_state, message=f"World Lab {'open' if open_state else 'closed'}")
 
 
@@ -160,24 +156,24 @@ def ensure_pointer_lock(driver: webdriver.Chrome) -> None:
             "return document.pointerLockElement === document.querySelector('#game-canvas')"
         ),
         timeout=8,
-        message="pointer lock for traversal",
+        message="pointer lock",
     )
 
 
 def parse_metrics(text: str) -> dict[str, Any]:
-    def line_value(label: str) -> str | None:
+    def value_for(label: str) -> str | None:
         match = re.search(rf"(?m)^{re.escape(label)}\s+(.+)$", text)
         return match.group(1).strip() if match else None
 
     result: dict[str, Any] = {"raw": text}
-    cell = line_value("cell")
+    cell = value_for("cell")
     if cell:
         result["cell"] = cell.split(" / ", 1)[0]
-        district_match = re.search(r"district\s+(\S+)", cell)
-        if district_match:
-            result["district"] = district_match.group(1)
+        district = re.search(r"district\s+(\S+)", cell)
+        if district:
+            result["district"] = district.group(1)
     for label, key in (("seed", "seed"), ("room", "room"), ("zone", "zone")):
-        value = line_value(label)
+        value = value_for(label)
         if value is not None:
             result[key] = value
     for label, key in (
@@ -186,12 +182,11 @@ def parse_metrics(text: str) -> dict[str, Any]:
         ("interactions", "interactions"),
         ("draw calls", "drawCalls"),
     ):
-        value = line_value(label)
-        if value and value.isdigit():
-            result[key] = int(value)
-        elif value is not None:
-            result[key] = value
-    position = line_value("position")
+        value = value_for(label)
+        if value is None:
+            continue
+        result[key] = int(value) if value.isdigit() else value
+    position = value_for("position")
     if position:
         match = re.match(r"(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)", position)
         if match:
@@ -203,14 +198,22 @@ def current_metrics(driver: webdriver.Chrome) -> dict[str, Any]:
     return parse_metrics(text_content(driver, '[data-ui="metrics"]'))
 
 
-def wait_for_metrics(driver: webdriver.Chrome, predicate: Callable[[dict[str, Any]], bool], message: str) -> dict[str, Any]:
-    return dict(wait_for(driver, lambda current: (value := current_metrics(current)) if predicate(value) else False, timeout=20, message=message))
+def wait_for_metrics(
+    driver: webdriver.Chrome,
+    predicate: Callable[[dict[str, Any]], bool],
+    message: str,
+) -> dict[str, Any]:
+    def ready(current: webdriver.Chrome) -> dict[str, Any] | bool:
+        value = current_metrics(current)
+        return value if predicate(value) else False
+
+    return dict(wait_for(driver, ready, timeout=20, message=message))
 
 
 def percentile(values: list[float], quantile: float) -> float:
-    if not values:
-        return math.nan
     ordered = sorted(values)
+    if not ordered:
+        return math.nan
     if len(ordered) == 1:
         return ordered[0]
     position = (len(ordered) - 1) * quantile
@@ -261,8 +264,7 @@ def measure_frames(driver: webdriver.Chrome, seconds: float) -> tuple[list[float
           if (now > previous) intervals.push(now - previous);
           previous = now;
           if (now - startedAt >= durationMs) {
-            done({ intervals, elapsedMs: now - startedAt });
-            return;
+            done({ intervals, elapsedMs: now - startedAt }); return;
           }
           requestAnimationFrame(sample);
         }
@@ -279,13 +281,11 @@ def cdp_metrics(driver: webdriver.Chrome) -> dict[str, float]:
 
 
 def cdp_delta(before: dict[str, float], after: dict[str, float], wall_seconds: float) -> dict[str, Any]:
-    duration_names = ("TaskDuration", "ScriptDuration", "LayoutDuration", "RecalcStyleDuration")
-    counter_names = ("LayoutCount", "RecalcStyleCount")
     result: dict[str, Any] = {}
-    for name in duration_names:
+    for name in ("TaskDuration", "ScriptDuration", "LayoutDuration", "RecalcStyleDuration"):
         if name in before and name in after:
             result[f"{name}Ms"] = round((after[name] - before[name]) * 1000, 3)
-    for name in counter_names:
+    for name in ("LayoutCount", "RecalcStyleCount"):
         if name in before and name in after:
             result[name] = round(after[name] - before[name], 3)
     task_ms = result.get("TaskDurationMs")
@@ -295,10 +295,11 @@ def cdp_delta(before: dict[str, float], after: dict[str, float], wall_seconds: f
 
 
 def memory_snapshot(driver: webdriver.Chrome, cdp: dict[str, float]) -> dict[str, Any]:
-    browser_memory = driver.execute_script(
-        "return performance.memory ? {usedJSHeapSize: performance.memory.usedJSHeapSize, totalJSHeapSize: performance.memory.totalJSHeapSize, jsHeapSizeLimit: performance.memory.jsHeapSizeLimit} : null"
-    )
-    result: dict[str, Any] = {"performanceMemory": browser_memory}
+    result: dict[str, Any] = {
+        "performanceMemory": driver.execute_script(
+            "return performance.memory ? {usedJSHeapSize: performance.memory.usedJSHeapSize, totalJSHeapSize: performance.memory.totalJSHeapSize, jsHeapSizeLimit: performance.memory.jsHeapSizeLimit} : null"
+        )
+    }
     for name in ("JSHeapUsedSize", "JSHeapTotalSize", "Nodes", "Documents", "Frames", "JSEventListeners"):
         if name in cdp:
             result[name] = cdp[name]
@@ -325,7 +326,12 @@ def webgl_environment(driver: webdriver.Chrome) -> dict[str, Any]:
     )
 
 
-def sample_static_scenario(driver: webdriver.Chrome, name: str, seconds: float, warnings: list[str]) -> dict[str, Any]:
+def sample_static_scenario(
+    driver: webdriver.Chrome,
+    name: str,
+    seconds: float,
+    warnings: list[str],
+) -> dict[str, Any]:
     metrics_before = wait_for_metrics(
         driver,
         lambda value: isinstance(value.get("loadedCells"), int) and value.get("drawCalls") not in (None, "n/a"),
@@ -346,7 +352,14 @@ def sample_static_scenario(driver: webdriver.Chrome, name: str, seconds: float, 
     }
 
 
-def dispatch_key(driver: webdriver.Chrome, event_type: str, key: str, code: str, virtual_key: int, modifiers: int = 0) -> None:
+def dispatch_key(
+    driver: webdriver.Chrome,
+    event_type: str,
+    key: str,
+    code: str,
+    virtual_key: int,
+    modifiers: int = 0,
+) -> None:
     driver.execute_cdp_cmd(
         "Input.dispatchKeyEvent",
         {
@@ -366,12 +379,12 @@ def unload_totals(save: dict[str, Any] | None) -> tuple[int, int]:
     return sum(numeric), len(numeric)
 
 
-def position_from_save(save: dict[str, Any] | None) -> dict[str, float]:
+def save_position(save: dict[str, Any] | None) -> dict[str, float]:
     position = (save or {}).get("position") or {}
     return {"x": float(position.get("x", 0)), "z": float(position.get("z", 0))}
 
 
-def position_distance(a: dict[str, float], b: dict[str, float]) -> float:
+def distance(a: dict[str, float], b: dict[str, float]) -> float:
     return math.hypot(a["x"] - b["x"], a["z"] - b["z"])
 
 
@@ -380,12 +393,12 @@ def traversal_profile(driver: webdriver.Chrome, warnings: list[str]) -> dict[str
     ensure_pointer_lock(driver)
     before_save = wait_for(driver, lambda current: read_save(current), timeout=15, message="save before traversal")
     before_metrics = current_metrics(driver)
-    before_total_unloads, before_unique_unloads = unload_totals(before_save)
-    start_position = position_from_save(before_save)
+    before_unloads, before_unique = unload_totals(before_save)
+    start_position = save_position(before_save)
     cdp_before = cdp_metrics(driver)
     all_intervals: list[float] = []
+    elapsed_total_ms = 0.0
     segments: list[dict[str, Any]] = []
-    wall_seconds = 0.0
     directions = (
         ("w", "KeyW", 87),
         ("d", "KeyD", 68),
@@ -397,60 +410,58 @@ def traversal_profile(driver: webdriver.Chrome, warnings: list[str]) -> dict[str
         ("a", "KeyA", 65),
     )
 
-    for index in range(min(TRAVERSAL_MAX_SEGMENTS, len(directions))):
-        key, code, virtual_key = directions[index]
+    for index, (key, code, virtual_key) in enumerate(directions[:TRAVERSAL_MAX_SEGMENTS], start=1):
         dispatch_key(driver, "rawKeyDown", "Shift", "ShiftLeft", 16, modifiers=8)
         dispatch_key(driver, "rawKeyDown", key, code, virtual_key, modifiers=8)
         try:
             intervals, elapsed_ms = measure_frames(driver, TRAVERSAL_SEGMENT_SECONDS)
         finally:
             dispatch_key(driver, "keyUp", key, code, virtual_key, modifiers=8)
-            dispatch_key(driver, "keyUp", "Shift", "ShiftLeft", 16, modifiers=0)
+            dispatch_key(driver, "keyUp", "Shift", "ShiftLeft", 16)
         all_intervals.extend(intervals)
-        wall_seconds += elapsed_ms / 1000
-        time.sleep(0.45)
+        elapsed_total_ms += elapsed_ms
+        time.sleep(0.5)
         save = read_save(driver)
         metrics = current_metrics(driver)
         total_unloads, unique_unloads = unload_totals(save)
-        segment = {
-            "index": index + 1,
-            "input": f"Shift+{code}",
-            "cell": metrics.get("cell"),
-            "position": metrics.get("position"),
-            "drawCalls": metrics.get("drawCalls"),
-            "unloadCountDelta": total_unloads - before_total_unloads,
-            "uniqueUnloadedCellsDelta": unique_unloads - before_unique_unloads,
-        }
-        segments.append(segment)
-        if segment["unloadCountDelta"] >= 14 and index >= 1:
+        segments.append(
+            {
+                "index": index,
+                "input": f"Shift+{code}",
+                "cell": metrics.get("cell"),
+                "position": metrics.get("position"),
+                "drawCalls": metrics.get("drawCalls"),
+                "unloadCountDelta": total_unloads - before_unloads,
+                "uniqueUnloadedCellsDelta": unique_unloads - before_unique,
+            }
+        )
+        if total_unloads - before_unloads >= 14 and index >= 2:
             break
 
-    time.sleep(2.0)
+    time.sleep(2)
     after_save = read_save(driver)
     after_metrics = current_metrics(driver)
     cdp_after = cdp_metrics(driver)
-    after_total_unloads, after_unique_unloads = unload_totals(after_save)
-    end_position = position_from_save(after_save)
-    unload_delta = after_total_unloads - before_total_unloads
-    unique_delta = after_unique_unloads - before_unique_unloads
-    distance = position_distance(start_position, end_position)
-
-    assert distance > 1.0, f"Trusted Chromium traversal did not move far enough ({distance:.2f} m)"
+    after_unloads, after_unique = unload_totals(after_save)
+    end_position = save_position(after_save)
+    travelled = distance(start_position, end_position)
+    unload_delta = after_unloads - before_unloads
+    unique_delta = after_unique - before_unique
+    assert travelled > 1.0, f"Trusted Chromium traversal did not move far enough ({travelled:.2f} m)"
     assert unload_delta >= 14, f"Traversal did not stream at least two cell bands (unload delta {unload_delta})"
-
     best_effort_screenshot(driver, "traversal-end.png", warnings)
     return {
-        "durationSeconds": round(wall_seconds, 3),
+        "durationSeconds": round(elapsed_total_ms / 1000, 3),
         "startWorldMetrics": before_metrics,
         "endWorldMetrics": after_metrics,
         "startPosition": start_position,
         "endPosition": end_position,
-        "persistedDistanceMeters": round(distance, 3),
+        "persistedDistanceMeters": round(travelled, 3),
         "unloadCountDelta": unload_delta,
         "uniqueUnloadedCellsDelta": unique_delta,
         "segments": segments,
-        "frames": summarize_frames(all_intervals, wall_seconds * 1000),
-        "cpu": cdp_delta(cdp_before, cdp_after, wall_seconds),
+        "frames": summarize_frames(all_intervals, elapsed_total_ms),
+        "cpu": cdp_delta(cdp_before, cdp_after, elapsed_total_ms / 1000),
         "memoryAfter": memory_snapshot(driver, cdp_after),
     }
 
@@ -485,7 +496,6 @@ def main() -> None:
             "chromeDriver": driver.capabilities.get("chrome", {}).get("chromedriverVersion"),
             "platformName": driver.capabilities.get("platformName"),
         }
-
         driver.get(BASE_URL)
         wait_for(driver, lambda current: current.execute_script("return document.readyState") == "complete", message="document load")
         new_button = wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="new"]'), message="new journey action")
@@ -507,20 +517,28 @@ def main() -> None:
         report["checks"].append("WebGL renderer metadata captured")
         time.sleep(2)
 
-        report["scenarios"]["baselineSpawn"] = sample_static_scenario(driver, "baseline-spawn", STATIC_SAMPLE_SECONDS, warnings)
-        baseline_metrics = report["scenarios"]["baselineSpawn"]["worldMetricsAfter"]
-        assert baseline_metrics.get("seed") == "threshold-001"
-        assert baseline_metrics.get("loadedCells") == 49
+        report["scenarios"]["baselineSpawn"] = sample_static_scenario(
+            driver, "baseline-spawn", STATIC_SAMPLE_SECONDS, warnings
+        )
+        baseline = report["scenarios"]["baselineSpawn"]["worldMetricsAfter"]
+        assert baseline.get("seed") == "threshold-001"
+        assert baseline.get("loadedCells") == 49
         report["checks"].append("baseline radius-3 spawn profiled with 49 loaded cells")
 
         ensure_lab(driver, True)
         dispatch_change(driver, '[data-lab="radius"]', "1")
         dispatch_change(driver, '[data-lab="bypass"]', True)
         dispatch_change(driver, '[data-lab="zone"]', "holes")
-        wait_for_metrics(driver, lambda value: value.get("zone") == "Hole Section" and value.get("loadedCells") == 9, "forced Hole Section radius 1")
+        wait_for_metrics(
+            driver,
+            lambda value: value.get("zone") == "Hole Section" and value.get("loadedCells") == 9,
+            "forced Hole Section radius 1",
+        )
         ensure_lab(driver, False)
         ensure_pointer_lock(driver)
-        report["scenarios"]["holeSectionRadius1"] = sample_static_scenario(driver, "hole-section-radius-1", STATIC_SAMPLE_SECONDS, warnings)
+        report["scenarios"]["holeSectionRadius1"] = sample_static_scenario(
+            driver, "hole-section-radius-1", STATIC_SAMPLE_SECONDS, warnings
+        )
         report["checks"].append("forced Hole Section radius-1 scenario profiled")
 
         ensure_lab(driver, True)
@@ -530,11 +548,18 @@ def main() -> None:
         wait_for_metrics(driver, lambda value: value.get("loadedCells") == 49, "baseline radius restored")
         spawn_all = driver.find_element(By.CSS_SELECTOR, '[data-action="spawn-all-objects"]')
         driver.execute_script("arguments[0].click();", spawn_all)
-        catalog_status = wait_for_text(driver, '[data-ui="catalog-status"]', ("Spawned 23",), timeout=15, message="World Lab full object showcase")
-        report["catalogStatus"] = catalog_status
+        report["catalogStatus"] = wait_for_text(
+            driver,
+            '[data-ui="catalog-status"]',
+            ("Spawned 23",),
+            timeout=15,
+            message="World Lab full object showcase",
+        )
         ensure_lab(driver, False)
         ensure_pointer_lock(driver)
-        report["scenarios"]["worldLabShowcase23"] = sample_static_scenario(driver, "world-lab-showcase-23", STATIC_SAMPLE_SECONDS, warnings)
+        report["scenarios"]["worldLabShowcase23"] = sample_static_scenario(
+            driver, "world-lab-showcase-23", STATIC_SAMPLE_SECONDS, warnings
+        )
         report["checks"].append("23-object World Lab showcase profiled at normal radius")
 
         ensure_lab(driver, True)
@@ -548,9 +573,9 @@ def main() -> None:
         report["scenarios"]["boundedTraversal"] = traversal_profile(driver, warnings)
         report["checks"].append("trusted Chromium traversal streamed at least two cell bands")
 
-        before_refresh_save = wait_for(driver, lambda current: read_save(current), timeout=15, message="save before refresh")
-        before_refresh_position = position_from_save(before_refresh_save)
-        character_id = before_refresh_save.get("characterId")
+        before_refresh = wait_for(driver, lambda current: read_save(current), timeout=15, message="save before refresh")
+        before_position = save_position(before_refresh)
+        character_id = before_refresh.get("characterId")
         driver.refresh()
         continue_button = wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="continue"]'), message="Continue after refresh")
         wait_for(driver, lambda _current: not continue_button.get_attribute("disabled"), timeout=15, message="saved journey availability")
@@ -563,17 +588,18 @@ def main() -> None:
             timeout=30,
             message="continued journey HUD",
         )
-        continued_save = wait_for(driver, lambda current: read_save(current), timeout=15, message="continued save")
-        continued_position = position_from_save(continued_save)
-        assert continued_save.get("version") == 2
-        assert continued_save.get("characterId") == character_id
-        assert continued_save.get("seed") == "threshold-001"
-        assert position_distance(before_refresh_position, continued_position) < 0.25
+        continued = wait_for(driver, lambda current: read_save(current), timeout=15, message="continued save")
+        continued_position = save_position(continued)
+        assert continued.get("version") == 2
+        assert continued.get("characterId") == character_id
+        assert continued.get("seed") == "threshold-001"
+        position_delta = distance(before_position, continued_position)
+        assert position_delta < 0.25
         report["saveReload"] = {
-            "version": continued_save.get("version"),
+            "version": continued.get("version"),
             "characterIdPreserved": True,
-            "seed": continued_save.get("seed"),
-            "positionDeltaMeters": round(position_distance(before_refresh_position, continued_position), 4),
+            "seed": continued.get("seed"),
+            "positionDeltaMeters": round(position_delta, 4),
         }
         report["checks"].append("direct refresh and Continue preserved save schema v2, character, seed and position")
 
