@@ -1,0 +1,129 @@
+name: Project Noclip Renderer Compare
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - src/renderer/**
+      - src/ui/DevelopmentVersionIndicator.ts
+      - src/ui/development-version-indicator.css
+      - src/version.ts
+      - src/main.ts
+      - VERSION
+      - vite.config.ts
+      - vercel.json
+      - .github/workflows/renderer-compare.yml
+      - scripts/profile-production.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: project-noclip-renderer-compare-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  compare-renderer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          npm install --no-audit --no-fund
+          python -m pip install --disable-pip-version-check selenium==4.46.0
+      - name: Profile accepted production baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/renderer-compare/before artifacts/renderer-compare/after
+          NOCLIP_BASE_URL="https://project-noclip.vercel.app" \
+          NOCLIP_DEPLOYMENT_COMMIT="c2d3cb38faacfc7e8e22dae67aa2e8e8af9ddfea" \
+          NOCLIP_DEPLOYMENT_ID="dpl_C1FfCuvYVQ7aKaVG6bpUPT2o6Gmp" \
+          NOCLIP_PROFILE_ARTIFACTS="artifacts/renderer-compare/before" \
+          python scripts/profile-production.py
+      - name: Build and serve candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run build
+          PORT=4173 npm run preview > /tmp/noclip-preview.log 2>&1 &
+          echo $! > /tmp/noclip-preview.pid
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/noclip-preview.log
+          exit 1
+      - name: Profile candidate on same runner
+        shell: bash
+        env:
+          CANDIDATE_COMMIT: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          NOCLIP_BASE_URL="http://127.0.0.1:4173" \
+          NOCLIP_DEPLOYMENT_COMMIT="$CANDIDATE_COMMIT" \
+          NOCLIP_DEPLOYMENT_ID="local-candidate" \
+          NOCLIP_PROFILE_ARTIFACTS="artifacts/renderer-compare/after" \
+          python scripts/profile-production.py
+      - name: Compare renderer invariants and draw calls
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path('artifacts/renderer-compare')
+          before = json.loads((root / 'before' / 'profile.json').read_text(encoding='utf-8'))
+          after = json.loads((root / 'after' / 'profile.json').read_text(encoding='utf-8'))
+          scenarios = ('baselineSpawn', 'holeSectionRadius1', 'worldLabShowcase23')
+          comparison = {'scenarios': {}}
+          for key in scenarios:
+              before_metrics = before['scenarios'][key]['worldMetricsAfter']
+              after_metrics = after['scenarios'][key]['worldMetricsAfter']
+              for invariant in ('loadedCells', 'colliders', 'interactions'):
+                  assert after_metrics[invariant] == before_metrics[invariant], (
+                      f'{key} {invariant} changed: {before_metrics[invariant]} -> {after_metrics[invariant]}'
+                  )
+              before_draw = int(before_metrics['drawCalls'])
+              after_draw = int(after_metrics['drawCalls'])
+              reduction_pct = (before_draw - after_draw) * 100 / before_draw
+              comparison['scenarios'][key] = {
+                  'beforeDrawCalls': before_draw,
+                  'afterDrawCalls': after_draw,
+                  'reductionPct': round(reduction_pct, 2),
+                  'loadedCells': after_metrics['loadedCells'],
+                  'colliders': after_metrics['colliders'],
+                  'interactions': after_metrics['interactions'],
+              }
+          baseline = comparison['scenarios']['baselineSpawn']
+          assert baseline['reductionPct'] >= 20.0, (
+              f"baseline draw-call reduction {baseline['reductionPct']:.2f}% is below the 20% target"
+          )
+          comparison['saveReload'] = after['saveReload']
+          comparison['browserErrors'] = after.get('browserErrors', [])
+          assert after['saveReload']['version'] == 2
+          assert not comparison['browserErrors']
+          (root / 'comparison.json').write_text(json.dumps(comparison, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(comparison, indent=2))
+          PY
+      - name: Upload renderer comparison evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: renderer-compare-${{ github.event.pull_request.head.sha }}
+          path: artifacts/renderer-compare
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Stop local preview
+        if: always()
+        shell: bash
+        run: |
+          if [ -f /tmp/noclip-preview.pid ]; then kill "$(cat /tmp/noclip-preview.pid)" 2>/dev/null || true; fi
