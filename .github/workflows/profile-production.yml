@@ -124,16 +124,17 @@ jobs:
           lines.extend([
               "",
               "### Streaming and generator evidence",
-              f"- Trusted traversal persisted `{traversal['persistedDistanceMeters']:.2f} m` and recorded `{traversal['unloadCountDelta']}` unload events across `{traversal['uniqueUnloadedCellsDelta']}` unique cells.",
+              f"- Trusted traversal covered `{traversal['pathDistanceMeters']:.2f} m` and crossed `{traversal['cellTransitions']}` cell boundaries through `{len(traversal['visitedCells'])}` distinct cells at `{traversal['viewport']['width']}×{traversal['viewport']['height']}`.",
+              f"- Persisted unload-counter observation during that traversal: `{traversal['unloadCountDeltaObserved']}` events across `{traversal['uniqueUnloadedCellsDeltaObserved']}` unique cells; cell-transition coverage is the acceptance signal because save cadence is simulation-time based.",
               f"- 10,000-cell benchmark: `{benchmark['elapsedMs']:.2f} ms` total / `{benchmark['microsecondsPerCell']:.2f} µs/cell` / `{benchmark['cellsPerSecond']:.2f} cells/s`.",
               f"- Connector errors: `{benchmark['connectorErrors']}`; placement errors: `{benchmark['placementErrors']}`; benchmark heap: `{benchmark['heapMb']:.2f} MB`.",
               f"- Save/reload: schema v{profile['saveReload']['version']} preserved, position delta `{profile['saveReload']['positionDeltaMeters']:.4f} m`.",
               f"- Browser console errors: `{len(profile.get('browserErrors', []))}`.",
               "",
-              "The uploaded artifact contains `profile.json`, `benchmark.json`, and scenario screenshots. The bottleneck conclusion and one bounded optimization recommendation will be posted after these measurements are reviewed; this profiling PR does not modify the deployed game runtime.",
+              "The uploaded artifact contains `profile.json`, `benchmark.json`, and available scenario screenshots. The bottleneck conclusion and one bounded optimization recommendation will be posted after these measurements are reviewed; this profiling PR does not modify the deployed game runtime.",
           ])
           for warning in profile.get("warnings", []):
-              lines.append(f"- Non-blocking evidence warning: {warning}")
+              lines.append(f"- Non-blocking evidence warning: {warning.splitlines()[0]}")
           Path("/tmp/issue-14-profile.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
           PY
           gh issue comment 14 --repo "$GITHUB_REPOSITORY" --body-file /tmp/issue-14-profile.md
