@@ -89,10 +89,8 @@ jobs:
           profile = json.loads((root / "profile.json").read_text(encoding="utf-8"))
           benchmark = json.loads((root / "benchmark.json").read_text(encoding="utf-8"))
           run_url = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
-
           lines = [
-              "## Issue #14 production profile: passed",
-              "",
+              "## Issue #14 production profile: passed", "",
               f"- Public URL: `{profile['baseUrl']}`",
               f"- Accepted deployment commit: `{profile['deployment']['commit']}`",
               f"- Vercel deployment: `{profile['deployment']['id']}`",
@@ -100,38 +98,35 @@ jobs:
               f"- Actions evidence: {run_url}",
               f"- Browser: `{profile['environment']['browser'].get('browserVersion', 'unknown')}`",
               f"- WebGL renderer: `{profile['environment']['webgl'].get('renderer', 'unknown')}`",
-              "",
-              "### Fixed scenarios",
+              "", "### Fixed renderer scenarios",
           ]
-          scenario_labels = {
-              "baselineSpawn": "Baseline spawn · radius 3",
-              "holeSectionRadius1": "Forced Hole Section · radius 1",
-              "worldLabShowcase23": "World Lab · 23-object showcase",
-              "boundedTraversal": "Bounded streaming traversal",
-          }
-          for key, label in scenario_labels.items():
+          for key, label in (
+              ("baselineSpawn", "Baseline spawn · radius 3"),
+              ("holeSectionRadius1", "Forced Hole Section · radius 1"),
+              ("worldLabShowcase23", "World Lab · 23-object showcase"),
+          ):
               scenario = profile["scenarios"][key]
               frames = scenario["frames"]["frameTimeMs"]
               fps = scenario["frames"]["instantaneousFps"]
-              cpu = scenario.get("cpu", {})
-              metrics = scenario.get("worldMetricsAfter") or scenario.get("endWorldMetrics") or {}
+              cpu = scenario["cpu"]
+              metrics = scenario["worldMetricsAfter"]
               lines.append(
                   f"- **{label}:** frame p50 `{frames['median']:.3f} ms`, p95 `{frames['p95']:.3f} ms`, "
                   f"median FPS `{fps['median']:.2f}`, main-thread busy `{cpu.get('mainThreadBusyPct', 'n/a')}%`, "
                   f"draw calls `{metrics.get('drawCalls', 'n/a')}`, loaded cells `{metrics.get('loadedCells', 'n/a')}`"
               )
-          traversal = profile["scenarios"]["boundedTraversal"]
+          streaming = profile["scenarios"]["boundedStreamingBands"]
           lines.extend([
-              "",
-              "### Streaming and generator evidence",
-              f"- Trusted traversal covered `{traversal['pathDistanceMeters']:.2f} m` and crossed `{traversal['cellTransitions']}` cell boundaries through `{len(traversal['visitedCells'])}` distinct cells at `{traversal['viewport']['width']}×{traversal['viewport']['height']}`.",
-              f"- Persisted unload-counter observation during that traversal: `{traversal['unloadCountDeltaObserved']}` events across `{traversal['uniqueUnloadedCellsDeltaObserved']}` unique cells; cell-transition coverage is the acceptance signal because save cadence is simulation-time based.",
+              "", "### Streaming and generator evidence",
+              f"- Deterministic World Lab streaming cycle: `{' → '.join(map(str, streaming['loadedCellsSequence']))}` loaded cells; peak `{streaming['peakCellsUnloaded']}` unloaded and `{streaming['peakCellsReloaded']}` reloaded without mutating journey save data.",
+              f"- Radius transition settle times: `{', '.join(str(step['settleMs']) + ' ms' for step in streaming['transitions'])}`.",
               f"- 10,000-cell benchmark: `{benchmark['elapsedMs']:.2f} ms` total / `{benchmark['microsecondsPerCell']:.2f} µs/cell` / `{benchmark['cellsPerSecond']:.2f} cells/s`.",
               f"- Connector errors: `{benchmark['connectorErrors']}`; placement errors: `{benchmark['placementErrors']}`; benchmark heap: `{benchmark['heapMb']:.2f} MB`.",
               f"- Save/reload: schema v{profile['saveReload']['version']} preserved, position delta `{profile['saveReload']['positionDeltaMeters']:.4f} m`.",
               f"- Browser console errors: `{len(profile.get('browserErrors', []))}`.",
               "",
-              "The uploaded artifact contains `profile.json`, `benchmark.json`, and available scenario screenshots. The bottleneck conclusion and one bounded optimization recommendation will be posted after these measurements are reviewed; this profiling PR does not modify the deployed game runtime.",
+              "Headless CI uses SwiftShader, so its absolute FPS is a software-renderer stress observation rather than a physical-GPU FPS claim. Existing Chromium journey smoke remains the separate pointer-lock/input regression gate.",
+              "The artifact contains `profile.json`, `benchmark.json`, and available scenario screenshots. This profiling PR does not modify the deployed game runtime.",
           ])
           for warning in profile.get("warnings", []):
               lines.append(f"- Non-blocking evidence warning: {warning.splitlines()[0]}")
