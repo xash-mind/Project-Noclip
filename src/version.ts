@@ -1,3 +1,3 @@
-declare const __NOCLIP_VERSION__: string;
+import projectVersion from '../VERSION?raw';
 
-export const PROJECT_VERSION = __NOCLIP_VERSION__;
+export const PROJECT_VERSION = projectVersion.trim();
