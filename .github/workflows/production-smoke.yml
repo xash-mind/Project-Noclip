@@ -8,23 +8,29 @@ on:
         required: false
         default: https://project-noclip.vercel.app
       deployment_commit:
-        description: Git commit served by the deployment
+        description: Git commit expected on the deployment
         required: false
   push:
     branches: [main]
     paths:
-      - .github/workflows/production-smoke.yml
-  pull_request:
-    branches: [main]
-    paths:
+      - src/**
+      - package.json
+      - package-lock.json
+      - VERSION
+      - vite.config.ts
+      - index.html
+      - vercel.json
+      - scripts/build.mjs
+      - scripts/preview.mjs
+      - scripts/browser-smoke.py
+      - scripts/version-smoke.py
       - .github/workflows/production-smoke.yml
 
 permissions:
   contents: read
-  issues: write
 
 concurrency:
-  group: project-noclip-production-smoke-${{ github.event_name }}-${{ github.ref }}
+  group: project-noclip-production-smoke-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -44,12 +50,22 @@ jobs:
         run: |
           set -euo pipefail
           echo "NOCLIP_TARGET_URL=${REQUESTED_BASE_URL:-https://project-noclip.vercel.app}" >> "$GITHUB_ENV"
-          echo "NOCLIP_DEPLOYMENT_COMMIT=${REQUESTED_DEPLOYMENT_COMMIT:-c2d3cb38faacfc7e8e22dae67aa2e8e8af9ddfea}" >> "$GITHUB_ENV"
-      - name: Capture public asset manifest
+          echo "NOCLIP_DEPLOYMENT_COMMIT=${REQUESTED_DEPLOYMENT_COMMIT:-$GITHUB_SHA}" >> "$GITHUB_ENV"
+      - name: Install browser-smoke driver
+        run: python -m pip install --disable-pip-version-check selenium==4.46.0
+      - name: Wait for canonical deployed version
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts/production-browser-smoke
+          NOCLIP_BASE_URL="${NOCLIP_TARGET_URL}" \
+          NOCLIP_VERSION_WAIT_SECONDS="420" \
+          NOCLIP_VERSION_ARTIFACTS="artifacts/production-browser-smoke" \
+          python scripts/version-smoke.py
+      - name: Capture public asset manifest
+        shell: bash
+        run: |
+          set -euo pipefail
           python - <<'PY'
           import hashlib
           import json
@@ -96,60 +112,14 @@ jobs:
           output.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
           print(json.dumps(manifest, indent=2))
           PY
-      - name: Install browser-smoke driver
-        run: python -m pip install --disable-pip-version-check selenium==4.46.0
       - name: Run Chromium journey against production
         shell: bash
         run: |
           set -euo pipefail
-          echo "Verifying ${NOCLIP_TARGET_URL}"
+          echo "Verifying ${NOCLIP_TARGET_URL} at visible $(cat VERSION)"
           NOCLIP_BASE_URL="${NOCLIP_TARGET_URL}" \
           NOCLIP_BROWSER_ARTIFACTS="artifacts/production-browser-smoke" \
           python scripts/browser-smoke.py
-      - name: Publish production evidence to Issue 8
-        if: success()
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          report = json.loads(Path("artifacts/production-browser-smoke/report.json").read_text(encoding="utf-8"))
-          assets = json.loads(Path("artifacts/production-browser-smoke/asset-manifest.json").read_text(encoding="utf-8"))
-          run_url = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
-
-          lines = [
-              "## Production browser smoke: passed",
-              "",
-              f"- Public URL: `{report['baseUrl']}`",
-              f"- Deployment commit: `{os.environ['NOCLIP_DEPLOYMENT_COMMIT']}`",
-              f"- Verification workflow commit: `{os.environ['GITHUB_SHA']}`",
-              f"- HTTP status: `{assets['status']}`",
-              f"- HTML SHA-256: `{assets['htmlSha256']}`",
-              f"- Actions evidence: {run_url}",
-              "",
-              "### Public generated assets",
-          ]
-          for asset in assets["assets"]:
-              lines.append(f"- `{asset['path']}` — {asset['bytes']} bytes — SHA-256 `{asset['sha256']}`")
-
-          lines.extend(["", "### Browser journey checks"])
-          lines.extend(f"- [x] {check}" for check in report.get("checks", []))
-          for warning in report.get("warnings", []):
-              lines.append(f"- [ ] Non-blocking headless limitation: {warning}")
-          lines.extend([
-              "",
-              f"Browser console errors: `{len(report.get('browserErrors', []))}`",
-              "",
-              "The uploaded Actions artifact contains the report and visual screenshots, including the forced Hole Section, World Lab catalog and continued save state.",
-          ])
-          Path("/tmp/issue-8-production-smoke.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-          PY
-          gh issue comment 8 --repo "$GITHUB_REPOSITORY" --body-file /tmp/issue-8-production-smoke.md
       - name: Upload production-smoke evidence
         if: always()
         uses: actions/upload-artifact@v4
