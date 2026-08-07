@@ -1,0 +1,19 @@
+.development-version-indicator {
+  position: fixed;
+  top: max(0.5rem, env(safe-area-inset-top));
+  right: max(0.5rem, env(safe-area-inset-right));
+  z-index: 100;
+  padding: 0.22rem 0.38rem;
+  border: 1px solid rgba(219, 204, 112, 0.28);
+  border-radius: 0.25rem;
+  background: rgba(10, 10, 6, 0.74);
+  color: rgba(233, 224, 169, 0.72);
+  font: 600 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  user-select: none;
+}
+
+@media print {
+  .development-version-indicator { display: none; }
+}

@@ -1,6 +1,8 @@
 import * as pc from 'playcanvas';
 import './styles.css';
 import { ProjectNoclipGame } from './app/ProjectNoclipGame.js';
+import { installStaticWorldBatching } from './renderer/StaticWorldBatching.js';
+import { mountDevelopmentVersionIndicator } from './ui/DevelopmentVersionIndicator.js';
 
 type FogParamsLike = {
   type: string;
@@ -59,6 +61,8 @@ function installPlayCanvasFogCompatibility(): void {
 }
 
 installPlayCanvasFogCompatibility();
+installStaticWorldBatching();
+mountDevelopmentVersionIndicator();
 
 const game = new ProjectNoclipGame();
 void game.initialize().then(() => {
