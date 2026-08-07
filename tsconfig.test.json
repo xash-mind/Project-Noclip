@@ -11,6 +11,7 @@
     "src/world/**/*.ts",
     "src/items/**/*.ts",
     "src/inventory/**/*.ts",
+    "src/input/**/*.ts",
     "src/persistence/types.ts",
     "src/simulation/**/*.ts",
     "src/physics/**/*.ts",
