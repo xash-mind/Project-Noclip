@@ -8,7 +8,7 @@ on:
         required: false
         default: https://project-noclip.vercel.app
       deployment_commit:
-        description: Git commit expected on the deployment
+        description: Product commit expected on the deployment
         required: false
   push:
     branches: [main]
@@ -29,6 +29,8 @@ on:
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: read
 
 concurrency:
   group: project-noclip-production-smoke-${{ github.ref }}
@@ -40,6 +42,8 @@ jobs:
     timeout-minutes: 24
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -50,8 +54,16 @@ jobs:
           REQUESTED_DEPLOYMENT_COMMIT: ${{ github.event.inputs.deployment_commit }}
         run: |
           set -euo pipefail
-          echo "NOCLIP_TARGET_URL=${REQUESTED_BASE_URL:-https://project-noclip.vercel.app}" >> "$GITHUB_ENV"
-          echo "NOCLIP_DEPLOYMENT_COMMIT=${REQUESTED_DEPLOYMENT_COMMIT:-$GITHUB_SHA}" >> "$GITHUB_ENV"
+          target_url="${REQUESTED_BASE_URL:-https://project-noclip.vercel.app}"
+          if [ -n "${REQUESTED_DEPLOYMENT_COMMIT:-}" ]; then
+            product_commit="$REQUESTED_DEPLOYMENT_COMMIT"
+          else
+            product_commit="$(git log --first-parent -1 --format=%H -- src package.json package-lock.json VERSION vite.config.ts index.html vercel.json scripts/build.mjs scripts/preview.mjs)"
+          fi
+          test -n "$product_commit"
+          echo "NOCLIP_TARGET_URL=$target_url" >> "$GITHUB_ENV"
+          echo "NOCLIP_DEPLOYMENT_COMMIT=$product_commit" >> "$GITHUB_ENV"
+          echo "Resolved canonical product commit: $product_commit"
       - name: Install browser-smoke driver
         run: python -m pip install --disable-pip-version-check selenium==4.46.0
       - name: Wait for canonical deployed version
@@ -129,6 +141,75 @@ jobs:
           NOCLIP_BASE_URL="${NOCLIP_TARGET_URL}" \
           NOCLIP_MOBILE_ARTIFACTS="artifacts/production-mobile-smoke" \
           python scripts/mobile-smoke.py
+      - name: Publish production release evidence
+        if: success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pr_number="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${NOCLIP_DEPLOYMENT_COMMIT}/pulls" --jq '[.[] | select(.merged_at != null)][0].number // empty')"
+          if [ -z "$pr_number" ]; then
+            echo "No merged PR resolved for ${NOCLIP_DEPLOYMENT_COMMIT}; keeping evidence in the Actions artifact only."
+            exit 0
+          fi
+          pr_body="$(gh pr view "$pr_number" --repo "$GITHUB_REPOSITORY" --json body --jq '.body // ""')"
+          issue_number="$(PR_BODY="$pr_body" python - <<'PY'
+          import os, re
+          body = os.environ.get('PR_BODY', '')
+          match = re.search(r'(?im)\b(?:closes|fixes|resolves)\s+#(\d+)', body)
+          print(match.group(1) if match else '')
+          PY
+          )"
+          PR_NUMBER="$pr_number" ISSUE_NUMBER="$issue_number" python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          root = Path('artifacts')
+          desktop = json.loads((root / 'production-browser-smoke' / 'report.json').read_text(encoding='utf-8'))
+          mobile = json.loads((root / 'production-mobile-smoke' / 'report.json').read_text(encoding='utf-8'))
+          assets = json.loads((root / 'production-browser-smoke' / 'asset-manifest.json').read_text(encoding='utf-8'))
+          version = (root / 'production-browser-smoke' / 'version.txt').read_text(encoding='utf-8').strip()
+          metrics = desktop.get('metrics', '')
+          def metric(label: str) -> str:
+              match = re.search(rf'^{re.escape(label)}\s+(.+)$', metrics, re.MULTILINE)
+              return match.group(1).strip() if match else 'n/a'
+          run_url = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          lines = [
+              '## Production release verification: passed',
+              '',
+              f"- Canonical production: `{desktop['baseUrl']}`",
+              f"- Product release commit: `{os.environ['NOCLIP_DEPLOYMENT_COMMIT']}`",
+              f"- Visible production version: **`{version}`**",
+              f"- Production verification run: {run_url}",
+              f"- HTTP status: `{assets['status']}`",
+              f"- HTML SHA-256: `{assets['htmlSha256']}`",
+              f"- Live world metrics: `{metric('loaded cells')}` loaded cells / `{metric('colliders')}` colliders / `{metric('interactions')}` interactions / `{metric('draw calls')}` draw calls",
+              f"- Mobile touch movement: `{mobile.get('startPosition')}` → `{mobile.get('movedPosition')}`",
+              f"- Mobile touch look yaw: `{mobile.get('yawBefore')}` → `{mobile.get('yawAfter')}`",
+              f"- Desktop browser errors: `{len(desktop.get('browserErrors', []))}`",
+              f"- Mobile browser errors: `{len(mobile.get('browserErrors', []))}`",
+              '',
+              '### Desktop journey',
+          ]
+          lines.extend(f"- [x] {check}" for check in desktop.get('checks', []))
+          lines.extend(['', '### Landscape touch journey'])
+          lines.extend(f"- [x] {check}" for check in mobile.get('checks', []))
+          for warning in desktop.get('warnings', []):
+              lines.append(f"- Non-blocking headless limitation: {warning}")
+          lines.extend([
+              '',
+              'The Actions artifact contains the visible-version screenshot, public asset hashes, desktop journey screenshots and the landscape touch screenshot/report. Responsive emulation is functional evidence, not a physical-device FPS claim.',
+          ])
+          Path('/tmp/production-evidence.md').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          PY
+          if [ -n "$issue_number" ]; then
+            gh issue comment "$issue_number" --repo "$GITHUB_REPOSITORY" --body-file /tmp/production-evidence.md
+          else
+            gh pr comment "$pr_number" --repo "$GITHUB_REPOSITORY" --body-file /tmp/production-evidence.md
+          fi
       - name: Upload production-smoke evidence
         if: always()
         uses: actions/upload-artifact@v4
