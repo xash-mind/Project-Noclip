@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { PlayerIntent } from '../.test-dist/src/input/PlayerIntent.js';
 import { generateCell, validateCellConnectivity, validateCellPlacement } from '../.test-dist/src/world/generator.js';
 import { DEFAULT_TUNING, PROP_KINDS } from '../.test-dist/src/world/types.js';
 import { chooseZone, districtId, isZoneUnlocked } from '../.test-dist/src/world/zones.js';
@@ -25,6 +26,23 @@ const generate = (overrides = {}) => generateCell({
 const generateDayZeroOrigin = (seed) => generate({ seed, x: 0, z: 0, worldDay: 0, exposure: 0 });
 
 test('fixed seed reproduces full room plan', () => assert.deepEqual(generate(), generate()));
+
+test('keyboard and touch share one bounded player movement intent', () => {
+  const input = new PlayerIntent();
+  input.keyDown('KeyW'); input.keyDown('ShiftLeft');
+  assert.deepEqual(input.movement(), { forward: 1, strafe: 0, sprinting: true, crouching: false });
+  input.keyUp('KeyW'); input.keyUp('ShiftLeft');
+  input.setTouchMovement(0.8, 0.6);
+  assert.deepEqual(input.movement(), { forward: 0.8, strafe: 0.6, sprinting: false, crouching: false });
+  input.setTouchMovement(2, 2);
+  const bounded = input.movement();
+  assert.ok(Math.hypot(bounded.forward, bounded.strafe) <= 1.000001);
+  input.keyDown('ShiftLeft'); input.keyDown('KeyC');
+  assert.equal(input.movement().sprinting, false);
+  assert.equal(input.movement().crouching, true);
+  input.clearAll();
+  assert.deepEqual(input.movement(), { forward: 0, strafe: 0, sprinting: false, crouching: false });
+});
 
 test('connector contracts remain symmetric', () => assert.deepEqual(validateCellConnectivity('symmetry', 24, DEFAULT_TUNING.extraOpeningChance), []));
 

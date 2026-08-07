@@ -1,3 +1,4 @@
+import './mobile-controls.css';
 import { ITEM_DEFINITIONS } from '../items/definitions.js';
 import type { ItemInstance } from '../items/types.js';
 import { clearObjectCatalogShowcase, filterObjectCatalog, OBJECT_CATALOG, OBJECT_CATALOG_CATEGORIES, spawnObjectCatalogEntries } from '../renderer/objectCatalog.js';
@@ -14,10 +15,15 @@ export interface UIHandlers {
   onSeedChange(seed: string): void;
   onSimulateStarter(): void;
   onExportTuning(): void;
+  onTouchMove(forward: number, strafe: number): void;
+  onTouchLook(deltaX: number, deltaY: number): void;
+  onTouchInteract(): void;
+  onTouchUse(): void;
 }
 
 export class GameUI {
   private readonly root: HTMLElement;
+  private readonly touchCapable: boolean;
   private title!: HTMLElement;
   private continueButton!: HTMLButtonElement;
   private seedInput!: HTMLInputElement;
@@ -45,6 +51,8 @@ export class GameUI {
     const root = document.querySelector<HTMLElement>('#ui-root');
     if (!root) throw new Error('Missing #ui-root');
     this.root = root;
+    this.touchCapable = navigator.maxTouchPoints > 0 && (window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(hover: none)').matches);
+    this.root.classList.toggle('touch-capable', this.touchCapable);
     this.build();
   }
 
@@ -59,7 +67,8 @@ export class GameUI {
             <label>World seed<input data-ui="seed" maxlength="48" value="threshold-001" /></label>
             <button class="primary" data-action="new">Begin new local journey</button>
             <button data-action="continue">Continue saved journey</button>
-            <small>WASD move · Shift sprint · E interact · F use · G drop · M marker · &#96; World Lab</small>
+            <small class="desktop-help">WASD move · Shift sprint · E interact · F use · G drop · M marker · &#96; World Lab</small>
+            <small class="touch-help">Landscape touch: left pad move · drag right side look · Interact / Use</small>
           </div>
         </div>
       </section>
@@ -75,10 +84,21 @@ export class GameUI {
         <div class="toast-stack" data-ui="toasts"></div>
         <div class="marker-mode" data-ui="marker-mode">MARKER READY — hold primary button while looking at a nearby wall</div>
         <div class="help">E interact · F use · G drop · M marker · &#96; World Lab · Esc pause</div>
+        <div class="touch-controls" data-ui="touch-controls" aria-label="Touch gameplay controls">
+          <div class="touch-move" data-touch="move" aria-label="Movement control"><div class="touch-stick" data-touch="stick"></div><span>Move</span></div>
+          <div class="touch-look" data-touch="look" aria-label="Camera look area"><span>Look</span></div>
+          <div class="touch-actions">
+            <button class="touch-action" data-action="touch-interact" aria-label="Interact">Interact</button>
+            <button class="touch-action" data-action="touch-use" aria-label="Use selected item">Use</button>
+          </div>
+        </div>
+        <div class="touch-orientation" data-ui="touch-orientation" role="status" aria-live="polite">
+          <div class="touch-orientation-card"><strong>Rotate to landscape</strong><span>Basic touch play is currently designed for a wide screen.</span></div>
+        </div>
       </section>
       <section class="pause" data-ui="pause">
         <div class="pause-card ui-panel">
-          <p class="eyebrow">Simulation paused</p><h2>Pointer released</h2>
+          <p class="eyebrow">Simulation paused</p><h2><span class="desktop-pause-label">Pointer released</span><span class="touch-pause-label">Journey paused</span></h2>
           <div class="menu-grid"><button class="primary" data-action="resume">Return</button><button class="danger" data-action="reset">Erase local journey</button></div>
         </div>
       </section>
@@ -162,6 +182,8 @@ export class GameUI {
     this.required('[data-action="resume"]').addEventListener('click', () => this.handlers.onResume());
     this.required('[data-action="reset"]').addEventListener('click', () => this.handlers.onReset());
     this.required('[data-action="close-note"]').addEventListener('click', () => this.hideNote());
+    this.required('[data-action="touch-interact"]').addEventListener('click', () => this.handlers.onTouchInteract());
+    this.required('[data-action="touch-use"]').addEventListener('click', () => this.handlers.onTouchUse());
     this.required('[data-action="apply-seed"]').addEventListener('click', () => this.handlers.onSeedChange(this.required<HTMLInputElement>('[data-lab="seed"]').value.trim() || 'threshold-001'));
     this.required('[data-action="simulate"]').addEventListener('click', () => this.handlers.onSimulateStarter());
     this.required('[data-action="export"]').addEventListener('click', () => this.handlers.onExportTuning());
@@ -199,6 +221,62 @@ export class GameUI {
       this.handlers.onTuningChange({ exposureOverride: value === '' ? undefined : Number(value) });
     });
     this.required<HTMLInputElement>('[data-lab="bypass"]').addEventListener('change', (event) => this.handlers.onTuningChange({ gateBypass: (event.target as HTMLInputElement).checked }));
+    this.installTouchControls();
+  }
+
+  private installTouchControls(): void {
+    if (!this.touchCapable) return;
+    const move = this.required<HTMLElement>('[data-touch="move"]');
+    const stick = this.required<HTMLElement>('[data-touch="stick"]');
+    const look = this.required<HTMLElement>('[data-touch="look"]');
+    let movePointer: number | undefined;
+    let lookPointer: number | undefined;
+    let lookX = 0;
+    let lookY = 0;
+
+    const updateMove = (event: PointerEvent): void => {
+      const rect = move.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const radius = Math.max(1, Math.min(rect.width, rect.height) * 0.34);
+      let dx = event.clientX - centerX;
+      let dy = event.clientY - centerY;
+      const length = Math.hypot(dx, dy);
+      if (length > radius) { const scale = radius / length; dx *= scale; dy *= scale; }
+      stick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      this.handlers.onTouchMove(-dy / radius, dx / radius);
+    };
+    const stopMove = (event?: PointerEvent): void => {
+      if (event && movePointer !== event.pointerId) return;
+      movePointer = undefined;
+      stick.style.transform = 'translate(-50%,-50%)';
+      this.handlers.onTouchMove(0, 0);
+    };
+
+    move.addEventListener('pointerdown', (event) => {
+      if (event.pointerType === 'mouse') return;
+      event.preventDefault(); movePointer = event.pointerId; move.setPointerCapture(event.pointerId); updateMove(event);
+    });
+    move.addEventListener('pointermove', (event) => { if (movePointer === event.pointerId) { event.preventDefault(); updateMove(event); } });
+    move.addEventListener('pointerup', stopMove);
+    move.addEventListener('pointercancel', stopMove);
+    move.addEventListener('lostpointercapture', () => stopMove());
+
+    look.addEventListener('pointerdown', (event) => {
+      if (event.pointerType === 'mouse') return;
+      event.preventDefault(); lookPointer = event.pointerId; lookX = event.clientX; lookY = event.clientY; look.setPointerCapture(event.pointerId);
+    });
+    look.addEventListener('pointermove', (event) => {
+      if (lookPointer !== event.pointerId) return;
+      event.preventDefault();
+      const dx = event.clientX - lookX; const dy = event.clientY - lookY;
+      lookX = event.clientX; lookY = event.clientY;
+      if (dx !== 0 || dy !== 0) this.handlers.onTouchLook(dx, dy);
+    });
+    const stopLook = (event: PointerEvent): void => { if (lookPointer === event.pointerId) lookPointer = undefined; };
+    look.addEventListener('pointerup', stopLook);
+    look.addEventListener('pointercancel', stopLook);
+    this.required('[data-ui="touch-controls"]').addEventListener('contextmenu', (event) => event.preventDefault());
   }
 
   private required<T extends Element = HTMLElement>(selector: string): T {
@@ -228,6 +306,8 @@ export class GameUI {
     this.updateCatalogStatus(entries.length === 0 ? 'No objects match this filter.' : `${entries.length} object${entries.length === 1 ? '' : 's'} match this filter.`);
   }
 
+  prefersTouchControls(): boolean { return this.touchCapable; }
+  isTouchLandscape(): boolean { return this.touchCapable && window.innerWidth > window.innerHeight; }
   setContinueAvailable(available: boolean): void { this.continueButton.disabled = !available; }
   showGame(): void { this.title.hidden = true; this.hud.hidden = false; }
   setPaused(paused: boolean): void { this.pause.classList.toggle('visible', paused); }
@@ -248,8 +328,9 @@ export class GameUI {
   hideNote(): void { this.noteOverlay.classList.remove('visible'); }
 
   setInteraction(text?: string): void {
-    this.interaction.textContent = text ?? '';
-    this.interaction.classList.toggle('visible', Boolean(text));
+    const visibleText = this.touchCapable ? text?.replace('[E]', '[INTERACT]') : text;
+    this.interaction.textContent = visibleText ?? '';
+    this.interaction.classList.toggle('visible', Boolean(visibleText));
   }
 
   updateWatch(snapshot: TimelineSnapshot, location: string, stability: string): void {
