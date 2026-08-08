@@ -34,6 +34,11 @@ const DIRECTIONS: Record<Direction, [number, number]> = {
 const PLAYER_ARRIVAL_CLEARANCE = 0.82;
 const LOOT_CLEARANCE = 0.38;
 const LOOT_PLACEMENT_ATTEMPTS = 48;
+const OPTIONAL_SCENERY_KEEP_CHANCE = 0.22;
+const OPTIONAL_SCENERY_MAX_PER_CELL = 1;
+const OPTIONAL_SCENERY_CLEARANCE = 0.08;
+const ARCH_CEILING_CLEARANCE = 0.28;
+const ARCH_BEAM_HEIGHT = 0.46;
 
 interface PlacementBounds {
   id: string;
@@ -108,12 +113,77 @@ function propBounds(prop: PropSpec): PlacementBounds {
   };
 }
 
+function boundsOverlap(left: PlacementBounds, right: PlacementBounds, clearance = 0): boolean {
+  return left.minX < right.maxX + clearance
+    && left.maxX > right.minX - clearance
+    && left.minZ < right.maxZ + clearance
+    && left.maxZ > right.minZ - clearance;
+}
+
 function circleOverlapsBounds(x: number, z: number, radius: number, bounds: PlacementBounds): boolean {
   return x + radius > bounds.minX && x - radius < bounds.maxX && z + radius > bounds.minZ && z - radius < bounds.maxZ;
 }
 
 function isClear(x: number, z: number, radius: number, occupied: readonly PlacementBounds[]): boolean {
   return occupied.every((bounds) => !circleOverlapsBounds(x, z, radius, bounds));
+}
+
+export function isEssentialSceneryProp(archetype: RoomArchetype, prop: PropSpec): boolean {
+  if (archetype === 'manila-room' || archetype === 'transition-foyer') return true;
+  return prop.kind === 'divider'
+    || prop.kind === 'pipe'
+    || prop.kind === 'column'
+    || prop.kind === 'wall-panel'
+    || prop.kind === 'ceiling-gap'
+    || prop.kind === 'sign';
+}
+
+function applyArchClearance(archetype: RoomArchetype, props: readonly PropSpec[]): PropSpec[] {
+  if (archetype !== 'arch-gallery' && archetype !== 'arch-crossing') return [...props];
+  const beamBottom = WALL_HEIGHT - ARCH_CEILING_CLEARANCE - ARCH_BEAM_HEIGHT;
+  return props.map((prop) => {
+    if (prop.kind === 'column') {
+      return {
+        ...prop,
+        position: { ...prop.position, y: beamBottom / 2 },
+        scale: { ...prop.scale, y: beamBottom }
+      };
+    }
+    if (prop.kind === 'wall-panel') {
+      return {
+        ...prop,
+        position: { ...prop.position, y: beamBottom + ARCH_BEAM_HEIGHT / 2 },
+        scale: { ...prop.scale, y: ARCH_BEAM_HEIGHT }
+      };
+    }
+    return prop;
+  });
+}
+
+function filterOptionalScenery(seed: string, x: number, z: number, archetype: RoomArchetype, walls: readonly WallSpec[], props: readonly PropSpec[]): PropSpec[] {
+  const occupied: PlacementBounds[] = [
+    ...walls.map(wallBounds),
+    ...props.filter((prop) => prop.solid && isEssentialSceneryProp(archetype, prop)).map(propBounds)
+  ];
+  const retained: PropSpec[] = [];
+  let optionalRetained = 0;
+
+  for (const prop of props) {
+    if (isEssentialSceneryProp(archetype, prop)) {
+      retained.push(prop);
+      continue;
+    }
+    if (optionalRetained >= OPTIONAL_SCENERY_MAX_PER_CELL) continue;
+    if (unitFloat(`${seed}:scenery:${x}:${z}:${prop.id}`) >= OPTIONAL_SCENERY_KEEP_CHANCE) continue;
+    if (prop.solid) {
+      const candidate = propBounds(prop);
+      if (occupied.some((bounds) => boundsOverlap(candidate, bounds, OPTIONAL_SCENERY_CLEARANCE))) continue;
+      occupied.push(candidate);
+    }
+    retained.push(prop);
+    optionalRetained += 1;
+  }
+  return retained;
 }
 
 function reserveOriginArrival(x: number, z: number, walls: readonly WallSpec[], props: readonly PropSpec[]): { walls: WallSpec[]; props: PropSpec[] } {
@@ -202,7 +272,9 @@ export function generateCell(options: GenerateCellOptions): CellDescriptor {
   for (const direction of Object.keys(DIRECTIONS) as Direction[]) walls.push(...boundaryWallParts(seed, x, z, direction, openings[direction], materialVariant));
   const layout = layoutFor(seed, x, z, archetype, shiftEpoch, variant);
   walls.push(...layout.walls);
-  const arrivalSafe = reserveOriginArrival(x, z, walls, layout.props);
+  const archClearedProps = applyArchClearance(archetype, layout.props);
+  const filteredProps = filterOptionalScenery(seed, x, z, archetype, walls, archClearedProps);
+  const arrivalSafe = reserveOriginArrival(x, z, walls, filteredProps);
   const noteSpecs = [...layout.notes, ...maybeNotes(seed, x, z, archetype)];
 
   return {
@@ -215,7 +287,7 @@ export function generateCell(options: GenerateCellOptions): CellDescriptor {
     roomLabel: layout.label,
     walls: arrivalSafe.walls,
     props: arrivalSafe.props,
-    floorPatches: layout.patches,
+    floorPatches: layout.patches.filter((patch) => patch.kind === 'hole'),
     notes: noteSpecs,
     lootNodes: zoneId === 'manila' ? [] : lootForCell(seed, x, z, tuning.lootChance, archetype, arrivalSafe.walls, arrivalSafe.props),
     exits,
@@ -226,8 +298,25 @@ export function generateCell(options: GenerateCellOptions): CellDescriptor {
   };
 }
 
-export function validateCellPlacement(cell: CellDescriptor): string[] {
+export function validateSceneryPlacement(cell: CellDescriptor): string[] {
   const errors: string[] = [];
+  const solidProps = cell.props.filter((prop) => prop.solid);
+  for (const prop of solidProps) {
+    if (isEssentialSceneryProp(cell.roomArchetype, prop)) continue;
+    const bounds = propBounds(prop);
+    for (const wall of cell.walls) {
+      if (boundsOverlap(bounds, wallBounds(wall))) errors.push(`Scenery ${prop.id} overlaps wall ${wall.id}`);
+    }
+    for (const other of solidProps) {
+      if (other.id === prop.id) continue;
+      if (boundsOverlap(bounds, propBounds(other))) errors.push(`Scenery ${prop.id} overlaps prop ${other.id}`);
+    }
+  }
+  return errors;
+}
+
+export function validateCellPlacement(cell: CellDescriptor): string[] {
+  const errors: string[] = [...validateSceneryPlacement(cell)];
   const occupied = solidBounds(cell.walls, cell.props);
   if (cell.address.cellX === 0 && cell.address.cellZ === 0) {
     for (const bounds of occupied) {

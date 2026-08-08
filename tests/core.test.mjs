@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PlayerIntent } from '../.test-dist/src/input/PlayerIntent.js';
-import { generateCell, validateCellConnectivity, validateCellPlacement } from '../.test-dist/src/world/generator.js';
-import { DEFAULT_TUNING, PROP_KINDS } from '../.test-dist/src/world/types.js';
+import { generateCell, isEssentialSceneryProp, validateCellConnectivity, validateCellPlacement } from '../.test-dist/src/world/generator.js';
+import { DEFAULT_TUNING, PROP_KINDS, WALL_HEIGHT } from '../.test-dist/src/world/types.js';
 import { chooseZone, districtId, isZoneUnlocked } from '../.test-dist/src/world/zones.js';
 import { exitsForCell, validateExitRegistry } from '../.test-dist/src/world/exits.js';
 import { resolveCircleAgainstAabbs } from '../.test-dist/src/physics/collision.js';
@@ -156,6 +156,53 @@ test('arrival and spawned-loot placement remain valid across deterministic sweep
     }
   }
   assert.deepEqual(failures.slice(0, 20), []);
+});
+
+test('ordinary scenery is sparse, deterministic and non-overlapping', () => {
+  let ordinaryCells = 0;
+  let emptyOrdinaryCells = 0;
+  let optionalProps = 0;
+  const failures = [];
+  for (let x = -25; x <= 25; x += 1) {
+    for (let z = -25; z <= 25; z += 1) {
+      const cell = generate({ seed: 'scenery-sweep', x, z, worldDay: 40, exposure: 10 });
+      if (cell.roomArchetype === 'manila-room' || cell.roomArchetype === 'transition-foyer') continue;
+      const optional = cell.props.filter((prop) => !isEssentialSceneryProp(cell.roomArchetype, prop));
+      ordinaryCells += 1;
+      optionalProps += optional.length;
+      if (optional.length === 0) emptyOrdinaryCells += 1;
+      assert.ok(optional.length <= 1, `${cell.id} retained ${optional.length} optional scenery props`);
+      for (const error of validateCellPlacement(cell)) if (error.startsWith('Scenery ')) failures.push(`${cell.id}: ${error}`);
+    }
+  }
+  assert.deepEqual(failures.slice(0, 20), []);
+  assert.ok(emptyOrdinaryCells / ordinaryCells >= 0.72, `only ${emptyOrdinaryCells}/${ordinaryCells} ordinary cells were scenery-empty`);
+  assert.ok(optionalProps / ordinaryCells <= 0.28, `optional scenery remained too common: ${optionalProps}/${ordinaryCells}`);
+  const browserSeed = generateDayZeroOrigin('threshold-001');
+  assert.equal(browserSeed.props.filter((prop) => !isEssentialSceneryProp(browserSeed.roomArchetype, prop)).length, 0);
+});
+
+test('arch geometry keeps stable IDs and visible ceiling clearance', () => {
+  const options = {
+    seed: 'arch-clearance', x: 4, z: 4, worldDay: 40, exposure: 10, shiftEpoch: 0,
+    tuning: { ...DEFAULT_TUNING, zoneOverride: 'arch', gateBypass: true }
+  };
+  const cell = generateCell(options);
+  const repeated = generateCell(options);
+  assert.equal(cell.address.zoneId, 'arch');
+  assert.deepEqual(cell.props.map((prop) => prop.id), repeated.props.map((prop) => prop.id));
+  const archParts = cell.props.filter((prop) => prop.kind === 'column' || prop.kind === 'wall-panel');
+  assert.ok(archParts.length >= 6);
+  assert.ok(archParts.every((prop) => prop.position.y + prop.scale.y / 2 <= WALL_HEIGHT - 0.279));
+});
+
+test('ordinary floor variation no longer becomes carpet overlays while Hole Sections stay explicit', () => {
+  const ordinary = generateDayZeroOrigin('threshold-001');
+  assert.deepEqual(ordinary.floorPatches, []);
+  const holes = generate({ tuning: { ...DEFAULT_TUNING, zoneOverride: 'holes', gateBypass: true } });
+  assert.equal(holes.address.zoneId, 'holes');
+  assert.ok(holes.floorPatches.length >= 4);
+  assert.ok(holes.floorPatches.every((patch) => patch.kind === 'hole'));
 });
 
 test('ordinary notes rest on the carpet while the Manila ledger remains on its table', () => {
