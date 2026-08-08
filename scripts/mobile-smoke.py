@@ -232,13 +232,12 @@ def main() -> None:
 
         touch_tap(driver, '[data-action="touch-lab"]', 30)
         wait_for(driver, lambda current: displayed(current, '[data-ui="lab"]'), timeout=5, message="World Lab opened from touch")
-        assert displayed(driver, '[data-action="close-lab"]')
-        assert not displayed(driver, '[data-ui="touch-controls"]')
-        touch_tap(driver, '[data-action="close-lab"]', 31)
-        wait_for(driver, lambda current: not displayed(current, '[data-ui="lab"]'), timeout=5, message="World Lab closed from touch")
+        wait_for(driver, lambda current: displayed(current, '[data-action="touch-lab"]'), timeout=5, message="persistent Lab toggle above open panel")
+        touch_tap(driver, '[data-action="touch-lab"]', 31)
+        wait_for(driver, lambda current: not displayed(current, '[data-ui="lab"]'), timeout=5, message="World Lab closed from persistent touch toggle")
         wait_for(driver, lambda current: displayed(current, '[data-ui="touch-controls"]'), timeout=5, message="touch controls restored after Lab")
         assert driver.execute_script("return document.pointerLockElement === null") is True
-        checks.append("World Lab opens and closes entirely from touch and restores mobile input without pointer lock")
+        checks.append("persistent mobile Lab toggle opens and closes World Lab above the scroll panel without pointer lock")
 
         seeded = wait_for(driver, lambda current: read_save(current), timeout=10, message="save for marker setup")
         marker = {
