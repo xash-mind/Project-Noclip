@@ -18,6 +18,7 @@ export class PlayerIntent {
   private readonly keys = new Set<string>();
   private touchForward = 0;
   private touchStrafe = 0;
+  private touchSprinting = false;
 
   keyDown(code: string): void { this.keys.add(code); }
   keyUp(code: string): void { this.keys.delete(code); }
@@ -31,18 +32,21 @@ export class PlayerIntent {
     this.touchStrafe = clampedStrafe * scale;
   }
 
+  setTouchSprint(active: boolean): void { this.touchSprinting = active; }
+
   clearKeyboard(): void { this.keys.clear(); }
-  clearTouch(): void { this.touchForward = 0; this.touchStrafe = 0; }
+  clearTouch(): void { this.touchForward = 0; this.touchStrafe = 0; this.touchSprinting = false; }
   clearAll(): void { this.clearKeyboard(); this.clearTouch(); }
 
   movement(): MovementIntent {
     const keyboardForward = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0);
     const keyboardStrafe = (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0);
+    const crouching = this.keys.has('ControlLeft') || this.keys.has('ControlRight') || this.keys.has('KeyC');
     return {
       forward: clampUnit(keyboardForward + this.touchForward),
       strafe: clampUnit(keyboardStrafe + this.touchStrafe),
-      crouching: this.keys.has('ControlLeft') || this.keys.has('ControlRight') || this.keys.has('KeyC'),
-      sprinting: (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')) && !(this.keys.has('ControlLeft') || this.keys.has('ControlRight') || this.keys.has('KeyC'))
+      crouching,
+      sprinting: (this.touchSprinting || this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')) && !crouching
     };
   }
 }
