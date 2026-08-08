@@ -23,7 +23,7 @@ jobs:
       - run: npm run build
       - name: Install browser-smoke driver
         run: python -m pip install --disable-pip-version-check selenium==4.46.0
-      - name: Run mobile and desktop Chromium journeys
+      - name: Run mobile, desktop and world-cohesion Chromium journeys
         shell: bash
         run: |
           set -euo pipefail
@@ -43,13 +43,15 @@ jobs:
           NOCLIP_VERSION_ARTIFACTS="artifacts/browser-smoke" python scripts/version-smoke.py
           NOCLIP_MOBILE_ARTIFACTS="artifacts/mobile-smoke" python scripts/mobile-smoke.py
           python scripts/browser-smoke.py
+          python scripts/world-cohesion-smoke.py
       - name: Upload browser-smoke evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-mobile-smoke-${{ github.sha }}
+          name: browser-mobile-cohesion-smoke-${{ github.sha }}
           path: |
             artifacts/browser-smoke
             artifacts/mobile-smoke
+            artifacts/world-cohesion-smoke
           if-no-files-found: warn
           retention-days: 14

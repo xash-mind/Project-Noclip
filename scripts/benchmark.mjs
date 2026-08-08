@@ -5,7 +5,7 @@ rmSync('.test-dist', { recursive: true, force: true });
 const compile = spawnSync('tsc', ['-p', 'tsconfig.test.json'], { stdio: 'inherit' });
 if (compile.status !== 0) process.exit(compile.status ?? 1);
 
-const { generateCell, validateCellConnectivity, validateCellPlacement } = await import('../.test-dist/src/world/generator.js');
+const { generateCell, isEssentialSceneryProp, validateCellConnectivity, validateCellPlacement } = await import('../.test-dist/src/world/generator.js');
 const { DEFAULT_TUNING } = await import('../.test-dist/src/world/types.js');
 const start = performance.now();
 let walls = 0;
@@ -13,6 +13,9 @@ let props = 0;
 let notes = 0;
 let loot = 0;
 let placementErrors = 0;
+let ordinaryCells = 0;
+let emptyOrdinaryCells = 0;
+let optionalSceneryProps = 0;
 const placementSamples = [];
 const archetypes = new Set();
 const cells = 10000;
@@ -25,6 +28,12 @@ for (let x = -50; x < 50; x += 1) {
     notes += cell.notes.length;
     loot += cell.lootNodes.filter((node) => node.spawnedDefinitionId).length;
     archetypes.add(cell.roomArchetype);
+    if (cell.roomArchetype !== 'manila-room' && cell.roomArchetype !== 'transition-foyer') {
+      const optional = cell.props.filter((prop) => !isEssentialSceneryProp(cell.roomArchetype, prop));
+      ordinaryCells += 1;
+      optionalSceneryProps += optional.length;
+      if (optional.length === 0) emptyOrdinaryCells += 1;
+    }
     const cellPlacementErrors = validateCellPlacement(cell);
     placementErrors += cellPlacementErrors.length;
     if (placementSamples.length < 10) {
@@ -44,6 +53,10 @@ console.log(JSON.stringify({
   props,
   notes,
   loot,
+  ordinaryCells,
+  emptyOrdinaryCells,
+  emptyOrdinaryRate: Number((emptyOrdinaryCells / Math.max(1, ordinaryCells)).toFixed(4)),
+  optionalSceneryProps,
   archetypes: [...archetypes].sort(),
   connectorErrors: connectorErrors.length,
   placementErrors,
