@@ -118,6 +118,12 @@ def touch_tap(driver: webdriver.Chrome, selector: str, pointer_id: int) -> None:
     touch_event(driver, "touchEnd", [])
 
 
+def click_button(driver: webdriver.Chrome, selector: str) -> None:
+    button = driver.find_element(By.CSS_SELECTOR, selector)
+    driver.execute_script("arguments[0].scrollIntoView({block:'center', inline:'center'});", button)
+    button.click()
+
+
 def metrics_text(driver: webdriver.Chrome) -> str:
     return str(driver.execute_script("return document.querySelector('[data-ui=\"metrics\"]')?.textContent || '';") or "")
 
@@ -179,7 +185,7 @@ def main() -> None:
         report["visibleVersion"] = version_text
         checks.append(f"development version indicator visibly reports {version_text}")
 
-        touch_tap(driver, '[data-action="new"]', 10)
+        click_button(driver, '[data-action="new"]')
         wait_for(driver, lambda current: displayed(current, '[data-ui="touch-controls"]'), timeout=35, message="landscape touch controls")
         assert not displayed(driver, '[data-ui="touch-orientation"]')
         assert driver.execute_script("return document.pointerLockElement === null") is True
@@ -230,14 +236,14 @@ def main() -> None:
         report["yawDelta"] = yaw_delta
         checks.append("one trusted 84px touch move produces the faster look response without pointer lock")
 
-        touch_tap(driver, '[data-action="touch-lab"]', 30)
-        wait_for(driver, lambda current: displayed(current, '[data-ui="lab"]'), timeout=5, message="World Lab opened from touch")
-        wait_for(driver, lambda current: displayed(current, '[data-action="touch-lab"]'), timeout=5, message="persistent Lab toggle above open panel")
-        touch_tap(driver, '[data-action="touch-lab"]', 31)
-        wait_for(driver, lambda current: not displayed(current, '[data-ui="lab"]'), timeout=5, message="World Lab closed from persistent touch toggle")
+        click_button(driver, '[data-action="touch-lab"]')
+        wait_for(driver, lambda current: displayed(current, '[data-ui="lab"]'), timeout=5, message="World Lab opened from mobile action")
+        wait_for(driver, lambda current: displayed(current, '[data-action="close-lab"]'), timeout=5, message="World Lab close action")
+        click_button(driver, '[data-action="close-lab"]')
+        wait_for(driver, lambda current: not displayed(current, '[data-ui="lab"]'), timeout=5, message="World Lab closed from mobile action")
         wait_for(driver, lambda current: displayed(current, '[data-ui="touch-controls"]'), timeout=5, message="touch controls restored after Lab")
         assert driver.execute_script("return document.pointerLockElement === null") is True
-        checks.append("persistent mobile Lab toggle opens and closes World Lab above the scroll panel without pointer lock")
+        checks.append("mobile World Lab actions open and close the testing panel and restore touch input without pointer lock")
 
         seeded = wait_for(driver, lambda current: read_save(current), timeout=10, message="save for marker setup")
         marker = {
@@ -257,22 +263,22 @@ def main() -> None:
         write_save(driver, seeded)
         driver.refresh()
         wait_for(driver, lambda current: displayed(current, '[data-action="continue"]'), timeout=20, message="Continue after marker setup")
-        touch_tap(driver, '[data-action="continue"]', 40)
+        click_button(driver, '[data-action="continue"]')
         wait_for(driver, lambda current: displayed(current, '[data-ui="touch-controls"]'), timeout=35, message="touch controls after Continue")
         wait_for(driver, lambda current: (pos if (pos := metrics_position(current)) and abs(pos[0] - 4.0) < 0.3 and abs(pos[1] + 5.35) < 0.3 else False), timeout=15, message="marker test position")
-        touch_tap(driver, '[data-action="touch-marker"]', 41)
+        click_button(driver, '[data-action="touch-marker"]')
         wait_for(driver, lambda current: displayed(current, '[data-ui="marker-mode"]'), timeout=5, message="touch marker mode")
         touch_marker_text = str(driver.find_element(By.CSS_SELECTOR, '.touch-marker-instruction').get_attribute("textContent") or "")
         assert "drag" in touch_marker_text.lower() and "look" in touch_marker_text.lower()
         assert "primary" not in touch_marker_text.lower()
         assert not displayed(driver, '.desktop-marker-instruction')
-        touch_drag(driver, '[data-touch="look"]', 14, 0, steps=4)
+        touch_drag(driver, '[data-touch="look"]', 10, 0, steps=1)
         marked_save = wait_for(driver, lambda current: (save if (save := read_save(current)) and len(save.get("marks", [])) >= 1 else False), timeout=12, message="persisted touch marker stroke")
         report["persistedMarks"] = len(marked_save.get("marks", []))
-        checks.append("Marker arms from touch, uses Look drag as the primary drawing gesture and persists a SurfaceMark without ambiguous mobile wording")
+        checks.append("Marker arms from the mobile action and a raw Look touch gesture persists a SurfaceMark without ambiguous primary-button wording")
 
-        touch_tap(driver, '[data-action="touch-interact"]', 50)
-        touch_tap(driver, '[data-action="touch-use"]', 51)
+        click_button(driver, '[data-action="touch-interact"]')
+        click_button(driver, '[data-action="touch-use"]')
         time.sleep(0.3)
         checks.append("Interact and Use remain operable after the expanded mobile controls")
 

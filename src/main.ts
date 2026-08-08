@@ -3,7 +3,6 @@ import './styles.css';
 import { ProjectNoclipGame } from './app/ProjectNoclipGame.js';
 import { installStaticWorldBatching } from './renderer/StaticWorldBatching.js';
 import { mountDevelopmentVersionIndicator } from './ui/DevelopmentVersionIndicator.js';
-import { installMobileLabToggle } from './ui/touchActivation.js';
 
 type FogParamsLike = {
   type: string;
@@ -66,7 +65,6 @@ installStaticWorldBatching();
 mountDevelopmentVersionIndicator();
 
 const game = new ProjectNoclipGame();
-installMobileLabToggle('[data-action="touch-lab"]');
 void game.initialize().then(() => {
   const params = new URLSearchParams(window.location.search);
   if (params.has('autostart')) (document.querySelector('[data-action="new"]') as HTMLButtonElement | null)?.click();
