@@ -195,7 +195,15 @@ export class GameUI {
     this.required('[data-action="touch-use"]').addEventListener('click', () => this.handlers.onTouchUse());
     this.required('[data-action="touch-marker"]').addEventListener('click', () => this.handlers.onTouchMarker());
     this.required('[data-action="touch-lab"]').addEventListener('click', () => this.handlers.onToggleLab());
-    this.required('[data-action="close-lab"]').addEventListener('click', () => this.handlers.onToggleLab());
+    const closeLab = this.required<HTMLButtonElement>('[data-action="close-lab"]');
+    closeLab.addEventListener('pointerup', (event) => {
+      event.preventDefault();
+      this.handlers.onToggleLab();
+    });
+    closeLab.addEventListener('click', (event) => {
+      if (event.detail !== 0) { event.preventDefault(); return; }
+      this.handlers.onToggleLab();
+    });
     this.required('[data-action="apply-seed"]').addEventListener('click', () => this.handlers.onSeedChange(this.required<HTMLInputElement>('[data-lab="seed"]').value.trim() || 'threshold-001'));
     this.required('[data-action="simulate"]').addEventListener('click', () => this.handlers.onSimulateStarter());
     this.required('[data-action="export"]').addEventListener('click', () => this.handlers.onExportTuning());
