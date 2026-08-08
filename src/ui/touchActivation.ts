@@ -3,8 +3,8 @@ const SYNTHETIC_CLICK_GUARD_MS = 700;
 /**
  * Keeps the mobile World Lab action reachable before and after the Lab opens.
  * The existing GameUI click handler remains the only source of Lab state; this
- * adapter only provides deterministic touch activation and moves that same
- * button above the Lab panel while the panel is open.
+ * adapter bridges the proven touch-pointerdown path into exactly one click and
+ * moves that same button above the Lab panel while the panel is open.
  */
 export function installMobileLabToggle(selector: string): void {
   const root = document.querySelector<HTMLElement>('#ui-root');
@@ -39,7 +39,8 @@ export function installMobileLabToggle(selector: string): void {
     event.stopImmediatePropagation();
   }, true);
 
-  button.addEventListener('touchend', (event) => {
+  button.addEventListener('pointerdown', (event) => {
+    if (event.pointerType !== 'touch') return;
     event.preventDefault();
     suppressTrustedClickUntil = performance.now() + SYNTHETIC_CLICK_GUARD_MS;
     dispatchingBridgedClick = true;
@@ -48,7 +49,7 @@ export function installMobileLabToggle(selector: string): void {
     } finally {
       dispatchingBridgedClick = false;
     }
-  }, { passive: false });
+  });
 
   new MutationObserver(syncPlacement).observe(root, { attributes: true, attributeFilter: ['class'] });
   syncPlacement();
