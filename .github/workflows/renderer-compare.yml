@@ -45,8 +45,8 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/renderer-compare/before artifacts/renderer-compare/after
           NOCLIP_BASE_URL="https://project-noclip.vercel.app" \
-          NOCLIP_DEPLOYMENT_COMMIT="b100a13b88b4c6478bcb10d033a729212fca2d26" \
-          NOCLIP_DEPLOYMENT_ID="canonical-production-v0.2.0-dev.3" \
+          NOCLIP_DEPLOYMENT_COMMIT="7b09d0e01db53c4a704fcada48b6a4afd91140d0" \
+          NOCLIP_DEPLOYMENT_ID="canonical-production-v0.2.0-dev.4" \
           NOCLIP_PROFILE_ARTIFACTS="artifacts/renderer-compare/before" \
           python scripts/profile-production.py
       - name: Build and serve candidate
@@ -73,7 +73,7 @@ jobs:
           NOCLIP_DEPLOYMENT_ID="local-candidate" \
           NOCLIP_PROFILE_ARTIFACTS="artifacts/renderer-compare/after" \
           python scripts/profile-production.py
-      - name: Compare renderer invariants and bounded cohesion changes
+      - name: Compare renderer invariants and draw-call regression
         shell: bash
         run: |
           set -euo pipefail
@@ -89,18 +89,10 @@ jobs:
           for key in scenarios:
               before_metrics = before['scenarios'][key]['worldMetricsAfter']
               after_metrics = after['scenarios'][key]['worldMetricsAfter']
-              for invariant in ('loadedCells', 'interactions'):
+              for invariant in ('loadedCells', 'colliders', 'interactions'):
                   assert after_metrics[invariant] == before_metrics[invariant], (
                       f'{key} {invariant} changed: {before_metrics[invariant]} -> {after_metrics[invariant]}'
                   )
-              before_colliders = int(before_metrics['colliders'])
-              after_colliders = int(after_metrics['colliders'])
-              assert after_colliders <= before_colliders, (
-                  f'{key} collider count unexpectedly increased: {before_colliders} -> {after_colliders}'
-              )
-              assert after_colliders >= int(before_colliders * 0.85), (
-                  f'{key} collider count dropped beyond the bounded scenery-removal budget: {before_colliders} -> {after_colliders}'
-              )
               before_draw = int(before_metrics['drawCalls'])
               after_draw = int(after_metrics['drawCalls'])
               delta_pct = (after_draw - before_draw) * 100 / max(1, before_draw)
@@ -109,8 +101,7 @@ jobs:
                   'candidateDrawCalls': after_draw,
                   'deltaPct': round(delta_pct, 2),
                   'loadedCells': after_metrics['loadedCells'],
-                  'productionColliders': before_colliders,
-                  'candidateColliders': after_colliders,
+                  'colliders': after_metrics['colliders'],
                   'interactions': after_metrics['interactions'],
               }
               allowed = max(before_draw + 2, int(before_draw * 1.05 + 0.999))
