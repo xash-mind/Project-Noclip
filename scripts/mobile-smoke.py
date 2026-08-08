@@ -101,11 +101,10 @@ def touch_hold_sprint_move(driver: webdriver.Chrome, hold_seconds: float = 0.8) 
     wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="touch-sprint"]').get_attribute("aria-pressed") == "false", timeout=3, message="Sprint released state")
 
 
-def touch_drag(driver: webdriver.Chrome, selector: str, dx: float, dy: float) -> None:
+def touch_drag(driver: webdriver.Chrome, selector: str, dx: float, dy: float, steps: int = 1) -> None:
     point = center_point(driver, selector, 2)
     x = float(point["x"]); y = float(point["y"])
     touch_event(driver, "touchStart", [point])
-    steps = 4
     for index in range(1, steps + 1):
         touch_event(driver, "touchMove", [{**point, "x": x + dx * index / steps, "y": y + dy * index / steps}])
         time.sleep(0.04)
@@ -225,11 +224,11 @@ def main() -> None:
         after_save = wait_for(driver, lambda current: read_save(current), timeout=10, message="schema-v2 save after touch look")
         after_yaw = float(after_save.get("position", {}).get("yaw", 0))
         yaw_delta = abs(after_yaw - before_yaw)
-        assert yaw_delta >= 16.0, (before_yaw, after_yaw, yaw_delta)
+        assert yaw_delta >= 17.0, (before_yaw, after_yaw, yaw_delta)
         report["yawBefore"] = before_yaw
         report["yawAfter"] = after_yaw
         report["yawDelta"] = yaw_delta
-        checks.append("right-side touch drag is materially faster than the v0.2.0-dev.2 baseline without pointer lock")
+        checks.append("one trusted 84px touch move produces the faster look response without pointer lock")
 
         touch_tap(driver, '[data-action="touch-lab"]', 30)
         wait_for(driver, lambda current: displayed(current, '[data-ui="lab"]'), timeout=5, message="World Lab opened from touch")
@@ -268,7 +267,7 @@ def main() -> None:
         assert "drag" in touch_marker_text.lower() and "look" in touch_marker_text.lower()
         assert "primary" not in touch_marker_text.lower()
         assert not displayed(driver, '.desktop-marker-instruction')
-        touch_drag(driver, '[data-touch="look"]', 14, 0)
+        touch_drag(driver, '[data-touch="look"]', 14, 0, steps=4)
         marked_save = wait_for(driver, lambda current: (save if (save := read_save(current)) and len(save.get("marks", [])) >= 1 else False), timeout=12, message="persisted touch marker stroke")
         report["persistedMarks"] = len(marked_save.get("marks", []))
         checks.append("Marker arms from touch, uses Look drag as the primary drawing gesture and persists a SurfaceMark without ambiguous mobile wording")
