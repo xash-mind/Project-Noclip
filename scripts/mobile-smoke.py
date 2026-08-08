@@ -67,6 +67,10 @@ def displayed(driver: webdriver.Chrome, selector: str) -> bool:
     return bool(driver.execute_script("const e=document.querySelector(arguments[0]); if(!e) return false; const s=getComputedStyle(e); const r=e.getBoundingClientRect(); return s.display!=='none' && s.visibility!=='hidden' && r.width>0 && r.height>0;", selector))
 
 
+def has_class(driver: webdriver.Chrome, selector: str, class_name: str) -> bool:
+    return bool(driver.execute_script("const e=document.querySelector(arguments[0]); return Boolean(e?.classList.contains(arguments[1]));", selector, class_name))
+
+
 def hit_testable(driver: webdriver.Chrome, selector: str) -> bool:
     return bool(driver.execute_script("""
         const element = document.querySelector(arguments[0]);
@@ -253,10 +257,9 @@ def main() -> None:
         checks.append("one trusted 84px touch move produces the faster look response without pointer lock")
 
         click_button(driver, '[data-action="touch-lab"]')
-        wait_for(driver, lambda current: displayed(current, '[data-ui="lab"]'), timeout=5, message="World Lab opened from mobile action")
-        wait_for(driver, lambda current: displayed(current, '[data-action="close-lab"]'), timeout=5, message="World Lab close action")
+        wait_for(driver, lambda current: has_class(current, '[data-ui="lab"]', 'visible'), timeout=5, message="World Lab open state from mobile action")
         click_button(driver, '[data-action="close-lab"]')
-        wait_for(driver, lambda current: not displayed(current, '[data-ui="lab"]'), timeout=5, message="World Lab closed from mobile action")
+        wait_for(driver, lambda current: not has_class(current, '[data-ui="lab"]', 'visible'), timeout=5, message="World Lab closed state from mobile action")
         wait_for(driver, lambda current: displayed(current, '[data-ui="touch-controls"]'), timeout=5, message="touch controls restored after Lab")
         assert driver.execute_script("return document.pointerLockElement === null") is True
         checks.append("mobile World Lab actions open and close the testing panel and restore touch input without pointer lock")
