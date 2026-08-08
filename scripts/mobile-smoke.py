@@ -67,6 +67,21 @@ def displayed(driver: webdriver.Chrome, selector: str) -> bool:
     return bool(driver.execute_script("const e=document.querySelector(arguments[0]); if(!e) return false; const s=getComputedStyle(e); const r=e.getBoundingClientRect(); return s.display!=='none' && s.visibility!=='hidden' && r.width>0 && r.height>0;", selector))
 
 
+def hit_testable(driver: webdriver.Chrome, selector: str) -> bool:
+    return bool(driver.execute_script("""
+        const element = document.querySelector(arguments[0]);
+        if (!element) return false;
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        if (style.display === 'none' || style.visibility === 'hidden' || rect.width <= 0 || rect.height <= 0) return false;
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        if (x < 0 || x >= innerWidth || y < 0 || y >= innerHeight) return false;
+        const hit = document.elementFromPoint(x, y);
+        return hit === element || element.contains(hit);
+    """, selector))
+
+
 def rects_overlap(a: dict[str, float], b: dict[str, float], padding: float = 0) -> bool:
     return not (a["right"] + padding <= b["left"] or b["right"] + padding <= a["left"] or a["bottom"] + padding <= b["top"] or b["bottom"] + padding <= a["top"])
 
@@ -121,7 +136,8 @@ def touch_tap(driver: webdriver.Chrome, selector: str, pointer_id: int) -> None:
 def click_button(driver: webdriver.Chrome, selector: str) -> None:
     button = driver.find_element(By.CSS_SELECTOR, selector)
     driver.execute_script("arguments[0].scrollIntoView({block:'center', inline:'center'});", button)
-    button.click()
+    wait_for(driver, lambda current: hit_testable(current, selector), timeout=3, message=f"{selector} hit target")
+    driver.find_element(By.CSS_SELECTOR, selector).click()
 
 
 def metrics_text(driver: webdriver.Chrome) -> str:
