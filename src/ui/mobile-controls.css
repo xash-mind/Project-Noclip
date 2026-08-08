@@ -1,7 +1,8 @@
-.touch-help,.touch-controls,.touch-orientation,.touch-pause-label{display:none}
+.touch-help,.touch-controls,.touch-orientation,.touch-pause-label,.touch-marker-instruction{display:none}
+.lab-close{float:right;min-height:36px}
 .touch-capable{touch-action:none}
-.touch-capable .desktop-pause-label{display:none}
-.touch-capable .touch-pause-label{display:inline}
+.touch-capable .desktop-pause-label,.touch-capable .desktop-marker-instruction{display:none}
+.touch-capable .touch-pause-label,.touch-capable .touch-marker-instruction{display:inline}
 @media (orientation:landscape) and (max-height:620px){
   .touch-capable .desktop-help{display:none}
   .touch-capable .touch-help{display:block;color:var(--muted)}
@@ -9,6 +10,7 @@
   .touch-capable .title-card h1{font-size:clamp(3rem,11vh,5.4rem);margin:.35rem 0 .65rem}
   .touch-capable .menu-grid{margin-top:.8rem;gap:.5rem}
   .touch-capable .touch-controls{display:block;position:absolute;inset:0;pointer-events:none;z-index:8}
+  .touch-capable.lab-open .touch-controls{display:none}
   .touch-capable .watch{left:max(.45rem,env(safe-area-inset-left));top:max(.45rem,env(safe-area-inset-top));max-width:42vw;padding:.45rem .55rem;font-size:.56rem;line-height:1.35}
   .touch-capable .status-bars{right:max(.55rem,env(safe-area-inset-right));top:max(2.15rem,calc(env(safe-area-inset-top) + 2.1rem));width:min(29vw,150px);gap:.35rem}
   .touch-capable .status-row{grid-template-columns:58px 1fr;font-size:.58rem}
@@ -19,15 +21,17 @@
   .touch-capable .toast-stack{bottom:54px;max-width:50vw;font-size:.62rem}
   .touch-capable .marker-mode{top:max(.35rem,env(safe-area-inset-top));max-width:44vw;text-align:center;font-size:.6rem}
   .touch-capable .help{display:none}
+  .touch-capable .lab-close{min-width:78px;min-height:48px;position:sticky;top:0;z-index:2}
   .touch-move{position:absolute;left:max(.8rem,env(safe-area-inset-left));bottom:max(.8rem,env(safe-area-inset-bottom));width:124px;height:124px;border:1px solid rgba(233,224,169,.28);border-radius:50%;background:rgba(10,10,6,.24);box-shadow:inset 0 0 28px rgba(0,0,0,.34);pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;z-index:11}
   .touch-stick{position:absolute;left:50%;top:50%;width:54px;height:54px;transform:translate(-50%,-50%);border:1px solid rgba(233,224,169,.46);border-radius:50%;background:rgba(138,125,59,.38);box-shadow:0 4px 20px rgba(0,0,0,.32);pointer-events:none}
   .touch-move span,.touch-look span{position:absolute;color:rgba(233,224,169,.48);font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;pointer-events:none;user-select:none}
   .touch-move span{left:50%;bottom:.35rem;transform:translateX(-50%)}
   .touch-look{position:absolute;right:0;top:15%;width:46%;height:62%;pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;z-index:9}
   .touch-look span{right:max(.7rem,env(safe-area-inset-right));top:.35rem}
-  .touch-actions{position:absolute;right:max(.8rem,env(safe-area-inset-right));bottom:max(.8rem,env(safe-area-inset-bottom));display:flex;gap:.45rem;pointer-events:auto;z-index:13}
-  .touch-action{min-width:68px;min-height:48px;padding:.5rem .65rem;border-color:rgba(233,224,169,.34);background:rgba(18,17,11,.78);touch-action:manipulation;font-size:.68rem;font-weight:700;letter-spacing:.04em}
-  .touch-action:active{background:rgba(138,125,59,.8);color:#100f0b}
+  .touch-actions{position:absolute;right:max(.8rem,env(safe-area-inset-right));bottom:max(.8rem,env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(2,minmax(58px,1fr));gap:.35rem;pointer-events:auto;z-index:13}
+  .touch-action{min-width:58px;min-height:48px;padding:.45rem .5rem;border-color:rgba(233,224,169,.34);background:rgba(18,17,11,.78);touch-action:none;font-size:.64rem;font-weight:700;letter-spacing:.03em}
+  .touch-action:active,.touch-action.pressed{background:rgba(138,125,59,.8);color:#100f0b;border-color:rgba(233,224,169,.7)}
+  .touch-lab{grid-column:1/-1}
 }
 @media (orientation:portrait){
   .touch-capable .touch-orientation{display:grid;position:fixed;inset:0;place-items:center;padding:2rem;background:rgba(10,10,6,.94);z-index:45;pointer-events:auto;text-align:center}

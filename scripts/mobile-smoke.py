@@ -29,11 +29,7 @@ def wait_for(driver: webdriver.Chrome, predicate: Callable[[webdriver.Chrome], A
 
 def browser_log_errors(driver: webdriver.Chrome) -> list[dict[str, Any]]:
     ignored = ("favicon.ico", "AudioContext was not allowed to start")
-    return [
-        entry
-        for entry in driver.get_log("browser")
-        if entry.get("level") == "SEVERE" and not any(fragment in entry.get("message", "") for fragment in ignored)
-    ]
+    return [entry for entry in driver.get_log("browser") if entry.get("level") == "SEVERE" and not any(fragment in entry.get("message", "") for fragment in ignored)]
 
 
 def build_driver() -> webdriver.Chrome:
@@ -50,40 +46,25 @@ def build_driver() -> webdriver.Chrome:
     if chrome_binary:
         options.binary_location = chrome_binary
     driver = webdriver.Chrome(options=options)
-    driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
-        "width": 900,
-        "height": 450,
-        "deviceScaleFactor": 2,
-        "mobile": True,
-        "screenWidth": 900,
-        "screenHeight": 450,
-        "positionX": 0,
-        "positionY": 0,
-    })
+    driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {"width": 900, "height": 450, "deviceScaleFactor": 2, "mobile": True, "screenWidth": 900, "screenHeight": 450, "positionX": 0, "positionY": 0})
     driver.execute_cdp_cmd("Emulation.setTouchEmulationEnabled", {"enabled": True, "maxTouchPoints": 5})
     return driver
 
 
 def element_rect(driver: webdriver.Chrome, selector: str) -> dict[str, float]:
-    value = driver.execute_script(
-        """
+    value = driver.execute_script("""
         const element = document.querySelector(arguments[0]);
         if (!element) return null;
         const r = element.getBoundingClientRect();
         return {left:r.left, top:r.top, right:r.right, bottom:r.bottom, width:r.width, height:r.height};
-        """,
-        selector,
-    )
+    """, selector)
     if not isinstance(value, dict):
         raise AssertionError(f"Missing element {selector}")
     return {key: float(number) for key, number in value.items()}
 
 
 def displayed(driver: webdriver.Chrome, selector: str) -> bool:
-    return bool(driver.execute_script(
-        "const e=document.querySelector(arguments[0]); if(!e) return false; const s=getComputedStyle(e); const r=e.getBoundingClientRect(); return s.display!=='none' && s.visibility!=='hidden' && r.width>0 && r.height>0;",
-        selector,
-    ))
+    return bool(driver.execute_script("const e=document.querySelector(arguments[0]); if(!e) return false; const s=getComputedStyle(e); const r=e.getBoundingClientRect(); return s.display!=='none' && s.visibility!=='hidden' && r.width>0 && r.height>0;", selector))
 
 
 def rects_overlap(a: dict[str, float], b: dict[str, float], padding: float = 0) -> bool:
@@ -94,40 +75,46 @@ def touch_event(driver: webdriver.Chrome, event_type: str, points: list[dict[str
     driver.execute_cdp_cmd("Input.dispatchTouchEvent", {"type": event_type, "touchPoints": points})
 
 
-def touch_hold_move(driver: webdriver.Chrome, selector: str, dx: float, dy: float, hold_seconds: float) -> None:
+def center_point(driver: webdriver.Chrome, selector: str, pointer_id: int) -> dict[str, float | int]:
     rect = element_rect(driver, selector)
-    x = rect["left"] + rect["width"] / 2
-    y = rect["top"] + rect["height"] / 2
-    touch_event(driver, "touchStart", [{"x": x, "y": y, "id": 1, "radiusX": 6, "radiusY": 6, "force": 1}])
-    touch_event(driver, "touchMove", [{"x": x + dx, "y": y + dy, "id": 1, "radiusX": 6, "radiusY": 6, "force": 1}])
+    return {"x": rect["left"] + rect["width"] / 2, "y": rect["top"] + rect["height"] / 2, "id": pointer_id, "radiusX": 5, "radiusY": 5, "force": 1}
+
+
+def touch_hold_move(driver: webdriver.Chrome, selector: str, dx: float, dy: float, hold_seconds: float) -> None:
+    point = center_point(driver, selector, 1)
+    x = float(point["x"]); y = float(point["y"])
+    touch_event(driver, "touchStart", [point])
+    touch_event(driver, "touchMove", [{**point, "x": x + dx, "y": y + dy}])
     time.sleep(hold_seconds)
     touch_event(driver, "touchEnd", [])
 
 
+def touch_hold_sprint_move(driver: webdriver.Chrome, hold_seconds: float = 0.8) -> None:
+    sprint = center_point(driver, '[data-action="touch-sprint"]', 3)
+    move = center_point(driver, '[data-touch="move"]', 4)
+    moved = {**move, "y": float(move["y"]) - 43}
+    touch_event(driver, "touchStart", [sprint, move])
+    wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="touch-sprint"]').get_attribute("aria-pressed") == "true", timeout=3, message="Sprint held state")
+    touch_event(driver, "touchMove", [sprint, moved])
+    time.sleep(hold_seconds)
+    touch_event(driver, "touchEnd", [])
+    wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="touch-sprint"]').get_attribute("aria-pressed") == "false", timeout=3, message="Sprint released state")
+
+
 def touch_drag(driver: webdriver.Chrome, selector: str, dx: float, dy: float) -> None:
-    rect = element_rect(driver, selector)
-    x = rect["left"] + rect["width"] / 2
-    y = rect["top"] + rect["height"] / 2
-    touch_event(driver, "touchStart", [{"x": x, "y": y, "id": 2, "radiusX": 5, "radiusY": 5, "force": 1}])
+    point = center_point(driver, selector, 2)
+    x = float(point["x"]); y = float(point["y"])
+    touch_event(driver, "touchStart", [point])
     steps = 4
     for index in range(1, steps + 1):
-        touch_event(driver, "touchMove", [{
-            "x": x + dx * index / steps,
-            "y": y + dy * index / steps,
-            "id": 2,
-            "radiusX": 5,
-            "radiusY": 5,
-            "force": 1,
-        }])
+        touch_event(driver, "touchMove", [{**point, "x": x + dx * index / steps, "y": y + dy * index / steps}])
         time.sleep(0.04)
     touch_event(driver, "touchEnd", [])
 
 
 def touch_tap(driver: webdriver.Chrome, selector: str, pointer_id: int) -> None:
-    rect = element_rect(driver, selector)
-    x = rect["left"] + rect["width"] / 2
-    y = rect["top"] + rect["height"] / 2
-    touch_event(driver, "touchStart", [{"x": x, "y": y, "id": pointer_id, "radiusX": 5, "radiusY": 5, "force": 1}])
+    point = center_point(driver, selector, pointer_id)
+    touch_event(driver, "touchStart", [point])
     time.sleep(0.06)
     touch_event(driver, "touchEnd", [])
 
@@ -142,8 +129,7 @@ def metrics_position(driver: webdriver.Chrome) -> tuple[float, float] | None:
 
 
 def read_save(driver: webdriver.Chrome) -> dict[str, Any] | None:
-    value = driver.execute_async_script(
-        """
+    value = driver.execute_async_script("""
         const done = arguments[0];
         const request = indexedDB.open('project-noclip', 2);
         request.onerror = () => done({ error: String(request.error) });
@@ -154,9 +140,25 @@ def read_save(driver: webdriver.Chrome) -> dict[str, Any] | None:
           read.onerror = () => { db.close(); done({ error: String(read.error) }); };
           read.onsuccess = () => { const result = read.result ?? null; db.close(); done(result); };
         };
-        """
-    )
+    """)
     return value if isinstance(value, dict) else None
+
+
+def write_save(driver: webdriver.Chrome, save: dict[str, Any]) -> None:
+    result = driver.execute_async_script("""
+        const save = arguments[0]; const done = arguments[1];
+        const request = indexedDB.open('project-noclip', 2);
+        request.onerror = () => done(String(request.error));
+        request.onsuccess = () => {
+          const db = request.result;
+          const tx = db.transaction('journey', 'readwrite');
+          tx.objectStore('journey').put(save, 'local-character');
+          tx.oncomplete = () => { db.close(); done(null); };
+          tx.onerror = () => { const error=String(tx.error); db.close(); done(error); };
+        };
+    """, save)
+    if result:
+        raise AssertionError(f"Could not write smoke save: {result}")
 
 
 def main() -> None:
@@ -166,9 +168,7 @@ def main() -> None:
     try:
         driver.get(BASE_URL)
         wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="new"]'), message="title screen")
-        environment = driver.execute_script(
-            "return {touch:navigator.maxTouchPoints, coarse:matchMedia('(pointer: coarse)').matches, noHover:matchMedia('(hover: none)').matches, width:innerWidth, height:innerHeight};"
-        )
+        environment = driver.execute_script("return {touch:navigator.maxTouchPoints, coarse:matchMedia('(pointer: coarse)').matches, noHover:matchMedia('(hover: none)').matches, width:innerWidth, height:innerHeight};")
         report["inputEnvironment"] = environment
         assert int(environment.get("touch", 0)) > 0, environment
         assert bool(environment.get("coarse")) or bool(environment.get("noHover")), environment
@@ -199,22 +199,24 @@ def main() -> None:
         assert not rects_overlap(move_rect, inventory_rect, 4), "movement control overlaps inventory"
         assert not rects_overlap(action_rect, inventory_rect, 4), "action buttons overlap inventory"
         assert not rects_overlap(version_rect, status_rect, 2), "version indicator overlaps status bars"
+        for selector in ('[data-action="touch-sprint"]', '[data-action="touch-marker"]', '[data-action="touch-interact"]', '[data-action="touch-use"]', '[data-action="touch-lab"]'):
+            rect = element_rect(driver, selector)
+            assert rect["width"] >= 44 and rect["height"] >= 44, (selector, rect)
         assert move_rect["width"] >= 44 and move_rect["height"] >= 44
-        assert element_rect(driver, '[data-action="touch-interact"]')["height"] >= 44
-        assert element_rect(driver, '[data-action="touch-use"]')["height"] >= 44
-        checks.append("touch targets and HUD/version regions remain readable and non-overlapping")
+        checks.append("Sprint, Marker, Interact, Use and Lab targets remain 44px-plus without essential HUD overlap")
 
-        touch_hold_move(driver, '[data-touch="move"]', 0, -43, 1.35)
-        moved_position = wait_for(
-            driver,
-            lambda current: (
-                pos if (pos := metrics_position(current)) and math.hypot(pos[0] - start_position[0], pos[1] - start_position[1]) > 0.3 else False
-            ),
-            timeout=12,
-            message="touch movement",
-        )
+        touch_hold_move(driver, '[data-touch="move"]', 0, -43, 1.0)
+        moved_position = wait_for(driver, lambda current: (pos if (pos := metrics_position(current)) and math.hypot(pos[0] - start_position[0], pos[1] - start_position[1]) > 0.3 else False), timeout=12, message="touch movement")
         report["movedPosition"] = moved_position
-        checks.append("left touch pad moves the canonical player through the existing movement/collision path")
+        checks.append("left touch pad still moves the canonical player through the existing movement/collision path")
+
+        sprint_start = metrics_position(driver)
+        assert sprint_start is not None
+        touch_hold_sprint_move(driver)
+        sprint_end = wait_for(driver, lambda current: (pos if (pos := metrics_position(current)) and math.hypot(pos[0] - sprint_start[0], pos[1] - sprint_start[1]) > 0.2 else False), timeout=10, message="Sprint plus movement")
+        report["sprintStart"] = sprint_start
+        report["sprintEnd"] = sprint_end
+        checks.append("Sprint can be held simultaneously with Move and releases cleanly through shared player intent")
 
         before_save = wait_for(driver, lambda current: read_save(current), timeout=10, message="schema-v2 save before touch look")
         before_yaw = float(before_save.get("position", {}).get("yaw", 0))
@@ -222,20 +224,65 @@ def main() -> None:
         time.sleep(2.0)
         after_save = wait_for(driver, lambda current: read_save(current), timeout=10, message="schema-v2 save after touch look")
         after_yaw = float(after_save.get("position", {}).get("yaw", 0))
-        assert abs(after_yaw - before_yaw) > 1.0, (before_yaw, after_yaw)
+        yaw_delta = abs(after_yaw - before_yaw)
+        assert yaw_delta >= 16.0, (before_yaw, after_yaw, yaw_delta)
         report["yawBefore"] = before_yaw
         report["yawAfter"] = after_yaw
-        checks.append("right-side touch drag rotates the camera and persists orientation without pointer lock")
+        report["yawDelta"] = yaw_delta
+        checks.append("right-side touch drag is materially faster than the v0.2.0-dev.2 baseline without pointer lock")
 
-        touch_tap(driver, '[data-action="touch-interact"]', 20)
-        touch_tap(driver, '[data-action="touch-use"]', 21)
-        time.sleep(0.3)
-        checks.append("minimum touch Interact and Use actions are operable with 44px-plus targets")
-
-        assert after_save.get("version") == 2
-        assert after_save.get("seed") == "threshold-001"
+        touch_tap(driver, '[data-action="touch-lab"]', 30)
+        wait_for(driver, lambda current: displayed(current, '[data-ui="lab"]'), timeout=5, message="World Lab opened from touch")
+        assert displayed(driver, '[data-action="close-lab"]')
+        assert not displayed(driver, '[data-ui="touch-controls"]')
+        touch_tap(driver, '[data-action="close-lab"]', 31)
+        wait_for(driver, lambda current: not displayed(current, '[data-ui="lab"]'), timeout=5, message="World Lab closed from touch")
+        wait_for(driver, lambda current: displayed(current, '[data-ui="touch-controls"]'), timeout=5, message="touch controls restored after Lab")
         assert driver.execute_script("return document.pointerLockElement === null") is True
-        checks.append("touch journey remains save schema v2 on the same deterministic world seed")
+        checks.append("World Lab opens and closes entirely from touch and restores mobile input without pointer lock")
+
+        seeded = wait_for(driver, lambda current: read_save(current), timeout=10, message="save for marker setup")
+        marker = {
+            "instanceId": "mobile-smoke-marker",
+            "definitionId": "marker",
+            "condition": 1,
+            "charge": 1,
+            "quantity": 1,
+            "owner": {"type": "character", "id": seeded["characterId"]},
+            "origin": {"type": "event", "sourceId": "mobile-smoke", "createdAt": int(time.time() * 1000)},
+            "revision": 1,
+            "tradeable": True,
+        }
+        seeded["inventory"] = [item for item in seeded.get("inventory", []) if item.get("definitionId") != "marker"] + [marker]
+        seeded["selectedItemId"] = marker["instanceId"]
+        seeded["position"] = {"x": 4.0, "y": 1.65, "z": -5.35, "yaw": 0, "pitch": 0}
+        write_save(driver, seeded)
+        driver.refresh()
+        wait_for(driver, lambda current: displayed(current, '[data-action="continue"]'), timeout=20, message="Continue after marker setup")
+        touch_tap(driver, '[data-action="continue"]', 40)
+        wait_for(driver, lambda current: displayed(current, '[data-ui="touch-controls"]'), timeout=35, message="touch controls after Continue")
+        wait_for(driver, lambda current: (pos if (pos := metrics_position(current)) and abs(pos[0] - 4.0) < 0.3 and abs(pos[1] + 5.35) < 0.3 else False), timeout=15, message="marker test position")
+        touch_tap(driver, '[data-action="touch-marker"]', 41)
+        wait_for(driver, lambda current: displayed(current, '[data-ui="marker-mode"]'), timeout=5, message="touch marker mode")
+        touch_marker_text = str(driver.find_element(By.CSS_SELECTOR, '.touch-marker-instruction').get_attribute("textContent") or "")
+        assert "drag" in touch_marker_text.lower() and "look" in touch_marker_text.lower()
+        assert "primary" not in touch_marker_text.lower()
+        assert not displayed(driver, '.desktop-marker-instruction')
+        touch_drag(driver, '[data-touch="look"]', 14, 0)
+        marked_save = wait_for(driver, lambda current: (save if (save := read_save(current)) and len(save.get("marks", [])) >= 1 else False), timeout=12, message="persisted touch marker stroke")
+        report["persistedMarks"] = len(marked_save.get("marks", []))
+        checks.append("Marker arms from touch, uses Look drag as the primary drawing gesture and persists a SurfaceMark without ambiguous mobile wording")
+
+        touch_tap(driver, '[data-action="touch-interact"]', 50)
+        touch_tap(driver, '[data-action="touch-use"]', 51)
+        time.sleep(0.3)
+        checks.append("Interact and Use remain operable after the expanded mobile controls")
+
+        final_save = wait_for(driver, lambda current: read_save(current), timeout=10, message="final schema-v2 save")
+        assert final_save.get("version") == 2
+        assert final_save.get("seed") == "threshold-001"
+        assert driver.execute_script("return document.pointerLockElement === null") is True
+        checks.append("expanded mobile controls preserve save schema v2 and the deterministic world seed")
 
         driver.save_screenshot(str(ARTIFACT_DIR / "mobile-landscape.png"))
         errors = browser_log_errors(driver)

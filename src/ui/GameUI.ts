@@ -16,9 +16,14 @@ export interface UIHandlers {
   onSimulateStarter(): void;
   onExportTuning(): void;
   onTouchMove(forward: number, strafe: number): void;
+  onTouchSprint(active: boolean): void;
   onTouchLook(deltaX: number, deltaY: number): void;
+  onTouchPrimaryStart(): void;
+  onTouchPrimaryEnd(): void;
   onTouchInteract(): void;
   onTouchUse(): void;
+  onTouchMarker(): void;
+  onToggleLab(): void;
 }
 
 export class GameUI {
@@ -68,7 +73,7 @@ export class GameUI {
             <button class="primary" data-action="new">Begin new local journey</button>
             <button data-action="continue">Continue saved journey</button>
             <small class="desktop-help">WASD move · Shift sprint · E interact · F use · G drop · M marker · &#96; World Lab</small>
-            <small class="touch-help">Landscape touch: left pad move · drag right side look · Interact / Use</small>
+            <small class="touch-help">Landscape touch: Move · hold Sprint · drag Look · Marker · Interact / Use · Lab</small>
           </div>
         </div>
       </section>
@@ -82,14 +87,17 @@ export class GameUI {
         </div>
         <div class="inventory" data-ui="inventory"></div>
         <div class="toast-stack" data-ui="toasts"></div>
-        <div class="marker-mode" data-ui="marker-mode">MARKER READY — hold primary button while looking at a nearby wall</div>
+        <div class="marker-mode" data-ui="marker-mode"><span class="desktop-marker-instruction">MARKER READY — hold primary button while looking at a nearby wall</span><span class="touch-marker-instruction">MARKER READY — drag the LOOK area while aiming at a nearby wall</span></div>
         <div class="help">E interact · F use · G drop · M marker · &#96; World Lab · Esc pause</div>
         <div class="touch-controls" data-ui="touch-controls" aria-label="Touch gameplay controls">
           <div class="touch-move" data-touch="move" aria-label="Movement control"><div class="touch-stick" data-touch="stick"></div><span>Move</span></div>
-          <div class="touch-look" data-touch="look" aria-label="Camera look area"><span>Look</span></div>
+          <div class="touch-look" data-touch="look" aria-label="Camera look and marker drawing area"><span>Look</span></div>
           <div class="touch-actions">
+            <button class="touch-action" data-action="touch-sprint" aria-label="Hold to sprint" aria-pressed="false">Sprint</button>
+            <button class="touch-action" data-action="touch-marker" aria-label="Toggle marker mode" aria-pressed="false">Marker</button>
             <button class="touch-action" data-action="touch-interact" aria-label="Interact">Interact</button>
             <button class="touch-action" data-action="touch-use" aria-label="Use selected item">Use</button>
+            <button class="touch-action touch-lab" data-action="touch-lab" aria-label="Open World Lab">Lab</button>
           </div>
         </div>
         <div class="touch-orientation" data-ui="touch-orientation" role="status" aria-live="polite">
@@ -111,6 +119,7 @@ export class GameUI {
         </article>
       </section>
       <aside class="world-lab ui-panel" data-ui="lab">
+        <button class="lab-close" data-action="close-lab" aria-label="Close World Lab">Close Lab</button>
         <p class="eyebrow">Development authority / local only</p><h2>World Lab</h2>
         <section class="lab-section">
           <h3>World controls</h3>
@@ -184,6 +193,9 @@ export class GameUI {
     this.required('[data-action="close-note"]').addEventListener('click', () => this.hideNote());
     this.required('[data-action="touch-interact"]').addEventListener('click', () => this.handlers.onTouchInteract());
     this.required('[data-action="touch-use"]').addEventListener('click', () => this.handlers.onTouchUse());
+    this.required('[data-action="touch-marker"]').addEventListener('click', () => this.handlers.onTouchMarker());
+    this.required('[data-action="touch-lab"]').addEventListener('click', () => this.handlers.onToggleLab());
+    this.required('[data-action="close-lab"]').addEventListener('click', () => this.handlers.onToggleLab());
     this.required('[data-action="apply-seed"]').addEventListener('click', () => this.handlers.onSeedChange(this.required<HTMLInputElement>('[data-lab="seed"]').value.trim() || 'threshold-001'));
     this.required('[data-action="simulate"]').addEventListener('click', () => this.handlers.onSimulateStarter());
     this.required('[data-action="export"]').addEventListener('click', () => this.handlers.onExportTuning());
@@ -229,8 +241,10 @@ export class GameUI {
     const move = this.required<HTMLElement>('[data-touch="move"]');
     const stick = this.required<HTMLElement>('[data-touch="stick"]');
     const look = this.required<HTMLElement>('[data-touch="look"]');
+    const sprint = this.required<HTMLButtonElement>('[data-action="touch-sprint"]');
     let movePointer: number | undefined;
     let lookPointer: number | undefined;
+    let sprintPointer: number | undefined;
     let lookX = 0;
     let lookY = 0;
 
@@ -262,9 +276,29 @@ export class GameUI {
     move.addEventListener('pointercancel', stopMove);
     move.addEventListener('lostpointercapture', () => stopMove());
 
+    const setSprintPressed = (active: boolean): void => {
+      sprint.classList.toggle('pressed', active);
+      sprint.setAttribute('aria-pressed', String(active));
+      this.handlers.onTouchSprint(active);
+    };
+    const stopSprint = (event?: PointerEvent): void => {
+      if (event && sprintPointer !== event.pointerId) return;
+      if (sprintPointer === undefined) return;
+      sprintPointer = undefined;
+      setSprintPressed(false);
+    };
+    sprint.addEventListener('pointerdown', (event) => {
+      if (event.pointerType === 'mouse') return;
+      event.preventDefault(); sprintPointer = event.pointerId; sprint.setPointerCapture(event.pointerId); setSprintPressed(true);
+    });
+    sprint.addEventListener('pointerup', stopSprint);
+    sprint.addEventListener('pointercancel', stopSprint);
+    sprint.addEventListener('lostpointercapture', () => stopSprint());
+
     look.addEventListener('pointerdown', (event) => {
       if (event.pointerType === 'mouse') return;
       event.preventDefault(); lookPointer = event.pointerId; lookX = event.clientX; lookY = event.clientY; look.setPointerCapture(event.pointerId);
+      this.handlers.onTouchPrimaryStart();
     });
     look.addEventListener('pointermove', (event) => {
       if (lookPointer !== event.pointerId) return;
@@ -273,9 +307,15 @@ export class GameUI {
       lookX = event.clientX; lookY = event.clientY;
       if (dx !== 0 || dy !== 0) this.handlers.onTouchLook(dx, dy);
     });
-    const stopLook = (event: PointerEvent): void => { if (lookPointer === event.pointerId) lookPointer = undefined; };
+    const stopLook = (event?: PointerEvent): void => {
+      if (event && lookPointer !== event.pointerId) return;
+      if (lookPointer === undefined) return;
+      lookPointer = undefined;
+      this.handlers.onTouchPrimaryEnd();
+    };
     look.addEventListener('pointerup', stopLook);
     look.addEventListener('pointercancel', stopLook);
+    look.addEventListener('lostpointercapture', () => stopLook());
     this.required('[data-ui="touch-controls"]').addEventListener('contextmenu', (event) => event.preventDefault());
   }
 
@@ -311,10 +351,20 @@ export class GameUI {
   setContinueAvailable(available: boolean): void { this.continueButton.disabled = !available; }
   showGame(): void { this.title.hidden = true; this.hud.hidden = false; }
   setPaused(paused: boolean): void { this.pause.classList.toggle('visible', paused); }
-  toggleLab(): void { this.lab.classList.toggle('visible'); }
+  toggleLab(): boolean {
+    const open = !this.lab.classList.contains('visible');
+    this.lab.classList.toggle('visible', open);
+    this.root.classList.toggle('lab-open', open);
+    return open;
+  }
   isLabOpen(): boolean { return this.lab.classList.contains('visible'); }
   isNoteOpen(): boolean { return this.noteOverlay.classList.contains('visible'); }
-  setMarkerMode(active: boolean): void { this.markerMode.classList.toggle('visible', active); }
+  setMarkerMode(active: boolean): void {
+    this.markerMode.classList.toggle('visible', active);
+    const button = this.root.querySelector<HTMLButtonElement>('[data-action="touch-marker"]');
+    button?.classList.toggle('pressed', active);
+    button?.setAttribute('aria-pressed', String(active));
+  }
   updateCatalogStatus(text: string): void { this.catalogStatus.textContent = text; }
 
   showNote(title: string, body: string, attribution?: string): void {

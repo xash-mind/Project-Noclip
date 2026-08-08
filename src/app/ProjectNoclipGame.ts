@@ -22,7 +22,7 @@ const WALK_SPEED = 3.15;
 const SPRINT_SPEED = 5.15;
 const CROUCH_SPEED = 1.8;
 const SAVE_INTERVAL = 1.5;
-const TOUCH_LOOK_MULTIPLIER = 1.65;
+const TOUCH_LOOK_MULTIPLIER = 2.25;
 
 export class ProjectNoclipGame {
   private readonly store = new IndexedDbSaveStore();
@@ -62,8 +62,10 @@ export class ProjectNoclipGame {
       onNewGame: (seed) => void this.startNew(seed), onContinue: () => void this.continueGame(), onReset: () => void this.resetGame(),
       onResume: () => this.resumeInput(), onSelectItem: (id) => this.selectItem(id), onTuningChange: (patch) => this.updateTuning(patch),
       onSeedChange: (seed) => void this.startNew(seed), onSimulateStarter: () => this.simulateStarters(), onExportTuning: () => this.exportTuning(),
-      onTouchMove: (forward, strafe) => this.handleTouchMove(forward, strafe), onTouchLook: (dx, dy) => this.handleTouchLook(dx, dy),
-      onTouchInteract: () => this.handleTouchInteract(), onTouchUse: () => this.handleTouchUse()
+      onTouchMove: (forward, strafe) => this.handleTouchMove(forward, strafe), onTouchSprint: (active) => this.handleTouchSprint(active),
+      onTouchLook: (dx, dy) => this.handleTouchLook(dx, dy), onTouchPrimaryStart: () => this.handleTouchPrimaryStart(), onTouchPrimaryEnd: () => this.handleTouchPrimaryEnd(),
+      onTouchInteract: () => this.handleTouchInteract(), onTouchUse: () => this.handleTouchUse(), onTouchMarker: () => this.handleTouchMarker(),
+      onToggleLab: () => this.toggleWorldLab()
     });
   }
 
@@ -125,7 +127,11 @@ export class ProjectNoclipGame {
 
   private installInput(): void {
     window.addEventListener('keydown', (event) => {
-      if (event.code === 'Backquote') { event.preventDefault(); this.ui.toggleLab(); if (this.ui.isLabOpen()) document.exitPointerLock(); return; }
+      if (event.code === 'Backquote') {
+        event.preventDefault();
+        if (this.started) this.toggleWorldLab(); else this.ui.toggleLab();
+        return;
+      }
       if (!this.started) return;
       if (event.code === 'Escape' && this.ui.isNoteOpen()) { this.ui.hideNote(); return; }
       if (event.code === 'KeyE') this.interact(); else if (event.code === 'KeyF') this.useSelectedItem(); else if (event.code === 'KeyG') this.dropSelectedItem(); else if (event.code === 'KeyM') this.toggleMarkerMode();
@@ -159,6 +165,19 @@ export class ProjectNoclipGame {
 
   private requestPointerLock(): void { if (this.started && !this.mobileInputActive && !this.ui.isLabOpen() && !this.ui.isNoteOpen()) void this.canvas.requestPointerLock(); }
 
+  private toggleWorldLab(): void {
+    if (this.drawing) this.finishMark();
+    const open = this.ui.toggleLab();
+    this.input.clearAll();
+    if (open) {
+      this.paused = true;
+      this.ui.setPaused(false);
+      if (document.pointerLockElement === this.canvas) document.exitPointerLock();
+      return;
+    }
+    this.resumeInput();
+  }
+
   private syncTouchOrientation(): void {
     if (!this.started || !this.mobileInputActive) return;
     this.input.clearTouch(); this.paused = !this.ui.isTouchLandscape(); this.ui.setPaused(false);
@@ -179,13 +198,24 @@ export class ProjectNoclipGame {
     this.input.setTouchMovement(forward, strafe);
   }
 
+  private handleTouchSprint(active: boolean): void {
+    this.input.setTouchSprint(active && this.touchActionAllowed());
+  }
+
   private handleTouchLook(deltaX: number, deltaY: number): void {
     if (!this.touchActionAllowed()) return;
     this.applyLookDelta(deltaX, deltaY, TOUCH_LOOK_MULTIPLIER);
+    if (this.drawing) this.sampleMark();
   }
 
+  private handleTouchPrimaryStart(): void {
+    if (this.touchActionAllowed() && this.markerMode) this.beginMark();
+  }
+
+  private handleTouchPrimaryEnd(): void { if (this.drawing) this.finishMark(); }
   private handleTouchInteract(): void { if (this.touchActionAllowed()) this.interact(); }
   private handleTouchUse(): void { if (this.touchActionAllowed()) this.useSelectedItem(); }
+  private handleTouchMarker(): void { if (this.touchActionAllowed()) this.toggleMarkerMode(); }
 
   private applyLookDelta(deltaX: number, deltaY: number, multiplier = 1): void {
     const sensitivity = this.save?.settings.sensitivity ?? 0.095;
@@ -340,10 +370,12 @@ export class ProjectNoclipGame {
 
   private toggleMarkerMode(): void {
     if (!this.save) return;
+    if (this.drawing) this.finishMark();
     const selected = this.save.inventory.find((candidate) => candidate.instanceId === this.save?.selectedItemId);
     if (selected?.definitionId !== 'marker') { const marker = this.save.inventory.find((candidate) => candidate.definitionId === 'marker'); if (!marker) { this.ui.toast('You do not have a marker.'); return; } this.save.selectedItemId = marker.instanceId; }
     this.markerMode = !this.markerMode; this.ui.setMarkerMode(this.markerMode); this.ui.updateInventory(this.save.inventory, this.save.selectedItemId);
-    this.ui.toast(this.markerMode ? 'Marker ready. Hold the primary button while looking at a wall.' : 'Marker capped.');
+    const instruction = this.mobileInputActive ? 'Marker ready. Drag the Look area while aiming at a nearby wall.' : 'Marker ready. Hold the primary button while looking at a wall.';
+    this.ui.toast(this.markerMode ? instruction : 'Marker capped.');
   }
 
   private beginMark(): void {
