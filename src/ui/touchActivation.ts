@@ -1,17 +1,35 @@
 const SYNTHETIC_CLICK_GUARD_MS = 700;
 
 /**
- * Makes an existing button's click action deterministic for touch browsers that
- * do not reliably synthesize a click after touchend. The button's existing
- * click handler remains the single action source; this adapter only bridges
- * touchend into exactly one click and suppresses a delayed duplicate.
+ * Keeps the mobile World Lab action reachable before and after the Lab opens.
+ * The existing GameUI click handler remains the only source of Lab state; this
+ * adapter only provides deterministic touch activation and moves that same
+ * button above the Lab panel while the panel is open.
  */
-export function installTouchClickActivation(selector: string): void {
+export function installMobileLabToggle(selector: string): void {
+  const root = document.querySelector<HTMLElement>('#ui-root');
   const button = document.querySelector<HTMLButtonElement>(selector);
-  if (!button) throw new Error(`Missing touch-activated button: ${selector}`);
+  if (!root || !button) throw new Error(`Missing mobile Lab toggle: ${selector}`);
+  const home = button.parentElement;
+  if (!home) throw new Error('Mobile Lab toggle has no home container');
 
   let dispatchingBridgedClick = false;
   let suppressTrustedClickUntil = 0;
+
+  const syncPlacement = (): void => {
+    const open = root.classList.contains('lab-open');
+    if (open) {
+      if (button.parentElement !== root) root.appendChild(button);
+      button.classList.add('floating-lab-toggle');
+      button.textContent = 'Close Lab';
+      button.setAttribute('aria-label', 'Close World Lab');
+    } else {
+      if (button.parentElement !== home) home.appendChild(button);
+      button.classList.remove('floating-lab-toggle');
+      button.textContent = 'Lab';
+      button.setAttribute('aria-label', 'Open World Lab');
+    }
+  };
 
   document.addEventListener('click', (event) => {
     if (dispatchingBridgedClick || performance.now() >= suppressTrustedClickUntil) return;
@@ -31,4 +49,7 @@ export function installTouchClickActivation(selector: string): void {
       dispatchingBridgedClick = false;
     }
   }, { passive: false });
+
+  new MutationObserver(syncPlacement).observe(root, { attributes: true, attributeFilter: ['class'] });
+  syncPlacement();
 }
