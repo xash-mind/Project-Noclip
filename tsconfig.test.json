@@ -8,6 +8,7 @@
     "moduleResolution": "NodeNext"
   },
   "include": [
+    "src/audio/**/*.ts",
     "src/world/**/*.ts",
     "src/items/**/*.ts",
     "src/inventory/**/*.ts",
