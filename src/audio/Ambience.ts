@@ -70,7 +70,7 @@ export class ProceduralAmbience {
   private unavailable = false;
   private baseVolume = 0.68;
   private targetMasterGain = 0;
-  private targetHumGain = AMBIENCE_TUNING.normalHumGain;
+  private targetHumGain: number = AMBIENCE_TUNING.normalHumGain;
   private lastStep = 0;
   private graphStarts = 0;
   private stepStarts = 0;
