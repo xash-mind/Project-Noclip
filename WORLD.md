@@ -1,85 +1,139 @@
 # Project Noclip World Bible
 
-This is the canonical human-facing vocabulary and content catalog for Project Noclip.
+This is the canonical human-facing vocabulary and world-content catalog for Project Noclip.
 
-GitHub code and accepted `STATUS.md` remain authoritative for exact runtime behaviour. This file answers a different question: **what kinds of things exist in the game, what are they called, and what state are they in?**
+GitHub code and accepted `STATUS.md` remain authoritative for exact runtime behaviour. This file answers: **what kinds of things exist in the game, what are they called, and what state are they in?**
 
 ## Maintenance contract
 
-When a change adds, removes, renames, reclassifies, or materially changes any **Level, Region, Variant, Geometry Regime, Field, Material Family, Condition, Feature, Structure, Carver, Anomaly, Entity, Item, Transition, District, Cell, or legacy worldgen category**, update this file in the same accepted pull request.
+When accepted work adds, removes, renames, reclassifies, or materially changes a **Level, Region, Variant, Geometry, Material, Condition, Feature, Structure, Carver, Anomaly, Entity, Item, Transition**, or a related engine/legacy world-generation concept, update this file in the same pull request.
 
 Rules:
 
 - Never present planned content as implemented.
-- Keep empty categories visible as `None implemented` so absence is obvious.
+- Keep useful empty categories visible as `None implemented`.
 - Keep legacy implementation vocabulary documented until the migration that removes it is accepted.
 - If code and this catalog disagree, resolve the mismatch before claiming the catalog is current.
 - Material catalog changes should be mirrored to the mapped Project Noclip Notion page during the normal material Notion sync.
 - A `Cell` is a technical streaming/computation unit, **not a room**.
-- Generation 3 target architecture is tracked by GitHub Issue #31. This file records the vocabulary and catalog; Issue #31 records the migration work.
+- Generation 3 target architecture is tracked by GitHub Issue #31. This file records vocabulary/current content; Issue #31 records migration work.
 
 ## Status vocabulary
 
 | Status | Meaning |
 |---|---|
 | **Implemented** | Exists in the accepted playable/runtime build. |
-| **Registered** | Exists in data/transition registries but is not a playable destination/content system yet. |
+| **Registered** | Exists in data/transition registries but is not playable content yet. |
 | **Legacy** | Exists in the current Gen-2 implementation but is intended to be replaced/reclassified by Gen 3. |
 | **Planned** | Accepted direction, not implemented runtime behaviour yet. |
-| **None implemented** | Category intentionally exists in the vocabulary but has no first-class implementation yet. |
+| **None implemented** | The category exists conceptually but has no first-class implementation yet. |
 
 ---
 
-# 1. Vocabulary chart
+# 1. Everyday design vocabulary
+
+These are the terms Sash should normally use when describing world content to agents.
 
 ```mermaid
 flowchart TD
-    L["LEVEL\nA Backrooms world/destination"]
-    L --> R["REGION\nBiome-like geographic character"]
-    R --> V["VARIANT\nNamed subtype of a Region"]
-    R --> G["GEOMETRY REGIME\nEuclidean / Distorted / Non-Euclidean"]
-    R --> F["FIELDS\nContinuous invisible generation values"]
-    F --> A["ARCHITECTURE\nSolved traversable substrate"]
-    A --> M["MATERIAL FAMILY\nWallpaper / carpet / ceiling family"]
-    M --> C["CONDITION\nDamp / worn / damaged / etc."]
+    L["LEVEL\nA Backrooms world/destination"] --> R["REGION\nBiome-like geography"]
+    R --> V["VARIANT\nOptional named subtype"]
+    R --> G["GEOMETRY\nEuclidean / Non-Euclidean"]
+    R --> A["ARCHITECTURE\nTraversable built space"]
+    A --> M["MATERIAL\nWallpaper / carpet / ceiling type"]
+    M --> C["CONDITION\nDamp / worn / damaged / dark etc."]
     A --> CV["CARVER\nSubtracts floor / wall / ceiling / shafts"]
-    A --> S["STRUCTURE\nMajor authored/generated location"]
-    A --> FT["FEATURE\nSmall generated object or scenery"]
-    A --> AN["ANOMALY\nLocalized rule-breaking phenomenon"]
-    A --> E["ENTITY\nActive/living world actor"]
+    A --> S["STRUCTURE\nSpecial generated location"]
+    A --> FT["FEATURE\nSmall generated object/scenery"]
+    A --> AN["ANOMALY\nNon-spatial rule-breaking phenomenon"]
+    A --> E["ENTITY\nActive/living actor"]
     A --> I["ITEM\nCollectible/useful object"]
     A --> T["TRANSITION\nRoute to another Level/destination"]
-
-    D["DISTRICT\nCoarse deterministic planning unit"] --> CELL["CELL\nStreaming/computation unit — never a room"]
 ```
 
-## Terms Sash can use with agents
-
-| Term | Simple meaning | Minecraft-ish analogy | Current Project Noclip use |
+| Term | Simple meaning | Minecraft-ish analogy | Project Noclip rule |
 |---|---|---|---|
-| **Level** | A major Backrooms world/destination. | Dimension | Level 0 is playable; other destination IDs are registered exits only. |
-| **Region** | A large coherent geographic/environmental area inside a Level. | Biome | Gen-3 preferred design term. Current code uses legacy `ZoneId`s for the closest equivalent. |
-| **Variant** | A named subtype of a Region. | Biome variant | Gen-3 design term. Current `SpatialProfile`s are the nearest legacy equivalent, not canonical Region Variants. |
-| **Geometry Regime** | The spatial law active in an area. | Terrain/world law | Gen-3 planned: Euclidean, Distorted, Non-Euclidean. Current playable topology is Euclidean. |
-| **Field** | Smooth invisible value sampled from coordinates/seed that influences generation. | Noise field | Gen-3 planned. Examples: openness, partition pressure, dampness, stability. |
-| **Material Family** | Named visual construction family. | Wood/block family | Planned. Current runtime has unnamed material variant indices and zone tints. |
-| **Condition** | State layered onto a material/object. | Block state | Partially present through light states, stability, floor-patch kinds and visual condition data; not yet one unified system. |
-| **Feature** | Small generated object/scenery. | Tree, ore, plant | Current prop system is the closest implementation. Gen 3 should move ordinary props fully into a feature layer. |
-| **Structure** | Major special location/discovery. | Village, temple, stronghold | Manila Room is the clearest current example. Rare structures stay explicitly generated in Gen 3. |
-| **Carver** | Subtractive generator that removes ordinary architecture. | Cave carver | Planned. Current holes are explicit room/components rather than a first-class carver pass. |
-| **Anomaly** | Local phenomenon that breaks expected world behaviour. | Rare world phenomenon | No first-class anomaly registry yet; `hallucinationAnchor` is an internal precursor. |
-| **Entity** | Active/living actor in the world. | Mob | None implemented as a routine world population system in the current Level 0 scope. |
-| **Item** | Collectible/useful world object. | Item | Implemented item registry. |
-| **Transition** | A route/trigger toward another Level or destination. | Portal/exit | Implemented exit registry foundations; destinations are not necessarily playable. |
-| **District** | Coarse deterministic planning grouping. | Chunk region | Current generator groups cells into deterministic 5×5 districts for zone selection. |
-| **Cell** | Internal streaming/computation unit. | Chunk | Implemented. Never use `cell` as a synonym for room. |
-| **Archetype** | Legacy Gen-2 room-shape category. | Template archetype | Implemented but should become descriptive/diagnostic rather than the primary Gen-3 generator command. |
-| **Spatial Profile** | Legacy Gen-2 composition profile. | Terrain/template profile | Implemented; expected to be superseded by field-derived conditions/variants. |
-| **Component** | Legacy explicit structural module. | Jigsaw piece | Implemented; ordinary Level 0 should stop relying on recognizable module selection as Gen 3 lands. |
+| **Level** | A major Backrooms world/destination. | Dimension | Level 0 is the only playable Level today. |
+| **Region** | A large coherent geographic/environmental area inside a Level. | Biome | Preferred Gen-3 geography term. Regions should usually emerge from continuous conditions rather than hard room templates. |
+| **Variant** | An optional named subtype of a Region. | Biome variant | Use only when a subtype deserves a stable name. Continuous changes do not automatically become Variants. |
+| **Geometry** | The spatial law of an area. | World/terrain law | Only two canonical values: **Euclidean** and **Non-Euclidean**. |
+| **Material** | A named construction/finish type. | Wood/block family | Wallpaper, carpet, ceiling or other semantic finish type. |
+| **Condition** | A state layered onto architecture, materials, fixtures or objects. | Block state | Damp, worn, damaged, dark, flickering, missing, etc. |
+| **Feature** | Small generated object/scenery placed into the world. | Tree, ore, plant | Chairs, desks, papers and similar non-structural content belong here. |
+| **Structure** | A special generated location/discovery. | Village, temple, stronghold | Manila Room is the clearest current example. `Rare` is an attribute of a Structure, not a separate category. |
+| **Carver** | A subtractive generator that removes ordinary architecture. | Cave carver | Used for holes, shafts, missing walls/floors/ceilings. |
+| **Anomaly** | A localized rule-breaking phenomenon that is not merely spatial geometry. | Rare world phenomenon | Purely spatial impossibility belongs under **Geometry**, not Anomaly. |
+| **Entity** | Active/living actor in the world. | Mob | None implemented as a routine world population system yet. |
+| **Item** | Collectible/useful world object. | Item | Implemented registry. |
+| **Transition** | Route/trigger toward another Level or destination. | Portal/exit | Exit foundations exist even when destination Levels are not playable. |
+
+## Geometry: only Euclidean or Non-Euclidean
+
+`Distorted` is **not** a separate Geometry category.
+
+- **Euclidean** — ordinary spatial relationships. Routes reverse normally and local dimensions/connectivity obey expected geometry.
+- **Non-Euclidean** — space itself violates ordinary geometry/topology in a deterministic, save-safe way.
+
+Useful **Non-Euclidean behaviours** are descriptions, not separate top-level Geometry values:
+
+- **metric distortion** — internal distance/scale cannot reconcile with surrounding space;
+- **impossible adjacency** — spaces connect in mutually incompatible ways;
+- **loop** — continued travel returns to an impossible prior location/relationship;
+- **asymmetric route** — A → B does not imply the same B → A path;
+- **spatial discontinuity** — a boundary/door/path maps to a location that ordinary continuous space cannot explain.
+
+Crooked walls, strange proportions, changing ceiling height or unsettling visuals remain **Euclidean** unless the spatial law itself becomes impossible.
+
+## Simplification rules
+
+To avoid vocabulary bloat:
+
+- Use **Region**, not `environment regime`, `environment class`, or `biome class`, for the human-facing geographic label.
+- Use **Geometry**, not `Geometry Regime`.
+- Use **Material**, not `Material Family`, in ordinary discussion.
+- Use **Condition** for fixture/object/environment state; do not create separate `Object State` or `Fixture State` world categories.
+- Use **Structure** for special locations; `rare`, `unique`, `common`, etc. are properties of Structures, not new categories.
+- Use **Anomaly** only for exceptional non-spatial phenomena. Spatial impossibility belongs under **Non-Euclidean Geometry**.
+- `Field`, `Cell`, `District`, `Archetype`, `Spatial Profile`, `Component` and `Prop` are engine/legacy vocabulary, not equal top-level design categories.
 
 ---
 
-# 2. Current world catalog
+# 2. Engine vocabulary
+
+These terms remain important to agents/code, but Sash does not need to use them for ordinary design requests.
+
+| Engine term | Meaning | Current state |
+|---|---|---|
+| **Field** | Smooth deterministic value sampled from seed/coordinates that drives generation. | Gen-3 framework planned; candidate fields are listed below. |
+| **Cell** | Streaming/computation unit. | Implemented. **Never a room.** |
+| **District** | Coarse deterministic planning grouping. | Current generator groups cells into 5×5 districts for legacy zone selection. |
+| **Seed domain** | Independent deterministic hash namespace for a generation layer. | Direction in Issue #31; used to prevent unrelated tuning from moving unrelated world facts. |
+
+### Candidate Gen-3 fields
+
+No canonical continuous Gen-3 field framework is implemented yet. Current proposed inputs:
+
+- `openness`
+- `partitionPressure`
+- `axisFlow`
+- `roomScale`
+- `columnPressure`
+- `ceilingVariation`
+- `regularity`
+- `connectivityPressure`
+- `dampness`
+- `decay`
+- `stability`
+- `abnormality`
+- `voidPressure`
+- `clutterPressure`
+- `electricalReliability`
+
+These are implementation controls. Human-facing output should usually be discussed as Regions, Geometry, Materials, Conditions, Features, Structures, etc.
+
+---
+
+# 3. Current world catalog
 
 ## Levels
 
@@ -89,7 +143,7 @@ flowchart TD
 |---|---|---|
 | **Level 0** | **Implemented** | Current browser-first vertical slice and only playable Level. |
 
-### Registered transition destinations — not implemented as playable Levels
+### Registered transition destinations — not playable Levels
 
 | Destination | Status | Current transition label | Enabled exit foundation |
 |---|---|---|---|
@@ -105,161 +159,131 @@ flowchart TD
 | **Red Rooms** | **Registered** | Crimson contamination | No |
 | **Void** | **Registered** | Unresolved floor failure | No |
 
-A registered destination means the Level/destination ID exists in the exit registry. It does **not** mean the destination has a playable implementation.
+A registered destination means its ID/exit exists. It does **not** mean the destination is implemented as a playable Level.
 
 ## Regions
 
-Generation 3 uses **Region** as the preferred human design term. The accepted runtime still uses `ZoneId`, so these are listed as legacy region-like implementations until a verified migration changes the code.
+### Canonical Gen-3 Regions
 
-| Current ID | Human label | Status | Gen-3 interpretation |
+**None implemented yet.**
+
+The accepted runtime still uses legacy `ZoneId`s as the nearest region-like implementation:
+
+| Legacy ID | Human label | Status | Gen-3 direction |
 |---|---|---|---|
-| `baseline` | Baseline Lobby / ordinary Level 0 | **Legacy implemented** | Primary ordinary Region; should emerge from stable field conditions rather than a hard room template. |
-| `arch` | Arch Rooms | **Legacy implemented** | Region/condition currently biased toward arch compositions. |
-| `pillar` | Pillar Field | **Legacy implemented** | Region/condition currently biased toward pillar-heavy compositions. |
-| `blackout` | Blackout Zone | **Legacy implemented** | Degraded/electrically unstable Region candidate. |
-| `holes` | Hole Section | **Legacy implemented** | Candidate Region/condition where future carver pressure produces floor/void failures. |
-| `exit-threshold` | Exit Threshold | **Legacy implemented** | Better treated as a transition structure/state than a normal Region in Gen 3. |
-| `manila` | Manila Room compatibility profile | **Legacy compatibility only** | **Not a Region.** Ordinary generation does not emit a Manila zone; Manila is one rare special Structure inside baseline Level 0. |
+| `baseline` | Baseline Lobby / ordinary Level 0 | **Legacy implemented** | Ordinary Level 0 should emerge from stable field conditions. |
+| `arch` | Arch Rooms | **Legacy implemented** | Reclassify only if a coherent Region still exists after field-driven architecture lands. |
+| `pillar` | Pillar Field | **Legacy implemented** | Reclassify only if pillar-heavy geography deserves a stable Region label. |
+| `blackout` | Blackout Zone | **Legacy implemented** | Likely represented mainly through Conditions/fields rather than a hard zone. |
+| `holes` | Hole Section | **Legacy implemented** | Future void/carver pressure should generate this effect over ordinary Level 0. |
+| `exit-threshold` | Exit Threshold | **Legacy implemented** | Better modeled as a Transition/Structure than ordinary geography. |
+| `manila` | Manila compatibility profile | **Legacy compatibility only** | **Not a Region.** Manila is a Structure. |
 
 ## Variants
 
 ### Canonical Gen-3 Region Variants
 
-**None implemented yet.** Future named Variants should be added here only when accepted into design/runtime.
+**None implemented yet.**
 
-### Legacy spatial profiles
+Current legacy spatial profiles are implementation metadata, not canonical Variants:
 
-| Spatial profile | Status | Notes |
+- `standard`
+- `sparse-vista`
+- `thin-channel`
+- `pillar-expanse`
+
+## Geometry
+
+| Geometry | Status | Meaning |
 |---|---|---|
-| `standard` | **Legacy implemented** | Ordinary composition profile. |
-| `sparse-vista` | **Legacy implemented** | Broad/sparse composition profile. |
-| `thin-channel` | **Legacy implemented** | Compressed/channel-like composition profile. |
-| `pillar-expanse` | **Legacy implemented** | Open pillar-heavy composition profile. |
+| **Euclidean** | **Implemented baseline law** | Current playable topology/connectivity law. |
+| **Non-Euclidean** | **Planned Gen 3** | Deterministic impossible spatial relationships. Exact player-facing behaviours must be intentionally designed and verified. |
 
-These are not yet canonical Gen-3 Region Variants; they are current Gen-2 composition metadata.
+There is no separate `Distorted` Geometry.
 
-## Geometry Regimes
-
-| Geometry regime | Status | Meaning |
-|---|---|---|
-| **Euclidean** | **Implemented baseline law** | Normal reversible spatial relationships and grid-connected world topology. |
-| **Distorted** | **Planned Gen 3** | Space remains mostly navigable/continuous but dimensions, scale, angles, corridor length or architectural reconciliation become implausible. |
-| **Non-Euclidean** | **Planned Gen 3** | Topology itself can violate normal expectations: impossible adjacency, loops, asymmetric routes, or other deterministic spatial-law breaks. |
-
-Geometry Regime must remain distinct from visual weirdness. A strange-looking Euclidean room is still Euclidean. A non-Euclidean Region changes spatial/topological laws and therefore requires deterministic topology, save, navigation and streaming rules.
-
-## Fields
-
-### Canonical continuous Gen-3 fields
-
-**None implemented as the Gen-3 field framework yet.** Issue #31 proposes the initial vocabulary:
-
-- `openness`
-- `partitionPressure`
-- `axisFlow` / directional bias
-- `roomScale`
-- `columnPressure`
-- `ceilingVariation`
-- `regularity`
-- `connectivityPressure`
-- `dampness`
-- `decay`
-- `stability`
-- `abnormality`
-- `voidPressure`
-- `clutterPressure`
-- `electricalReliability`
-
-Existing deterministic hash rolls, district weighting and stability systems are implementation precursors, not the accepted Gen-3 continuous field framework.
-
-## Material Families
+## Materials
 
 **None canonically named yet.**
 
-Current runtime has:
-
-- unnamed wall `materialVariant` indices;
-- zone-specific wall/floor/ceiling/trim tints;
-- generated ceiling pattern indices;
-- floor patch kinds.
-
-Gen 3 should introduce named Material Families only when visual/semantic families are actually defined, for example wallpaper, carpet and ceiling families. Do not invent names in this catalog before that work is accepted.
+Current runtime has unnamed wall material variant indices, zone-specific tints, ceiling pattern indices and floor-patch kinds. Named wallpaper/carpet/ceiling Materials should be added here only after they actually exist as semantic content.
 
 ## Conditions
 
-Current implemented condition-like values include:
+Current implemented condition-like state includes:
 
-| Condition system | Values / state |
+| Condition system | Values/state |
 |---|---|
-| **Stability class** | `disorienting`, `semi-stable`, `stable`, `rendezvous`, `terminal` |
-| **Light state** | `on`, `flicker`, `off` |
-| **Floor patch kind vocabulary** | `damp`, `worn`, `dark`, `dry`, `hole` |
+| **Stability** | `disorienting`, `semi-stable`, `stable`, `rendezvous`, `terminal` |
+| **Light** | `on`, `flicker`, `off` |
+| **Floor patch vocabulary** | `damp`, `worn`, `dark`, `dry`, `hole` |
 | **World shift** | deterministic `shiftEpoch` participates in some generated state |
 
-A unified semantic Condition layer is **planned**, not implemented yet.
+A unified semantic Condition layer is **planned**, not yet first-class.
 
 ## Features
 
-The current prop system is the legacy implementation closest to Gen-3 Features.
+A first-class Gen-3 Feature layer is **not implemented yet**. The current legacy prop system mixes structure, service elements and scenery.
 
-| Current prop/feature kind | Status |
-|---|---|
-| table | **Implemented** |
-| chair | **Implemented** |
-| cabinet | **Implemented** |
-| box | **Implemented** |
-| divider | **Legacy implemented** — ordinary divider grammar is targeted for retirement from primary Level-0 structure generation |
-| pipe | **Implemented** |
-| column | **Implemented** |
-| bench | **Implemented** |
-| book | **Implemented** |
-| wall-panel | **Implemented** |
-| ceiling-gap | **Implemented** |
-| stain | **Implemented vocabulary** |
-| carpet-patch | **Implemented vocabulary** |
-| sign | **Legacy implemented vocabulary** — generated green baseline/threshold sign path was removed in dev.7 |
+Current feature-like prop vocabulary includes:
 
-Gen 3 should distinguish **structural construction elements** from **Features** so columns/wall panels needed for architecture are not treated like decorative chairs/desks.
+- table
+- chair
+- cabinet
+- box
+- bench
+- book
+- stain
+- carpet-patch
+
+Current prop vocabulary that may instead become Architecture/service content includes:
+
+- divider
+- pipe
+- column
+- wall-panel
+- ceiling-gap
+- sign
+
+Do not automatically classify every legacy `PropKind` as a future Feature.
 
 ## Structures
 
 | Structure | Status | Notes |
 |---|---|---|
-| **Manila Room** | **Implemented** | One delayed seed-derived far special room embedded in baseline Level 0; rendezvous direction. It is not a Region. |
-| **Exit Threshold** | **Implemented legacy transition structure/state** | Current generator switches exit-bearing cells to `exit-threshold`; Gen 3 should model threshold architecture as a special transition/structure layer rather than ordinary geography. |
-| **Maintenance/service complexes** | **Planned** | Candidate rare structures from Issue #31, not currently canonical content. |
-| **Special stairwells/elevators** | **Planned** | Candidate rare structures from Issue #31, not currently canonical content. |
-| **Anomalous office/settlement complexes** | **Planned** | Candidate future rare structures, not currently canonical content. |
+| **Manila Room** | **Implemented** | One delayed seed-derived far special room inside baseline Level 0; not a Region. |
+| **Exit Threshold** | **Legacy implemented** | Current exit-bearing cell state; Gen 3 should model threshold architecture as a Transition/Structure. |
+| **Maintenance/service complex** | **Planned candidate** | Add only when accepted as actual content. |
+| **Special stairwell/elevator** | **Planned candidate** | Add only when accepted as actual content. |
+
+`Rare Structure` is not a separate vocabulary category. A Structure may simply be rare/unique/common.
 
 ## Carvers
 
 **None implemented as a first-class carver pass.**
 
-Current hole content is generated through explicit hole-related archetypes/components. Gen-3 planned carvers include:
+Planned examples:
 
-- floor / void carver;
-- wall-opening carver;
-- shaft carver;
-- ceiling / service-cavity carver;
-- localized degradation/damage carver.
+- floor/void carver
+- wall-opening carver
+- shaft carver
+- ceiling/service-cavity carver
+- localized damage/degradation carver
 
-When carvers land, move each from Planned to Implemented and record which Regions/fields control them.
+Current holes still come from explicit legacy archetypes/components.
 
 ## Anomalies
 
 **None implemented as a first-class anomaly registry.**
 
-Current precursor:
+Current precursor: deterministic `hallucinationAnchor` on eligible generated cells.
 
-- deterministic `hallucinationAnchor` boolean on eligible generated cells.
-
-Future anomalies should be catalogued individually when they become real player-facing phenomena. Do not classify ordinary low stability, darkness or visual damage as an Anomaly unless it actually violates expected world behaviour.
+Rule: if the phenomenon is only spatially impossible, classify it under **Non-Euclidean Geometry** instead of creating an Anomaly duplicate.
 
 ## Entities
 
 **None implemented as a routine generated world population system.**
 
-The current phase explicitly avoids routine monsters/combat loops. Add each future Entity family here when accepted.
+Routine monsters/combat remain outside the current Level 0 phase.
 
 ## Items
 
@@ -277,11 +301,9 @@ The current phase explicitly avoids routine monsters/combat loops. Add each futu
 
 ## Transitions
 
-Current exit registry foundations:
-
-| Destination | Trigger | Gate status |
+| Destination | Trigger | State |
 |---|---|---|
-| Level 1 | `gradual` | Registered + enabled when timeline/exposure gate is met |
+| Level 1 | `gradual` | Registered + enabled when gate is met |
 | Level 2 | `manila-wait` | Registered + enabled when gate is met |
 | Level 27 | `floor-breach` | Registered + enabled when gate is met |
 | Level 483 | `wall-breach` | Registered + enabled when gate is met |
@@ -293,77 +315,67 @@ Current exit registry foundations:
 | Level 0.99 | `anomalous-wall` | Registered, disabled |
 | Red Rooms | `gradual` | Registered, disabled |
 
-These are transition foundations inside Level 0, not proof that destination Levels are playable.
+---
+
+# 4. Legacy Gen-2 translation
+
+These terms remain in code/issues until Gen 3 actually replaces them. They are translation aids, not preferred design vocabulary.
+
+## Legacy `ZoneId`s
+
+`baseline`, `arch`, `pillar`, `blackout`, `holes`, `manila`, `exit-threshold`
+
+## Legacy room archetypes
+
+`open-office`, `split-suite`, `narrow-hall`, `alcove-ring`, `service-corner`, `wide-lobby`, `arch-gallery`, `arch-crossing`, `pillar-grid`, `pillar-aisle`, `maintenance-bay`, `flooded-corridor`, `hole-gallery`, `broken-floor`, `manila-room`, `transition-foyer`
+
+## Legacy spatial profiles
+
+`standard`, `sparse-vista`, `thin-channel`, `pillar-expanse`
+
+## Legacy structural components
+
+`open-void`, `offset-partition`, `cross-partition`, `thin-corridor`, `alcove-pair`, `pillar-scatter`, `pillar-lattice`, `arch-run`, `service-bank`, `divider-run`, `bench-island`, `storage-corner`, `hole-field`, `hole-rail`
+
+`alcove-pair` and `divider-run` remain accepted legacy implementation but are not the long-term ordinary-Level-0 strategy.
+
+## Legacy prop vocabulary
+
+`table`, `chair`, `cabinet`, `box`, `divider`, `pipe`, `column`, `bench`, `book`, `wall-panel`, `ceiling-gap`, `stain`, `carpet-patch`, `sign`
 
 ---
 
-# 3. Legacy Gen-2 generation inventory
-
-Keep this section until Generation 3 has actually replaced these concepts. It lets Sash and agents translate old code/issues into the new vocabulary without guessing.
-
-## Current Room Archetypes
-
-- `open-office`
-- `split-suite`
-- `narrow-hall`
-- `alcove-ring`
-- `service-corner`
-- `wide-lobby`
-- `arch-gallery`
-- `arch-crossing`
-- `pillar-grid`
-- `pillar-aisle`
-- `maintenance-bay`
-- `flooded-corridor`
-- `hole-gallery`
-- `broken-floor`
-- `manila-room`
-- `transition-foyer`
-
-**Gen-3 direction:** ordinary archetypes should increasingly become descriptive classification/diagnostics derived from fields and solved architecture. Special archetypes such as Manila/transition structures may remain explicit where appropriate.
-
-## Current structural Component IDs
-
-- `open-void`
-- `offset-partition`
-- `cross-partition`
-- `thin-corridor`
-- `alcove-pair`
-- `pillar-scatter`
-- `pillar-lattice`
-- `arch-run`
-- `service-bank`
-- `divider-run`
-- `bench-island`
-- `storage-corner`
-- `hole-field`
-- `hole-rail`
-
-**Gen-3 direction:** explicit ordinary `alcove-pair` and `divider-run` style selection should be retired from the primary base-world vocabulary as field-driven architecture replaces it. Similar shapes may emerge naturally from solved architecture.
-
----
-
-# 4. Generation 3 target hierarchy
+# 5. Generation 3 target model
 
 ```text
-Level
-  -> Region
-      -> Variant
-      -> Geometry Regime
-      -> multi-scale Fields
-          -> architectural constraint solver
-              -> continuous substrate
-                  -> Material Families + Conditions
-                  -> Carvers
-                  -> Structures
-                  -> Features
-                  -> Anomalies
-                  -> Entities
-                  -> Items
-                  -> Transitions
-
-Technical support:
-Seed -> District / coordinates -> Cells for streaming/computation -> stable IDs -> runtime mutations + save deltas
+WORLD SEED
+  -> MULTI-SCALE FIELDS                 [engine]
+  -> ARCHITECTURE + GEOMETRY SOLVER    [world]
+  -> CONTINUOUS LEVEL 0
+  -> MATERIALS + CONDITIONS
+  -> CARVERS
+  -> STRUCTURES
+  -> FEATURES
+  -> ANOMALIES / ENTITIES / ITEMS / TRANSITIONS
+  -> RUNTIME MUTATIONS + SAVE DELTAS
 ```
 
-The hierarchy is conceptual, not a demand that every system be parented exactly this way in code. The hard design rule is: **world geography and spatial laws are generated before ordinary decoration/content is layered into them.**
+Geometry is part of the world law. Current Euclidean behaviour stays unchanged until a bounded verified slice intentionally adds Non-Euclidean behaviour.
+
+Generation layers should use independent deterministic seed domains where useful so changing a stain, fixture or feature does not unnecessarily move architecture, Manila or other unrelated world facts.
+
+---
+
+# 6. How Sash can phrase requests
+
+Examples:
+
+> Add a damp **Variant** of an ordinary **Region**. Keep its **Geometry Euclidean**, use darker carpet **Materials**, stronger damp **Conditions**, sparse pipe/desk **Features**, and no new **Structures**.
+
+> Add a rare **Non-Euclidean** area to Level 0 using a deterministic **loop** behaviour, while keeping its Materials visually ordinary.
+
+> Make the Hole area emerge from stronger void conditions and a floor **Carver** instead of explicit hole-room templates.
+
+> Add a new **Structure** with one Transition to Level 1. Do not create a new Region just for that Structure.
+
+Agents may translate these requests into Fields/Cells/seed domains internally without requiring Sash to specify engine vocabulary.
