@@ -11,6 +11,9 @@ import {
 
 const PLAYER_CLEARANCE = 0.82;
 const SUPPORT_CLEARANCE = 0.24;
+const TRAVERSAL_RADIUS = 0.34;
+const TRAVERSAL_STEP = 0.45;
+const TRAVERSAL_LIMIT = CELL_SIZE / 2 - 1.35;
 const INTERIOR_LIMIT = CELL_SIZE / 2 - 1.15;
 const SUPPORT_GRID = [-4.7, -2.35, 0, 2.35, 4.7] as const;
 
@@ -70,6 +73,43 @@ function overlapsArrival(bounds: Bounds): boolean {
   return Math.hypot(nearestX, nearestZ) < PLAYER_CLEARANCE;
 }
 
+function pointBlocked(x: number, z: number, occupied: readonly Bounds[]): boolean {
+  return occupied.some((bounds) => x > bounds.minX - TRAVERSAL_RADIUS
+    && x < bounds.maxX + TRAVERSAL_RADIUS
+    && z > bounds.minZ - TRAVERSAL_RADIUS
+    && z < bounds.maxZ + TRAVERSAL_RADIUS);
+}
+
+function traversalReachabilityErrors(walls: readonly WallSpec[], props: readonly PropSpec[]): string[] {
+  const occupied = [...walls.map(wallBounds), ...props.filter((prop) => prop.solid).map(propBounds)];
+  const maxIndex = Math.floor(TRAVERSAL_LIMIT / TRAVERSAL_STEP);
+  const encode = (gx: number, gz: number): string => `${gx}:${gz}`;
+  const coordinate = (grid: number): number => grid * TRAVERSAL_STEP;
+  const start = encode(0, 0);
+  if (pointBlocked(0, 0, occupied)) return ['Pilot traversal origin is blocked'];
+  const visited = new Set<string>([start]);
+  const queue: Array<[number, number]> = [[0, 0]];
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const [gx, gz] = queue[cursor]!;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const nx = gx + dx; const nz = gz + dz;
+      if (Math.abs(nx) > maxIndex || Math.abs(nz) > maxIndex) continue;
+      const key = encode(nx, nz);
+      if (visited.has(key)) continue;
+      if (pointBlocked(coordinate(nx), coordinate(nz), occupied)) continue;
+      visited.add(key); queue.push([nx, nz]);
+    }
+  }
+  const edge = maxIndex;
+  const targets: Array<[string, number, number]> = [
+    ['north', 0, -edge],
+    ['east', edge, 0],
+    ['south', 0, edge],
+    ['west', -edge, 0]
+  ];
+  return targets.flatMap(([label, gx, gz]) => visited.has(encode(gx, gz)) ? [] : [`Pilot traversal cannot reach ${label} interior edge`]);
+}
+
 function quantize(value: number, buckets = 5): number {
   return Math.min(buckets - 1, Math.floor(Math.max(0, Math.min(0.999999, value)) * buckets));
 }
@@ -95,9 +135,7 @@ function makeWall(id: string, index: number, count: number, fields: WorldFieldSa
   const negativeLength = Math.max(0.75, extent + gapDrift - gapWidth / 2);
   const positiveLength = Math.max(0.75, extent - gapDrift - gapWidth / 2);
   const length = side < 0 ? negativeLength : positiveLength;
-  const along = side < 0
-    ? -extent + length / 2
-    : extent - length / 2;
+  const along = side < 0 ? -extent + length / 2 : extent - length / 2;
   const materialVariant = (quantize(fields.regularity) + index) % 5;
 
   if (flowNorthSouth) {
@@ -166,9 +204,7 @@ function makeSupports(ids: readonly string[], fields: WorldFieldSample, walls: r
       occupied.push(bounds);
       break;
     }
-    if (!selected) {
-      throw new Error(`Generation 3 pilot could not place compatibility support ${id}`);
-    }
+    if (!selected) throw new Error(`Generation 3 pilot could not place compatibility support ${id}`);
     retained.push(selected);
   }
   return retained;
@@ -227,21 +263,18 @@ export function validateBaselineArchitecturePilot(walls: readonly WallSpec[], pr
   const propBoundsList = props.map(propBounds);
   for (const wall of walls) {
     const bounds = wallBounds(wall);
-    if (Math.max(Math.abs(bounds.minX), Math.abs(bounds.maxX), Math.abs(bounds.minZ), Math.abs(bounds.maxZ)) > INTERIOR_LIMIT + 0.01) {
-      errors.push(`Pilot wall ${wall.id} exceeds interior bound`);
-    }
+    if (Math.max(Math.abs(bounds.minX), Math.abs(bounds.maxX), Math.abs(bounds.minZ), Math.abs(bounds.maxZ)) > INTERIOR_LIMIT + 0.01) errors.push(`Pilot wall ${wall.id} exceeds interior bound`);
     if (overlapsArrival(bounds)) errors.push(`Pilot wall ${wall.id} blocks arrival clearance`);
   }
   for (let index = 0; index < props.length; index += 1) {
     const prop = props[index]!;
     const bounds = propBoundsList[index]!;
     if (!prop.solid || prop.kind !== 'column') errors.push(`Pilot support ${prop.id} is not a solid column`);
-    if (Math.max(Math.abs(bounds.minX), Math.abs(bounds.maxX), Math.abs(bounds.minZ), Math.abs(bounds.maxZ)) > INTERIOR_LIMIT + 0.01) {
-      errors.push(`Pilot support ${prop.id} exceeds interior bound`);
-    }
+    if (Math.max(Math.abs(bounds.minX), Math.abs(bounds.maxX), Math.abs(bounds.minZ), Math.abs(bounds.maxZ)) > INTERIOR_LIMIT + 0.01) errors.push(`Pilot support ${prop.id} exceeds interior bound`);
     if (overlapsArrival(bounds)) errors.push(`Pilot support ${prop.id} blocks arrival clearance`);
     for (const wallBoundsEntry of wallBoundsList) if (overlaps(bounds, wallBoundsEntry, SUPPORT_CLEARANCE)) errors.push(`Pilot support ${prop.id} overlaps wall`);
     for (let other = index + 1; other < props.length; other += 1) if (overlaps(bounds, propBoundsList[other]!, SUPPORT_CLEARANCE)) errors.push(`Pilot support ${prop.id} overlaps support ${props[other]!.id}`);
   }
+  errors.push(...traversalReachabilityErrors(walls, props));
   return errors;
 }
