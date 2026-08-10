@@ -1,3 +1,5 @@
+import type { LightFieldSample } from '../world/lighting.js';
+
 export interface JourneyAudioLifecycleSnapshot {
   started: boolean;
   paused: boolean;
@@ -12,6 +14,10 @@ export interface AmbienceDebugState {
   graphStarts: number;
   stepStarts: number;
   impactStarts: number;
+  flickerStarts: number;
+  lightEnergy: number;
+  activeLightGroups: number;
+  flickerGroups: number;
   targetMasterGain: number;
   actualMasterGain: number;
   targetHumGain: number;
@@ -72,9 +78,15 @@ export class ProceduralAmbience {
   private targetMasterGain = 0;
   private targetHumGain: number = AMBIENCE_TUNING.normalHumGain;
   private lastStep = 0;
+  private lastFlickerPulse = 0;
+  private suppressNextFlicker = true;
+  private lightEnergy = 0;
+  private activeLightGroups = 0;
+  private flickerGroups = 0;
   private graphStarts = 0;
   private stepStarts = 0;
   private impactStarts = 0;
+  private flickerStarts = 0;
 
   async start(volume: number): Promise<void> {
     this.baseVolume = Math.max(0, Math.min(1, volume));
@@ -128,7 +140,11 @@ export class ProceduralAmbience {
   setActive(active: boolean): void {
     const changed = this.active !== active;
     this.active = active;
-    if (changed && this.context) this.lastStep = this.context.currentTime;
+    if (changed) {
+      this.suppressNextFlicker = true;
+      this.lastFlickerPulse = 0;
+      if (this.context) this.lastStep = this.context.currentTime;
+    }
     this.applyMasterGain();
     if (active) void this.ensureContextRunning();
     this.publishDebugState();
@@ -143,6 +159,28 @@ export class ProceduralAmbience {
     if (this.humGain && this.context) {
       this.humGain.gain.setTargetAtTime(this.targetHumGain, this.context.currentTime, AMBIENCE_TUNING.zoneTimeConstant);
     }
+    this.publishDebugState();
+  }
+
+  setLightField(field: LightFieldSample): void {
+    this.lightEnergy = Math.max(0, Math.min(1, field.energy));
+    this.activeLightGroups = field.activeGroups;
+    this.flickerGroups = field.flickerGroups;
+    this.targetHumGain = Math.pow(this.lightEnergy, 0.72) * AMBIENCE_TUNING.normalHumGain;
+
+    if (this.context && this.humGain) {
+      const now = this.context.currentTime;
+      this.humGain.gain.setTargetAtTime(this.targetHumGain, now, AMBIENCE_TUNING.zoneTimeConstant);
+      if (this.hum) this.hum.frequency.setTargetAtTime(59.7 + (field.temperature - 0.94) * 3, now, 0.8);
+    }
+
+    const pulse = Math.max(0, Math.min(1, field.flickerPulse));
+    if (this.suppressNextFlicker) {
+      this.suppressNextFlicker = false;
+    } else if (this.active && pulse > 0.18 && this.lastFlickerPulse <= 0.18) {
+      this.flickerSnap(pulse);
+    }
+    this.lastFlickerPulse = pulse;
     this.publishDebugState();
   }
 
@@ -190,6 +228,10 @@ export class ProceduralAmbience {
       graphStarts: this.graphStarts,
       stepStarts: this.stepStarts,
       impactStarts: this.impactStarts,
+      flickerStarts: this.flickerStarts,
+      lightEnergy: this.lightEnergy,
+      activeLightGroups: this.activeLightGroups,
+      flickerGroups: this.flickerGroups,
       targetMasterGain: this.targetMasterGain,
       actualMasterGain: this.master?.gain.value ?? 0,
       targetHumGain: this.targetHumGain,
@@ -198,6 +240,22 @@ export class ProceduralAmbience {
       masterScale: AMBIENCE_TUNING.masterScale,
       normalHumGain: AMBIENCE_TUNING.normalHumGain
     };
+  }
+
+  private flickerSnap(intensity: number): void {
+    if (!this.context || !this.master || this.context.state !== 'running') return;
+    const now = this.context.currentTime;
+    const oscillator = this.context.createOscillator();
+    const gain = this.context.createGain();
+    oscillator.type = 'triangle';
+    oscillator.frequency.setValueAtTime(120 + intensity * 70, now);
+    oscillator.frequency.exponentialRampToValueAtTime(70, now + 0.045);
+    gain.gain.setValueAtTime(0.0015 + intensity * 0.0025, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.055);
+    oscillator.connect(gain).connect(this.master);
+    oscillator.start(now);
+    oscillator.stop(now + 0.06);
+    this.flickerStarts += 1;
   }
 
   private installLifecycleObservers(): void {

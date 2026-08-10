@@ -16,6 +16,11 @@ let placementErrors = 0;
 let ordinaryCells = 0;
 let emptyOrdinaryCells = 0;
 let optionalSceneryProps = 0;
+let lightGroups = 0;
+let lightFixtures = 0;
+let maxLightGroupsPerCell = 0;
+let maxLightFixturesPerCell = 0;
+const lightStates = { on: 0, off: 0, flicker: 0 };
 const placementSamples = [];
 const archetypes = new Set();
 const cells = 10000;
@@ -27,6 +32,12 @@ for (let x = -50; x < 50; x += 1) {
     props += cell.props.length;
     notes += cell.notes.length;
     loot += cell.lootNodes.filter((node) => node.spawnedDefinitionId).length;
+    const cellFixtures = cell.lightGroups.reduce((sum, group) => sum + group.fixtures.length, 0);
+    lightGroups += cell.lightGroups.length;
+    lightFixtures += cellFixtures;
+    maxLightGroupsPerCell = Math.max(maxLightGroupsPerCell, cell.lightGroups.length);
+    maxLightFixturesPerCell = Math.max(maxLightFixturesPerCell, cellFixtures);
+    for (const group of cell.lightGroups) lightStates[group.state] += 1;
     archetypes.add(cell.roomArchetype);
     if (cell.roomArchetype !== 'manila-room' && cell.roomArchetype !== 'transition-foyer') {
       const optional = cell.props.filter((prop) => !isEssentialSceneryProp(cell.roomArchetype, prop));
@@ -57,6 +68,11 @@ console.log(JSON.stringify({
   emptyOrdinaryCells,
   emptyOrdinaryRate: Number((emptyOrdinaryCells / Math.max(1, ordinaryCells)).toFixed(4)),
   optionalSceneryProps,
+  lightGroups,
+  lightFixtures,
+  lightStates,
+  maxLightGroupsPerCell,
+  maxLightFixturesPerCell,
   archetypes: [...archetypes].sort(),
   connectorErrors: connectorErrors.length,
   placementErrors,

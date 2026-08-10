@@ -1,6 +1,7 @@
 import * as pc from 'playcanvas';
 import type { DroppedItemState, SaveData, SurfaceMark } from '../persistence/types.js';
 import { resolveCircleAgainstAabbs } from '../physics/collision.js';
+import { sampleLightField, type LightFieldSample } from '../world/lighting.js';
 import { CELL_SIZE, type CellDescriptor, type FloorPatchSpec } from '../world/types.js';
 import { ZONE_PROFILES } from '../world/zones.js';
 import { registerObjectCatalogShowcaseHost, type ObjectCatalogEntry } from './objectCatalog.js';
@@ -27,6 +28,8 @@ export class WorldRenderer {
   get wallCount(): number { return this.walls.size; }
   get interactionCount(): number { return this.interactions.size; }
   get labObjectCount(): number { return this.labShowcaseCount; }
+  get lightGroupCount(): number { return [...this.loaded.values()].reduce((sum, visual) => sum + visual.descriptor.lightGroups.length, 0); }
+  get lightFixtureCount(): number { return [...this.loaded.values()].reduce((sum, visual) => sum + visual.descriptor.lightGroups.reduce((groupSum, group) => groupSum + group.fixtures.length, 0), 0); }
 
   private texture(kind: TextureKind, variant = 0): pc.Texture {
     const key = `${kind}:${variant}`;
@@ -60,6 +63,7 @@ export class WorldRenderer {
   loadCell(descriptor: CellDescriptor): void {
     if (this.loaded.has(descriptor.id)) return;
     const visual = this.cellBuilder.buildCell(descriptor);
+    this.replaceFixtureLighting(visual);
     if (descriptor.floorPatches.some((patch) => patch.kind === 'hole')) this.replaceHoleFloor(visual);
     this.loaded.set(descriptor.id, visual);
     this.renderMarksForCell(descriptor.id);
@@ -135,6 +139,31 @@ export class WorldRenderer {
     return entries.length;
   }
 
+  private replaceFixtureLighting(visual: CellVisual): void {
+    const descriptor = visual.descriptor;
+    const rootNode = visual.root as pc.Entity & { children?: pc.Entity[] };
+    for (const child of [...(rootNode.children ?? [])]) {
+      const name = (child as pc.Entity & { name?: string }).name;
+      if (name?.startsWith('fixture:')) child.destroy();
+    }
+    const profile = ZONE_PROFILES[descriptor.address.zoneId];
+    for (const group of descriptor.lightGroups) {
+      const active = group.state !== 'off';
+      const fixtureMat = this.getMaterial(
+        `fixture:${profile.id}:${group.state}`,
+        active ? [0.69, 0.68, 0.53] : [0.28, 0.28, 0.23],
+        undefined,
+        0,
+        [1, 1],
+        active ? [0.84, 0.82, 0.61] : [0.01, 0.01, 0.008],
+        active ? (group.state === 'flicker' ? 0.78 : 1.12) * profile.lightMultiplier : 0.02
+      );
+      group.fixtures.forEach((fixture, index) => {
+        this.box(`${group.id}:fixture:${index}`, visual.root, [fixture.x, fixture.y, fixture.z], [2.2, 0.08, 0.38], fixtureMat, group.rotationY);
+      });
+    }
+  }
+
   private replaceHoleFloor(visual: CellVisual): void {
     const descriptor = visual.descriptor;
     const holes = descriptor.floorPatches.filter((patch) => patch.kind === 'hole');
@@ -202,6 +231,20 @@ export class WorldRenderer {
     this.labShowcaseRoot?.destroy();
     this.labShowcaseRoot = undefined;
     this.labShowcaseCount = 0;
+  }
+
+  updateLightField(playerX: number, playerZ: number, elapsedSeconds: number, reducedFlicker: boolean): LightFieldSample {
+    return sampleLightField(
+      [...this.loaded.values()].flatMap((visual) => visual.descriptor.lightGroups.map((group) => ({
+        cellX: visual.descriptor.address.cellX,
+        cellZ: visual.descriptor.address.cellZ,
+        group
+      }))),
+      playerX,
+      playerZ,
+      elapsedSeconds,
+      reducedFlicker
+    );
   }
 
   updateDynamicItems(now: number): void {

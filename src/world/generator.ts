@@ -2,6 +2,7 @@ import { ITEM_DEFINITIONS, type ItemDefinitionId } from '../items/definitions.js
 import { exitsForCell } from './exits.js';
 import { intInRange, stableId, unitFloat, weightedChoice } from './hash.js';
 import { boundaryWallParts, chooseArchetype, layoutFor } from './layouts.js';
+import { generateLightGroups, validateLightClearance } from './lighting.js';
 import { makeNote } from './notes.js';
 import { chooseZone, districtId, ZONE_PROFILES } from './zones.js';
 import {
@@ -9,7 +10,6 @@ import {
   DOOR_WIDTH,
   WALL_HEIGHT,
   WALL_THICKNESS,
-  addressId,
   cellId,
   type CellDescriptor,
   type Direction,
@@ -276,6 +276,21 @@ export function generateCell(options: GenerateCellOptions): CellDescriptor {
   const filteredProps = filterOptionalScenery(seed, x, z, archetype, walls, archClearedProps);
   const arrivalSafe = reserveOriginArrival(x, z, walls, filteredProps);
   const noteSpecs = [...layout.notes, ...maybeNotes(seed, x, z, archetype)];
+  const ceilingPattern = intInRange(`${seed}:ceiling:${x}:${z}`, 0, 4);
+  const lightGroups = generateLightGroups({
+    seed,
+    x,
+    z,
+    shiftEpoch,
+    zoneId,
+    roomArchetype: archetype,
+    ceilingPattern,
+    walls: arrivalSafe.walls,
+    props: arrivalSafe.props
+  });
+  const lightTemperature = lightGroups.length > 0
+    ? lightGroups.reduce((sum, group) => sum + group.temperature, 0) / lightGroups.length
+    : 0.94;
 
   return {
     id: cellId(x, z),
@@ -291,9 +306,10 @@ export function generateCell(options: GenerateCellOptions): CellDescriptor {
     notes: noteSpecs,
     lootNodes: zoneId === 'manila' ? [] : lootForCell(seed, x, z, tuning.lootChance, archetype, arrivalSafe.walls, arrivalSafe.props),
     exits,
-    lightFailure: zoneId === 'blackout' || unitFloat(`${addressId(address)}:light`) < 0.045,
-    lightTemperature: 0.82 + unitFloat(`${addressId(address)}:temperature`) * 0.24,
-    ceilingPattern: intInRange(`${seed}:ceiling:${x}:${z}`, 0, 4),
+    lightGroups,
+    lightFailure: lightGroups.length === 0 || lightGroups.every((group) => group.state === 'off'),
+    lightTemperature,
+    ceilingPattern,
     hallucinationAnchor: profile.stability === 'disorienting' && unitFloat(`${seed}:hallucination:${x}:${z}`) < 0.032
   };
 }
@@ -316,7 +332,7 @@ export function validateSceneryPlacement(cell: CellDescriptor): string[] {
 }
 
 export function validateCellPlacement(cell: CellDescriptor): string[] {
-  const errors: string[] = [...validateSceneryPlacement(cell)];
+  const errors: string[] = [...validateSceneryPlacement(cell), ...validateLightClearance(cell.lightGroups, cell.walls, cell.props)];
   const occupied = solidBounds(cell.walls, cell.props);
   if (cell.address.cellX === 0 && cell.address.cellZ === 0) {
     for (const bounds of occupied) {
