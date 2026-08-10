@@ -7,7 +7,7 @@ For routine work, read only what is needed to orient accurately:
 1. `PROJECT.md`
 2. `STATUS.md`
 3. Relevant open issues and recent pull requests
-4. `WORLD.md` when work touches world generation, Levels, Regions, Variants, geometry/topology, materials, conditions, features, structures, carvers, anomalies, entities, items, transitions, or world terminology
+4. `WORLD.md` when work touches world generation, Levels, Regions, Variants, Geometry, Materials, Conditions, Features, Structures, Carvers, Anomalies, Entities, Items, Transitions, or world terminology
 5. `docs/VISION.md` when product direction or world-law interpretation matters
 6. Relevant shared playbook in `xash-mind/project-operations`
 7. Applicable Shared Engineering Standards sections; use the Run Checklist at completion
@@ -27,6 +27,20 @@ Do not reread unrelated historical snapshots, all docs, or unrelated shared gove
 - Preserve deterministic district planning, stable IDs, persistence compatibility, timeline gates, ordinary player isolation, and the Manila Room rendezvous direction.
 - Generation 3 target direction is field-driven continuous world generation: world geography/spatial laws first, ordinary content second. Treat GitHub Issue #31 and `WORLD.md` as the current architecture/vocabulary references when relevant.
 - A `Cell` is a streaming/computation unit, never a synonym for a room.
+
+## Vocabulary discipline
+
+Prefer the simple design vocabulary in `WORLD.md`:
+
+- `Level`, `Region`, `Variant`, `Geometry`, `Material`, `Condition`, `Feature`, `Structure`, `Carver`, `Anomaly`, `Entity`, `Item`, `Transition`.
+- `Geometry` has only two canonical values: `Euclidean` and `Non-Euclidean`. Do not create a third `Distorted` geometry category; use a named Non-Euclidean behaviour when space itself is impossible.
+- Use `Region` rather than inventing parallel human-facing terms such as environment regime/class.
+- Use `Material` rather than `Material Family` in ordinary product language.
+- Use `Condition` rather than separate object-state/fixture-state world categories.
+- `Rare` is a Structure property, not a separate Structure category.
+- Pure spatial impossibility belongs under Non-Euclidean Geometry, not a duplicate Anomaly classification.
+
+Treat `Field`, `Cell`, `District`, seed domains, room archetypes, spatial profiles, components and props as engine/legacy vocabulary unless implementation detail is specifically needed.
 
 ## Explicit non-goals for the current phase
 
@@ -65,13 +79,13 @@ Node.js `>=22.12.0` is required.
 
 ## World-catalog maintenance
 
-When accepted work adds, removes, renames, reclassifies, or materially changes a Level, Region, Variant, Geometry Regime, Field, Material Family, Condition, Feature, Structure, Carver, Anomaly, Entity, Item, Transition, District/Cell semantics, or legacy worldgen category:
+When accepted work adds, removes, renames, reclassifies, or materially changes a Level, Region, Variant, Geometry, Material, Condition, Feature, Structure, Carver, Anomaly, Entity, Item, Transition, or related engine/legacy worldgen concept:
 
 - update `WORLD.md` in the same pull request;
 - preserve explicit status (`Implemented`, `Registered`, `Legacy`, `Planned`, or `None implemented`);
 - never claim a registered exit destination is a playable Level;
-- never silently relabel legacy `ZoneId`/archetype/component implementation as completed Gen-3 Regions/Variants/fields;
-- keep empty categories visible when their absence is useful orientation;
+- never silently relabel legacy `ZoneId`/archetype/component implementation as completed Gen-3 Regions/Variants/Fields;
+- keep useful empty categories visible when their absence matters;
 - mirror material catalog changes to the mapped Project Noclip Notion page during the normal final Notion sync.
 
 ## Required verification
