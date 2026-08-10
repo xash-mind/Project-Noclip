@@ -22,7 +22,7 @@ Rules:
 
 | Status | Meaning |
 |---|---|
-| **Implemented** | Exists in the accepted playable/runtime build. |
+| **Implemented** | Exists in the accepted playable/runtime build or accepted engine/tooling framework where explicitly stated. |
 | **Registered** | Exists in data/transition registries but is not playable content yet. |
 | **Legacy** | Exists in the current Gen-2 implementation but is intended to be replaced/reclassified by Gen 3. |
 | **Planned** | Accepted direction, not implemented runtime behaviour yet. |
@@ -104,14 +104,14 @@ These terms remain important to agents/code, but Sash does not need to use them 
 
 | Engine term | Meaning | Current state |
 |---|---|---|
-| **Field** | Smooth deterministic value sampled from seed/coordinates that drives generation. | Gen-3 framework planned; candidate fields are listed below. |
+| **Field** | Smooth deterministic value sampled from seed/world coordinates that can drive generation. | **Implemented framework.** `src/world/fields.ts` samples all canonical Gen-3 Fields continuously; current Gen-2 generation does **not** consume them yet. |
 | **Cell** | Streaming/computation unit. | Implemented. **Never a room.** |
 | **District** | Coarse deterministic planning grouping. | Current generator groups cells into 5×5 districts for legacy zone selection. |
-| **Seed domain** | Independent deterministic hash namespace for a generation layer. | Direction in Issue #31; used to prevent unrelated tuning from moving unrelated world facts. |
+| **Seed domain** | Independent deterministic namespace for a generation layer. | **Implemented for the Field sampler**; broader layer-by-layer separation remains Generation 3 direction. |
 
-### Candidate Gen-3 fields
+### Implemented Gen-3 Field framework
 
-No canonical continuous Gen-3 field framework is implemented yet. Current proposed inputs:
+The accepted Slice-A framework exposes these deterministic scalar Fields:
 
 - `openness`
 - `partitionPressure`
@@ -129,7 +129,23 @@ No canonical continuous Gen-3 field framework is implemented yet. Current propos
 - `clutterPressure`
 - `electricalReliability`
 
-These are implementation controls. Human-facing output should usually be discussed as Regions, Geometry, Materials, Conditions, Features, Structures, etc.
+Framework laws:
+
+- sampling uses **world-space metres**, not Cell-local coordinates;
+- each Field combines **168 m, 56 m and 21 m** deterministic scales so geography exists at multiple distances;
+- interpolation is continuous across Cell boundaries;
+- values are bounded to `0..1`;
+- deterministic domains are separated from current generator hashes and from one another;
+- current Geometry metadata is **Euclidean** only;
+- these values are **diagnostic/read-only in Slice A** and therefore do not alter legacy zone/layout/connector output yet.
+
+Developer diagnostics:
+
+```text
+npm run fields:lab -- [seed] [worldX] [worldZ]
+```
+
+The normal 10,000-cell benchmark also reports a separate 10,000-sample Field timing/range/Cell-boundary continuity section. Human-facing output should still usually be discussed as Regions, Geometry, Materials, Conditions, Features, Structures, etc.
 
 ---
 
@@ -171,11 +187,11 @@ The accepted runtime still uses legacy `ZoneId`s as the nearest region-like impl
 
 | Legacy ID | Human label | Status | Gen-3 direction |
 |---|---|---|---|
-| `baseline` | Baseline Lobby / ordinary Level 0 | **Legacy implemented** | Ordinary Level 0 should emerge from stable field conditions. |
+| `baseline` | Baseline Lobby / ordinary Level 0 | **Legacy implemented** | Ordinary Level 0 should emerge from stable Field conditions. |
 | `arch` | Arch Rooms | **Legacy implemented** | Reclassify only if a coherent Region still exists after field-driven architecture lands. |
 | `pillar` | Pillar Field | **Legacy implemented** | Reclassify only if pillar-heavy geography deserves a stable Region label. |
-| `blackout` | Blackout Zone | **Legacy implemented** | Likely represented mainly through Conditions/fields rather than a hard zone. |
-| `holes` | Hole Section | **Legacy implemented** | Future void/carver pressure should generate this effect over ordinary Level 0. |
+| `blackout` | Blackout Zone | **Legacy implemented** | Likely represented mainly through Conditions/Fields rather than a hard zone. |
+| `holes` | Hole Section | **Legacy implemented** | Future void/Carver pressure should generate this effect over ordinary Level 0. |
 | `exit-threshold` | Exit Threshold | **Legacy implemented** | Better modeled as a Transition/Structure than ordinary geography. |
 | `manila` | Manila compatibility profile | **Legacy compatibility only** | **Not a Region.** Manila is a Structure. |
 
@@ -196,7 +212,7 @@ Current legacy spatial profiles are implementation metadata, not canonical Varia
 
 | Geometry | Status | Meaning |
 |---|---|---|
-| **Euclidean** | **Implemented baseline law** | Current playable topology/connectivity law. |
+| **Euclidean** | **Implemented baseline law** | Current playable topology/connectivity law and the only Geometry emitted by the Slice-A Field framework. |
 | **Non-Euclidean** | **Planned Gen 3** | Deterministic impossible spatial relationships. Exact player-facing behaviours must be intentionally designed and verified. |
 
 There is no separate `Distorted` Geometry.
@@ -349,7 +365,7 @@ These terms remain in code/issues until Gen 3 actually replaces them. They are t
 
 ```text
 WORLD SEED
-  -> MULTI-SCALE FIELDS                 [engine]
+  -> MULTI-SCALE FIELDS                 [engine]  <- Slice A framework implemented; not driving generation yet
   -> ARCHITECTURE + GEOMETRY SOLVER    [world]
   -> CONTINUOUS LEVEL 0
   -> MATERIALS + CONDITIONS
@@ -362,7 +378,7 @@ WORLD SEED
 
 Geometry is part of the world law. Current Euclidean behaviour stays unchanged until a bounded verified slice intentionally adds Non-Euclidean behaviour.
 
-Generation layers should use independent deterministic seed domains where useful so changing a stain, fixture or feature does not unnecessarily move architecture, Manila or other unrelated world facts.
+Generation layers should use independent deterministic seed domains where useful so changing a stain, fixture or feature does not unnecessarily move architecture, Manila or other unrelated world facts. Slice A establishes this rule for the Field framework; later slices should extend it deliberately rather than sharing one accidental RNG stream.
 
 ---
 
