@@ -45,6 +45,22 @@ export type PropKind = typeof PROP_KINDS[number];
 export const FLOOR_PATCH_KINDS = ['damp', 'worn', 'dark', 'dry', 'hole'] as const;
 export type FloorPatchKind = typeof FLOOR_PATCH_KINDS[number];
 export type LightState = 'on' | 'off' | 'flicker';
+export type SpatialProfile = 'standard' | 'sparse-vista' | 'thin-channel' | 'pillar-expanse';
+export type RoomComponentId =
+  | 'open-void'
+  | 'offset-partition'
+  | 'cross-partition'
+  | 'thin-corridor'
+  | 'alcove-pair'
+  | 'pillar-scatter'
+  | 'pillar-lattice'
+  | 'arch-run'
+  | 'service-bank'
+  | 'divider-run'
+  | 'bench-island'
+  | 'storage-corner'
+  | 'hole-field'
+  | 'hole-rail';
 
 export interface WorldAddress {
   worldSeed: string;
@@ -145,6 +161,9 @@ export interface CellDescriptor {
   variant: number;
   roomArchetype: RoomArchetype;
   roomLabel: string;
+  spatialProfile: SpatialProfile;
+  componentIds: RoomComponentId[];
+  compositionSignature: string;
   walls: WallSpec[];
   props: PropSpec[];
   floorPatches: FloorPatchSpec[];
