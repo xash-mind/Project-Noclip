@@ -13,14 +13,14 @@ The world—not a routine monster—is the main antagonist. Architecture changes
 - **Consistent laws:** mystery comes from hidden rules, not arbitrary randomness.
 - **Objects create relationships:** players find different objects, enabling future trade and cooperation.
 - **Rare presence:** ordinary Level 0 isolates; the Manila Room is a future rendezvous exception.
-- **Time changes access:** World Day and Exposure Day gate regions, exits and events.
+- **Time changes access:** World Day and Exposure Day gate Regions, Transitions and events.
 - **Renderer independence:** canonical world generation and state remain pure TypeScript data where practical.
 - **Progressive fidelity:** richer materials and silhouettes matter, but never at the cost of world scale or stable performance.
-- **Spatial law is content:** Euclidean, distorted and eventually non-Euclidean geography should be deterministic world rules rather than one-off visual tricks.
+- **Spatial law is content:** Geometry is **Euclidean or Non-Euclidean**. Non-Euclidean areas must follow deterministic, learnable world rules rather than one-off visual tricks.
 
 ## Current durable lesson
 
-Cell-by-cell random variation and recognizable room-module selection can create technical infinity while remaining perceptually repetitive. Project Noclip therefore moves toward **Generation 3**: generate continuous multi-scale world conditions first, solve traversable architecture second, then layer materials, conditions, carvers, rare structures, features, anomalies, entities, items and transitions.
+Cell-by-cell random variation and recognizable room-module selection can create technical infinity while remaining perceptually repetitive. Project Noclip therefore moves toward **Generation 3**: generate continuous multi-scale world conditions first, solve traversable architecture and Geometry second, then layer Materials, Conditions, Carvers, Structures, Features, Anomalies, Entities, Items and Transitions.
 
 A `Cell` is only a streaming/computation unit. Player-visible architecture should be capable of crossing cell boundaries without exposing the grid.
 
