@@ -83,11 +83,11 @@ function pointBlocked(x: number, z: number, occupied: readonly Bounds[]): boolea
 function traversalReachabilityErrors(walls: readonly WallSpec[], props: readonly PropSpec[]): string[] {
   const occupied = [...walls.map(wallBounds), ...props.filter((prop) => prop.solid).map(propBounds)];
   const maxIndex = Math.floor(TRAVERSAL_LIMIT / TRAVERSAL_STEP);
+  const bandIndex = Math.floor(maxIndex * 0.72);
   const encode = (gx: number, gz: number): string => `${gx}:${gz}`;
   const coordinate = (grid: number): number => grid * TRAVERSAL_STEP;
-  const start = encode(0, 0);
   if (pointBlocked(0, 0, occupied)) return ['Pilot traversal origin is blocked'];
-  const visited = new Set<string>([start]);
+  const visited = new Set<string>([encode(0, 0)]);
   const queue: Array<[number, number]> = [[0, 0]];
   for (let cursor = 0; cursor < queue.length; cursor += 1) {
     const [gx, gz] = queue[cursor]!;
@@ -100,14 +100,15 @@ function traversalReachabilityErrors(walls: readonly WallSpec[], props: readonly
       visited.add(key); queue.push([nx, nz]);
     }
   }
-  const edge = maxIndex;
-  const targets: Array<[string, number, number]> = [
-    ['north', 0, -edge],
-    ['east', edge, 0],
-    ['south', 0, edge],
-    ['west', -edge, 0]
+  const anyReachable = (points: Array<[number, number]>): boolean => points.some(([gx, gz]) => visited.has(encode(gx, gz)));
+  const lateral = Array.from({ length: bandIndex * 2 + 1 }, (_, index) => index - bandIndex);
+  const targets: Array<[string, Array<[number, number]>]> = [
+    ['north', lateral.map((gx) => [gx, -maxIndex])],
+    ['east', lateral.map((gz) => [maxIndex, gz])],
+    ['south', lateral.map((gx) => [gx, maxIndex])],
+    ['west', lateral.map((gz) => [-maxIndex, gz])]
   ];
-  return targets.flatMap(([label, gx, gz]) => visited.has(encode(gx, gz)) ? [] : [`Pilot traversal cannot reach ${label} interior edge`]);
+  return targets.flatMap(([label, points]) => anyReachable(points) ? [] : [`Pilot traversal cannot reach ${label} interior edge band`]);
 }
 
 function quantize(value: number, buckets = 5): number {
@@ -125,13 +126,13 @@ function makeWall(id: string, index: number, count: number, fields: WorldFieldSa
   const partitionIndex = Math.floor(index / 2);
   const side = index % 2 === 0 ? -1 : 1;
   const pairCount = Math.max(1, Math.ceil(count / 2));
-  const spacing = 2.15 + fields.roomScale * 1.7;
+  const spacing = 2.05 + fields.roomScale * 1.45 + fields.partitionPressure * 0.45;
   const offsetMagnitude = pairCount === 1
     ? (fields.regularity - 0.5) * 1.8
     : (partitionIndex - (pairCount - 1) / 2) * spacing;
-  const gapWidth = 2.75 + fields.connectivityPressure * 1.25 + fields.openness * 0.65;
+  const gapWidth = 3.05 + fields.connectivityPressure * 1.05 + fields.openness * 0.62 - fields.partitionPressure * 0.32;
   const gapDrift = (fields.regularity - 0.5) * 1.45;
-  const extent = 5.45 - fields.openness * 0.42;
+  const extent = 5.18 + fields.partitionPressure * 0.26 - fields.openness * 0.24;
   const negativeLength = Math.max(0.75, extent + gapDrift - gapWidth / 2);
   const positiveLength = Math.max(0.75, extent - gapDrift - gapWidth / 2);
   const length = side < 0 ? negativeLength : positiveLength;
