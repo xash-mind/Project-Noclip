@@ -13,7 +13,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node scripts/test.mjs",
     "check": "npm run typecheck && npm test && npm run benchmark && npm run build",
-    "benchmark": "node scripts/benchmark.mjs"
+    "benchmark": "node scripts/benchmark.mjs",
+    "fields:lab": "node scripts/field-lab.mjs"
   },
   "dependencies": { "playcanvas": "2.21.3" },
   "devDependencies": { "typescript": "^5.8.3", "vite": "^7.1.0" },
