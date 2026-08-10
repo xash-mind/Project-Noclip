@@ -104,7 +104,7 @@ These terms remain important to agents/code, but Sash does not need to use them 
 
 | Engine term | Meaning | Current state |
 |---|---|---|
-| **Field** | Smooth deterministic value sampled from seed/world coordinates that can drive generation. | **Implemented framework.** `src/world/fields.ts` samples all canonical Gen-3 Fields continuously; current Gen-2 generation does **not** consume them yet. |
+| **Field** | Smooth deterministic value sampled from seed/world coordinates that can drive generation. | **Implemented and partially consumed.** `src/world/fields.ts` samples all canonical Gen-3 Fields continuously; the bounded baseline `open-office` architecture pilot now consumes structural Fields while most Level 0 generation remains legacy. |
 | **Cell** | Streaming/computation unit. | Implemented. **Never a room.** |
 | **District** | Coarse deterministic planning grouping. | Current generator groups cells into 5×5 districts for legacy zone selection. |
 | **Seed domain** | Independent deterministic namespace for a generation layer. | **Implemented for the Field sampler**; broader layer-by-layer separation remains Generation 3 direction. |
@@ -137,7 +137,21 @@ Framework laws:
 - values are bounded to `0..1`;
 - deterministic domains are separated from current generator hashes and from one another;
 - current Geometry metadata is **Euclidean** only;
-- these values are **diagnostic/read-only in Slice A** and therefore do not alter legacy zone/layout/connector output yet.
+- Slice B consumes structural Fields only on the bounded ordinary baseline `open-office` pilot; other ordinary paths remain on accepted legacy generation until later migrations.
+
+### Implemented Gen-3 architecture pilot
+
+One bounded ordinary-Level-0 path now uses `src/world/architecture.ts` instead of emitting recognizable Gen-2 structural modules:
+
+- scope: legacy `baseline` cells classified as `open-office`;
+- `axisFlow`, `openness`, `partitionPressure`, `roomScale`, `columnPressure`, `regularity` and `connectivityPressure` solve internal partitions/supports;
+- Cell boundary openings remain the existing deterministic Euclidean connector law;
+- legacy `open-office` remains migration metadata, not proof that the new geometry is still room-template driven;
+- emitted pilot `componentIds` are empty and its composition signature is Field-derived;
+- legacy markable/collidable wall and solid-prop IDs are reused as compatibility identity slots so existing saved marker evidence remains addressable without a save-schema migration;
+- non-structural legacy module decoration is not emitted on the pilot path;
+- a coarse player-radius reachability validator requires the centre to reach all four interior edge bands;
+- cross-Cell architectural continuity is **not** solved yet and remains the next Generation 3 migration boundary.
 
 Developer diagnostics:
 
@@ -145,7 +159,7 @@ Developer diagnostics:
 npm run fields:lab -- [seed] [worldX] [worldZ]
 ```
 
-The normal 10,000-cell benchmark also reports a separate 10,000-sample Field timing/range/Cell-boundary continuity section. Human-facing output should still usually be discussed as Regions, Geometry, Materials, Conditions, Features, Structures, etc.
+The normal 10,000-cell benchmark also reports a separate 10,000-sample Field timing/range/Cell-boundary continuity section plus bounded architecture-pilot coverage/validation. Human-facing output should still usually be discussed as Regions, Geometry, Materials, Conditions, Features, Structures, etc.
 
 ---
 
@@ -187,7 +201,7 @@ The accepted runtime still uses legacy `ZoneId`s as the nearest region-like impl
 
 | Legacy ID | Human label | Status | Gen-3 direction |
 |---|---|---|---|
-| `baseline` | Baseline Lobby / ordinary Level 0 | **Legacy implemented** | Ordinary Level 0 should emerge from stable Field conditions. |
+| `baseline` | Baseline Lobby / ordinary Level 0 | **Legacy with bounded Gen-3 pilot** | Baseline `open-office` geometry is now Field-solved; broader ordinary Level 0 should continue migrating away from hard room templates. |
 | `arch` | Arch Rooms | **Legacy implemented** | Reclassify only if a coherent Region still exists after field-driven architecture lands. |
 | `pillar` | Pillar Field | **Legacy implemented** | Reclassify only if pillar-heavy geography deserves a stable Region label. |
 | `blackout` | Blackout Zone | **Legacy implemented** | Likely represented mainly through Conditions/Fields rather than a hard zone. |
@@ -212,7 +226,7 @@ Current legacy spatial profiles are implementation metadata, not canonical Varia
 
 | Geometry | Status | Meaning |
 |---|---|---|
-| **Euclidean** | **Implemented baseline law** | Current playable topology/connectivity law and the only Geometry emitted by the Slice-A Field framework. |
+| **Euclidean** | **Implemented baseline law** | Current playable topology/connectivity law and the only Geometry used by the Field framework and bounded architecture pilot. |
 | **Non-Euclidean** | **Planned Gen 3** | Deterministic impossible spatial relationships. Exact player-facing behaviours must be intentionally designed and verified. |
 
 There is no separate `Distorted` Geometry.
@@ -345,6 +359,8 @@ These terms remain in code/issues until Gen 3 actually replaces them. They are t
 
 `open-office`, `split-suite`, `narrow-hall`, `alcove-ring`, `service-corner`, `wide-lobby`, `arch-gallery`, `arch-crossing`, `pillar-grid`, `pillar-aisle`, `maintenance-bay`, `flooded-corridor`, `hole-gallery`, `broken-floor`, `manila-room`, `transition-foyer`
 
+`open-office` remains a legacy classifier/migration label, but baseline `open-office` internal geometry is now Field-solved by the bounded Slice-B pilot instead of being emitted from its Gen-2 structural modules.
+
 ## Legacy spatial profiles
 
 `standard`, `sparse-vista`, `thin-channel`, `pillar-expanse`
@@ -353,7 +369,7 @@ These terms remain in code/issues until Gen 3 actually replaces them. They are t
 
 `open-void`, `offset-partition`, `cross-partition`, `thin-corridor`, `alcove-pair`, `pillar-scatter`, `pillar-lattice`, `arch-run`, `service-bank`, `divider-run`, `bench-island`, `storage-corner`, `hole-field`, `hole-rail`
 
-`alcove-pair` and `divider-run` remain accepted legacy implementation but are not the long-term ordinary-Level-0 strategy.
+`alcove-pair` and `divider-run` remain accepted legacy implementation on non-pilot paths but are not emitted as ordinary structural modules by the baseline `open-office` pilot.
 
 ## Legacy prop vocabulary
 
@@ -365,9 +381,9 @@ These terms remain in code/issues until Gen 3 actually replaces them. They are t
 
 ```text
 WORLD SEED
-  -> MULTI-SCALE FIELDS                 [engine]  <- Slice A framework implemented; not driving generation yet
-  -> ARCHITECTURE + GEOMETRY SOLVER    [world]
-  -> CONTINUOUS LEVEL 0
+  -> MULTI-SCALE FIELDS                 [engine]  <- Slice A framework implemented; Slice B pilot consumes structural Fields
+  -> ARCHITECTURE + GEOMETRY SOLVER    [world]   <- bounded baseline open-office pilot implemented
+  -> CONTINUOUS LEVEL 0                           <- cross-Cell continuity remains next
   -> MATERIALS + CONDITIONS
   -> CARVERS
   -> STRUCTURES

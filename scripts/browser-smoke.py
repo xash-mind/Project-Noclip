@@ -15,6 +15,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 BASE_URL = os.environ.get("NOCLIP_BASE_URL", "http://127.0.0.1:4173")
 ARTIFACT_DIR = Path(os.environ.get("NOCLIP_BROWSER_ARTIFACTS", "artifacts/browser-smoke"))
 ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
+SCREENSHOT_WARNINGS: list[str] = []
 
 
 def wait_for(
@@ -86,7 +87,12 @@ def browser_log_errors(driver: webdriver.Chrome) -> list[dict[str, Any]]:
 
 
 def screenshot(driver: webdriver.Chrome, name: str) -> None:
-    driver.save_screenshot(str(ARTIFACT_DIR / name))
+    try:
+        driver.save_screenshot(str(ARTIFACT_DIR / name))
+    except TimeoutException as error:
+        warning = f"Screenshot {name} timed out in headless Chromium; functional assertions remain authoritative: {error.msg}"
+        SCREENSHOT_WARNINGS.append(warning)
+        print(f"WARNING: {warning}")
 
 
 def build_driver() -> webdriver.Chrome:
@@ -342,6 +348,7 @@ def main() -> None:
             pass
         raise
     finally:
+        report["screenshotWarnings"] = SCREENSHOT_WARNINGS
         (ARTIFACT_DIR / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
         driver.quit()
 

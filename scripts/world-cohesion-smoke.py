@@ -106,9 +106,10 @@ def main() -> None:
         if resume.is_displayed():
             driver.execute_script("arguments[0].click();", resume)
             time.sleep(1)
-        wait_for_text(driver, '[data-ui="watch"]', ("PROJECT NOCLIP", "LEVEL 0"), timeout=15, message="watch")
-        driver.save_screenshot(str(ARTIFACT_DIR / "01-sparse-continuous-carpet.png"))
-        report["checks"].append("fixed sparse-1 open-office browser view captured with architecture retained and no optional scenery/carpet overlay")
+        watch = wait_for_text(driver, '[data-ui="watch"]', ("PROJECT NOCLIP", "LEVEL 0", "field-solved open office"), timeout=15, message="Generation 3 pilot watch label")
+        report["pilotWatch"] = watch
+        driver.save_screenshot(str(ARTIFACT_DIR / "01-gen3-field-solved-open-office.png"))
+        report["checks"].append("fixed sparse-1 origin exercised the Generation 3 field-solved open-office pilot in the normal renderer path")
 
         toggle_lab(driver)
         wait_for(driver, lambda current: lab_visible(current), message="World Lab open")
@@ -118,13 +119,13 @@ def main() -> None:
         metrics = wait_for_text(driver, '[data-ui="metrics"]', ("zone          Arch Rooms",), timeout=20, message="forced Arch Room")
         report["archMetrics"] = metrics
         driver.save_screenshot(str(ARTIFACT_DIR / "02-forced-arch-lab.png"))
-        report["checks"].append("World Lab forced an Arch Room under the normal deterministic renderer path")
+        report["checks"].append("World Lab forced an unchanged legacy Arch Room under the normal deterministic renderer path")
 
         toggle_lab(driver)
         wait_for(driver, lambda current: not lab_visible(current), message="World Lab close")
         time.sleep(2)
         driver.save_screenshot(str(ARTIFACT_DIR / "03-forced-arch-room.png"))
-        report["checks"].append("forced Arch Room browser view captured for visible beam-to-ceiling clearance review")
+        report["checks"].append("forced Arch Room browser view captured to guard an out-of-pilot ordinary generation path")
 
         errors = browser_errors(driver)
         report["browserErrors"] = errors
