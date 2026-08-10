@@ -1,20 +1,20 @@
 # Project Status
 
 **Last verified runtime:** 2026-08-10 (Asia/Kolkata)  
-**Production release commit:** `d3ff02c4b19a316d15addcc55a8e164658af419b` from PR #30  
-**Production:** https://project-noclip.vercel.app — HTTP 200, desktop and landscape-touch journeys verified  
-**Visible deployed version:** `v0.2.0-dev.7`  
+**Production release commit:** `251cf8288415b968d1bee68c5bba629546842bfa` from PR #35  
+**Production:** https://project-noclip.vercel.app — Vercel production deployment succeeded and canonical browser evidence visibly reports the accepted version  
+**Visible deployed version:** `v0.2.0-dev.8`  
 **Save schema:** `v2`  
 **Current architecture direction:** Generation 3 — GitHub Issue #31  
 **World vocabulary/catalog:** `WORLD.md`
 
 ## Health
 
-**Healthy.** Canonical production remains the accepted `v0.2.0-dev.7` runtime. Generation 3 Slice A adds deterministic Field infrastructure and diagnostics only; it does not change the playable Level 0 generator, renderer, Geometry, persistence or version.
+**Healthy.** Generation 3 Slice B is accepted in canonical production as `v0.2.0-dev.8`. The bounded `baseline` + `open-office` path now consumes the deterministic Generation 3 Fields to solve internal architecture instead of emitting the recognizable Gen-2 structural-module layout on that pilot path.
 
-Level 0 therefore still uses the accepted deterministic Gen-2 modular composition release: canonical Cell coordinates, connector symmetry, timeline gates, district identity, stable IDs, save v2 and journey loading remain intact. Manila remains one delayed seed-derived far Structure embedded in ordinary Level 0 rather than a Region. Current playable Geometry remains **Euclidean**.
+Current playable Geometry remains **Euclidean**. Cell identity, boundary connector laws, timeline gates, stable IDs, Manila/exits, loot identity and save schema `v2` remain compatible. All non-pilot generation paths remain on the accepted legacy implementation until migrated deliberately.
 
-Accepted normal production scene remains **49 loaded Cells / 442 colliders / 7 interactions / 128 draw calls**. The accepted Gen-2 benchmark baseline remains **1,823 composition signatures**, **0 connector errors**, **0 placement errors**, and a **0.242% baseline off-group rate**.
+Accepted renderer comparison against dev.7 showed the normal scene move from **128 → 125 draw calls** while staying at **49 loaded Cells / 442 colliders / 7 interactions**. Hole remained **34 draws / 9 Cells / 64 colliders / 1 interaction**. World Lab moved **127 → 124 draws** while staying at **49 Cells / 444 colliders / 7 interactions**. Save reload preserved version `2`, character, seed and exact position with zero blocking browser errors.
 
 ## Generation 3 progress
 
@@ -22,9 +22,9 @@ Accepted normal production scene remains **49 loaded Cells / 442 colliders / 7 i
 
 ```text
 seed
-  -> multi-scale Fields                      [Slice A framework implemented]
-  -> architecture + Geometry solver          [next bounded migration]
-  -> continuous Level 0
+  -> multi-scale Fields                      [Slice A accepted]
+  -> architecture + Geometry solver          [Slice B bounded pilot accepted]
+  -> continuous cross-Cell Level 0           [Slice C next]
   -> Materials + Conditions
   -> Carvers
   -> Structures
@@ -35,31 +35,21 @@ seed
 
 ### Slice A — deterministic Field framework
 
-The repository now contains a renderer-independent `src/world/fields.ts` framework for the 15 canonical Generation 3 Fields:
+The 15 canonical Fields remain deterministic, multi-scale and continuous in world-space with independent seed domains. Current Geometry metadata remains `euclidean`. Field diagnostics and the 10,000-sample Field benchmark remain available.
 
-- structural: `openness`, `partitionPressure`, `axisFlow`, `roomScale`, `columnPressure`, `ceilingVariation`, `regularity`, `connectivityPressure`;
-- environmental: `dampness`, `decay`, `stability`, `abnormality`, `voidPressure`, `clutterPressure`, `electricalReliability`.
+### Slice B — bounded field-driven architecture pilot
 
-Field laws now established:
+Accepted via [PR #35](https://github.com/xash-mind/Project-Noclip/pull/35):
 
-- deterministic from world seed + independent Field domains;
-- sampled in world-space metres rather than Cell-local coordinates;
-- overlapping **168 m / 56 m / 21 m** scales;
-- smooth interpolation across Cell boundaries;
-- bounded scalar values in `0..1`;
-- Geometry metadata remains `euclidean` only;
-- diagnostic/read-only: **current Gen-2 zone/layout/connector generation does not consume the Fields yet**.
+- only the legacy `baseline` + `open-office` ordinary path is migrated;
+- pilot internal partitions/supports are solved from `axisFlow`, `openness`, `partitionPressure`, `roomScale`, `columnPressure`, `regularity` and `connectivityPressure`;
+- existing deterministic Cell-boundary openings and Euclidean connector laws are preserved exactly;
+- pilot output emits no legacy structural component IDs and uses a Field-derived composition signature;
+- replacement geometry preserves the relevant markable/collidable identity slots so persisted `SurfaceMark.surfaceId` references remain addressable without a save migration;
+- coarse player-radius reachability from the pilot centre to all four interior edge bands is validated;
+- Cell IDs, loot IDs, Manila, transitions and non-baseline generators remain unchanged.
 
-Developer diagnostics are available through `npm run fields:lab -- [seed] [worldX] [worldZ]`. The standard benchmark now includes an independent 10,000-sample Field section covering range, timing and boundary continuity in addition to the existing 10,000-Cell generator checks.
-
-A representative CI measurement for the Slice-A sampler recorded **10,000 Field samples at ~4.53 µs/sample**, maximum sampled Cell-boundary delta **0.0000143**, no narrow Field ranges, and no change to the existing 10,000-Cell connector/placement baseline. Exact runner timing remains evidence rather than a permanent performance guarantee.
-
-### Verification infrastructure repair
-
-Two stale production-profile assumptions exposed during this work were repaired in the same verification domain:
-
-- renderer regression again consumes the stable `**Production release commit:**` STATUS contract;
-- the production-profile workflow now resolves accepted commit/version from STATUS by default instead of hardcoded historical deployment metadata and verifies the visible production version indicator before treating a profile as accepted-production evidence.
+Final 10,000-Cell verification recorded **1,419 pilot Cells**, **736 pilot signatures**, **0 pilot traversal/validation errors**, **0 legacy module props on the pilot**, **0 connector errors** and **0 placement errors**. Total composition signatures increased to **2,535**. Representative accepted-runner generation timing remained in the existing broad range; the final live-transition rerun measured about **64 µs/Cell**, while the offline coarse reachability validator is measured separately and is not runtime workload.
 
 ## Canonical vocabulary
 
@@ -81,7 +71,7 @@ Use the human-facing terms from `WORLD.md`:
 
 `Field`, `Cell`, `District`, seed domains, room archetypes, spatial profiles, components and props remain engine/legacy vocabulary.
 
-Geometry has exactly two canonical values: **Euclidean** and **Non-Euclidean**. There is no separate Distorted Geometry. No player-facing Non-Euclidean behavior is implemented by Slice A.
+Geometry has exactly two canonical values: **Euclidean** and **Non-Euclidean**. There is no separate Distorted Geometry. No player-facing Non-Euclidean behavior is implemented by Slice B.
 
 ## Current world catalog facts
 
@@ -90,7 +80,7 @@ Geometry has exactly two canonical values: **Euclidean** and **Non-Euclidean**. 
 - **Canonical Gen-3 Regions:** none implemented yet. Current `baseline`, `arch`, `pillar`, `blackout`, `holes`, `exit-threshold` remain legacy region-like `ZoneId`s; `manila` is compatibility tooling only.
 - **Canonical Gen-3 Region Variants:** none implemented yet; legacy spatial profiles remain `standard`, `sparse-vista`, `thin-channel`, `pillar-expanse`.
 - **Geometry:** Euclidean is current; Non-Euclidean remains planned and requires intentional behavior design before implementation.
-- **Gen-3 Fields:** framework implemented; not yet consumed by architecture generation.
+- **Gen-3 Fields:** implemented and now consumed by the bounded Slice-B baseline/open-office architecture pilot; other paths remain unmigrated.
 - **Canonical Materials:** none named yet.
 - **First-class Carvers:** none implemented yet; current holes remain legacy archetype/component output.
 - **First-class Anomaly registry:** none implemented yet; `hallucinationAnchor` remains an internal precursor.
@@ -99,15 +89,14 @@ Geometry has exactly two canonical values: **Euclidean** and **Non-Euclidean**. 
 
 ## Next recommended action
 
-Begin the largest safe coherent **Slice B architecture-substrate pilot** from Issue #31:
+Begin the largest safe coherent **Slice C cross-Cell architectural continuity** step from Issue #31:
 
-- choose one bounded ordinary-Level-0 generation path;
-- consume the accepted Fields to solve architecture instead of recognizable alcove/divider modules;
-- keep current Euclidean connector/connectivity laws exact;
-- preserve spawn/loot clearance, stable IDs and save v2;
-- compare old/new traversal, long-range perceptual continuity and renderer/collider budgets before expanding the pilot.
+- extend the accepted pilot so Field-driven architecture reads coherently across Cell boundaries rather than only solving each pilot Cell interior;
+- keep the current Euclidean boundary-connector contract exact unless an explicitly scoped migration replaces it with an equally deterministic law;
+- preserve stable IDs, markable surface compatibility, spawn/loot clearance and save v2;
+- verify long-range perceptual continuity, traversal and renderer/collider budgets before expanding beyond the bounded ordinary pilot.
 
-Do not turn Slice B into a whole-generator rewrite. Cross-Cell continuity, Materials/Conditions, Features, Carvers and Structure-placement remain later slices unless a directly dependent part is required for a safe pilot.
+Do not broaden Slice C into Materials/Conditions, Features, Carvers, Structures or player-facing Non-Euclidean behavior unless a directly dependent piece is required for the continuity contract.
 
 ## Separate legacy / deferred work
 
@@ -120,21 +109,23 @@ Do not turn Slice B into a whole-generator rewrite. Cross-Cell continuity, Mater
 
 ## Decisions needed from Sash
 
-**None for the next bounded Slice B architecture pilot.** Agents must still escalate before choosing exact player-facing Non-Euclidean behaviours rather than inventing them.
+**None for the next bounded Slice C continuity step.** Agents must still escalate before choosing exact player-facing Non-Euclidean behaviours rather than inventing them.
 
 ## Version policy
 
-Project Noclip remains opted into the manual-project version indicator policy. Canonical root `VERSION` remains **`0.2.0-dev.7`** and canonical production remains **`v0.2.0-dev.7`** because Slice A is engine/tooling infrastructure that is not consumed by the shipped Level 0 runtime. No production version bump is warranted for this bundle.
+Project Noclip remains opted into the manual-project version indicator policy. Canonical root `VERSION` is **`0.2.0-dev.8`** and canonical production visibly reports **`v0.2.0-dev.8`**. This version was incremented exactly once for the accepted production-changing Slice-B release.
 
 ## Important links
 
 - Repository: https://github.com/xash-mind/Project-Noclip
 - Production: https://project-noclip.vercel.app
 - Generation 3 architecture: https://github.com/xash-mind/Project-Noclip/issues/31
-- Slice A implementation PR: https://github.com/xash-mind/Project-Noclip/pull/34
+- Slice B implementation/release PR: https://github.com/xash-mind/Project-Noclip/pull/35
+- Slice B final CI: https://github.com/xash-mind/Project-Noclip/actions/runs/31401645553
+- Slice B renderer comparison: https://github.com/xash-mind/Project-Noclip/actions/runs/31401645508
+- Live version transition evidence: https://github.com/xash-mind/Project-Noclip/actions/runs/31401645590
+- Vercel deployment: https://vercel.com/xash-mind0/project-noclip/DPy8jXBGRroVbsZ78MDSGJpNPHwt
 - World vocabulary/catalog: `WORLD.md`
-- Accepted runtime PR: https://github.com/xash-mind/Project-Noclip/pull/30
-- Accepted production verification: https://github.com/xash-mind/Project-Noclip/actions/runs/31363540975
 - Broad deferred issue: https://github.com/xash-mind/Project-Noclip/issues/11
 - Deferred donor PR: https://github.com/xash-mind/Project-Noclip/pull/12
 - Shared operations: https://github.com/xash-mind/project-operations
