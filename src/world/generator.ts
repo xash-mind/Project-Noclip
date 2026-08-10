@@ -1,4 +1,5 @@
 import { ITEM_DEFINITIONS, type ItemDefinitionId } from '../items/definitions.js';
+import { isBaselineArchitecturePilot, solveBaselineArchitecturePilot } from './architecture.js';
 import { exitsForCell } from './exits.js';
 import { intInRange, stableId, unitFloat, weightedChoice } from './hash.js';
 import { boundaryWallParts, chooseArchetype, layoutFor } from './layouts.js';
@@ -159,19 +160,47 @@ export function generateCell(options: GenerateCellOptions): CellDescriptor {
   const openings = generateOpenings(seed, x, z, tuning.extraOpeningChance);
   const variant = intInRange(`${seed}:variant:${x}:${z}:${shiftEpoch}`, 0, Math.max(10, Math.round(18 * tuning.roomVariation)));
   const archetype: RoomArchetype = manilaRoom ? 'manila-room' : chooseArchetype(seed, x, z, zoneId, shiftEpoch);
-  const materialVariant = intInRange(`${seed}:wall-material:${x}:${z}`, 0, 5); const walls: WallSpec[] = [];
-  for (const direction of Object.keys(DIRECTIONS) as Direction[]) walls.push(...boundaryWallParts(seed, x, z, direction, openings[direction], materialVariant));
-  const layout = layoutFor(seed, x, z, archetype, zoneId, shiftEpoch, variant, tuning.roomVariation); walls.push(...layout.walls);
-  const filteredProps = filterOptionalScenery(seed, x, z, archetype, walls, layout.props); const arrivalSafe = reserveOriginArrival(x, z, walls, filteredProps);
-  const noteSpecs = [...layout.notes, ...maybeNotes(seed, x, z, archetype)]; const ceilingPattern = intInRange(`${seed}:ceiling:${x}:${z}`, 0, 4);
+  const materialVariant = intInRange(`${seed}:wall-material:${x}:${z}`, 0, 5);
+  const boundaryWalls: WallSpec[] = [];
+  for (const direction of Object.keys(DIRECTIONS) as Direction[]) boundaryWalls.push(...boundaryWallParts(seed, x, z, direction, openings[direction], materialVariant));
+
+  const legacyLayout = layoutFor(seed, x, z, archetype, zoneId, shiftEpoch, variant, tuning.roomVariation);
+  let roomLabel = legacyLayout.label;
+  let spatialProfile = legacyLayout.spatialProfile;
+  let componentIds = legacyLayout.componentIds;
+  let compositionSignature = legacyLayout.compositionSignature;
+  let arrivalSafe: { walls: WallSpec[]; props: PropSpec[] };
+
+  if (isBaselineArchitecturePilot(zoneId, archetype)) {
+    // Generate the accepted Gen-2 layout only to recover markable/collidable identity slots.
+    // Its module geometry is not emitted on the pilot path.
+    const legacyWalls = [...boundaryWalls, ...legacyLayout.walls];
+    const legacyFilteredProps = filterOptionalScenery(seed, x, z, archetype, legacyWalls, legacyLayout.props);
+    const legacySafe = reserveOriginArrival(x, z, legacyWalls, legacyFilteredProps);
+    const boundaryIds = new Set(boundaryWalls.map((wall) => wall.id));
+    const legacyWallIds = legacySafe.walls.filter((wall) => !boundaryIds.has(wall.id)).map((wall) => wall.id);
+    const legacySolidPropIds = legacySafe.props.filter((prop) => prop.solid).map((prop) => prop.id);
+    const pilot = solveBaselineArchitecturePilot({ seed, cellX: x, cellZ: z, legacyWallIds, legacySolidPropIds });
+    arrivalSafe = { walls: [...boundaryWalls, ...pilot.walls], props: pilot.props };
+    roomLabel = pilot.label;
+    spatialProfile = pilot.spatialProfile;
+    componentIds = pilot.componentIds;
+    compositionSignature = pilot.compositionSignature;
+  } else {
+    const walls = [...boundaryWalls, ...legacyLayout.walls];
+    const filteredProps = filterOptionalScenery(seed, x, z, archetype, walls, legacyLayout.props);
+    arrivalSafe = reserveOriginArrival(x, z, walls, filteredProps);
+  }
+
+  const noteSpecs = [...legacyLayout.notes, ...maybeNotes(seed, x, z, archetype)]; const ceilingPattern = intInRange(`${seed}:ceiling:${x}:${z}`, 0, 4);
   const lightingZone = archetype === 'manila-room' ? 'manila' : zoneId;
   const lightGroups = generateLightGroups({ seed, x, z, shiftEpoch, zoneId: lightingZone, roomArchetype: archetype, ceilingPattern, walls: arrivalSafe.walls, props: arrivalSafe.props });
   const lightTemperature = lightGroups.length > 0 ? lightGroups.reduce((sum, group) => sum + group.temperature, 0) / lightGroups.length : 0.94;
   const effectiveStability = archetype === 'manila-room' ? ZONE_PROFILES.manila.stability : profile.stability;
   return {
-    id: cellId(x, z), address, stability: effectiveStability, openings, variant, roomArchetype: archetype, roomLabel: layout.label,
-    spatialProfile: layout.spatialProfile, componentIds: layout.componentIds, compositionSignature: layout.compositionSignature,
-    walls: arrivalSafe.walls, props: arrivalSafe.props, floorPatches: layout.patches.filter((patch) => patch.kind === 'hole'), notes: noteSpecs,
+    id: cellId(x, z), address, stability: effectiveStability, openings, variant, roomArchetype: archetype, roomLabel,
+    spatialProfile, componentIds, compositionSignature,
+    walls: arrivalSafe.walls, props: arrivalSafe.props, floorPatches: legacyLayout.patches.filter((patch) => patch.kind === 'hole'), notes: noteSpecs,
     lootNodes: archetype === 'manila-room' ? [] : lootForCell(seed, x, z, tuning.lootChance, archetype, arrivalSafe.walls, arrivalSafe.props), exits, lightGroups,
     lightFailure: lightGroups.length === 0 || lightGroups.every((group) => group.state === 'off'), lightTemperature, ceilingPattern,
     hallucinationAnchor: archetype !== 'manila-room' && profile.stability === 'disorienting' && unitFloat(`${seed}:hallucination:${x}:${z}`) < 0.032
