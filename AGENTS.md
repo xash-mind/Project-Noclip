@@ -7,13 +7,14 @@ For routine work, read only what is needed to orient accurately:
 1. `PROJECT.md`
 2. `STATUS.md`
 3. Relevant open issues and recent pull requests
-4. `docs/VISION.md` when product direction or world-law interpretation matters
-5. Relevant shared playbook in `xash-mind/project-operations`
-6. Applicable Shared Engineering Standards sections; use the Run Checklist at completion
+4. `WORLD.md` when work touches world generation, Levels, Regions, Variants, geometry/topology, materials, conditions, features, structures, carvers, anomalies, entities, items, transitions, or world terminology
+5. `docs/VISION.md` when product direction or world-law interpretation matters
+6. Relevant shared playbook in `xash-mind/project-operations`
+7. Applicable Shared Engineering Standards sections; use the Run Checklist at completion
 
 Do not reread unrelated historical snapshots, all docs, or unrelated shared governance on every run. Perform a broader read when first orienting, changing architecture/governance, crossing a high-risk boundary, or when current instructions appear stale or contradictory.
 
-`docs/CURRENT_STATE.md` remains a historical iteration snapshot. `STATUS.md` is the compact accepted current state going forward.
+`docs/CURRENT_STATE.md` remains a historical iteration snapshot. `STATUS.md` is the compact accepted current state going forward. `WORLD.md` is the canonical human-facing world vocabulary/content catalog and must distinguish implemented, registered, legacy and planned content.
 
 ## Repository and product boundaries
 
@@ -24,6 +25,8 @@ Do not reread unrelated historical snapshots, all docs, or unrelated shared gove
 - Canonical world simulation and persistence logic should remain renderer-independent where practical.
 - The environment, not routine combat, is the primary antagonist.
 - Preserve deterministic district planning, stable IDs, persistence compatibility, timeline gates, ordinary player isolation, and the Manila Room rendezvous direction.
+- Generation 3 target direction is field-driven continuous world generation: world geography/spatial laws first, ordinary content second. Treat GitHub Issue #31 and `WORLD.md` as the current architecture/vocabulary references when relevant.
+- A `Cell` is a streaming/computation unit, never a synonym for a room.
 
 ## Explicit non-goals for the current phase
 
@@ -59,6 +62,17 @@ Node.js `>=22.12.0` is required.
 - Do not bundle unrelated features merely for throughput. Browser/runtime failures, save corruption, deterministic-generation regressions, performance instability, and release blockers take priority over content volume.
 - Stop at a blocker, human decision, materially different risk/rollback domain, material context switch, disproportionate verification cost, deployment/provider-action budget, or natural release boundary.
 - Run cheap targeted checks during internal subtasks and the complete risk-proportional verification set at the coherent bundle boundary.
+
+## World-catalog maintenance
+
+When accepted work adds, removes, renames, reclassifies, or materially changes a Level, Region, Variant, Geometry Regime, Field, Material Family, Condition, Feature, Structure, Carver, Anomaly, Entity, Item, Transition, District/Cell semantics, or legacy worldgen category:
+
+- update `WORLD.md` in the same pull request;
+- preserve explicit status (`Implemented`, `Registered`, `Legacy`, `Planned`, or `None implemented`);
+- never claim a registered exit destination is a playable Level;
+- never silently relabel legacy `ZoneId`/archetype/component implementation as completed Gen-3 Regions/Variants/fields;
+- keep empty categories visible when their absence is useful orientation;
+- mirror material catalog changes to the mapped Project Noclip Notion page during the normal final Notion sync.
 
 ## Required verification
 
