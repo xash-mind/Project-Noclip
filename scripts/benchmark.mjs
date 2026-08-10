@@ -12,7 +12,7 @@ const { DEFAULT_TUNING } = await import('../.test-dist/src/world/types.js');
 const start = performance.now();
 let walls = 0; let props = 0; let notes = 0; let loot = 0; let placementErrors = 0; let ordinaryCells = 0; let emptyOrdinaryCells = 0; let optionalSceneryProps = 0;
 let lightGroups = 0; let lightFixtures = 0; let maxLightGroupsPerCell = 0; let maxLightFixturesPerCell = 0; let maxWallsPerCell = 0; let maxPropsPerCell = 0;
-let gen3PilotCells = 0; let gen3PilotWalls = 0; let gen3PilotSupports = 0; let gen3PilotValidationErrors = 0; let gen3PilotLegacyModuleProps = 0;
+let gen3PilotCells = 0; let gen3PilotWalls = 0; let gen3PilotSupports = 0; let gen3PilotValidationErrors = 0; let gen3PilotLegacyModuleProps = 0; let gen3PilotValidationMs = 0;
 const gen3PilotSignatures = new Set(); const gen3PilotValidationSamples = [];
 const lightStates = { on: 0, off: 0, flicker: 0 }; const baselineLightStates = { on: 0, off: 0, flicker: 0 }; const placementSamples = [];
 const archetypes = new Set(); const compositionSignatures = new Set(); const signaturesByZone = new Map(); const spatialProfiles = {}; const cells = 10000;
@@ -37,7 +37,9 @@ for (let x = -50; x < 50; x += 1) {
       gen3PilotWalls += internalWalls.length;
       gen3PilotSupports += cell.props.length;
       gen3PilotLegacyModuleProps += cell.props.filter((prop) => prop.kind !== 'column').length;
+      const pilotValidationStart = performance.now();
       const errors = validateBaselineArchitecturePilot(internalWalls, cell.props);
+      gen3PilotValidationMs += performance.now() - pilotValidationStart;
       gen3PilotValidationErrors += errors.length;
       if (gen3PilotValidationSamples.length < 10) for (const error of errors) {
         if (gen3PilotValidationSamples.length >= 10) break;
@@ -50,7 +52,9 @@ for (let x = -50; x < 50; x += 1) {
   }
 }
 
-const elapsed = performance.now() - start; const connectorErrors = validateCellConnectivity('benchmark-001', 28, DEFAULT_TUNING.extraOpeningChance);
+const elapsedWithPilotValidation = performance.now() - start;
+const elapsed = Math.max(0.001, elapsedWithPilotValidation - gen3PilotValidationMs);
+const connectorErrors = validateCellConnectivity('benchmark-001', 28, DEFAULT_TUNING.extraOpeningChance);
 const baselineLightTotal = baselineLightStates.on + baselineLightStates.off + baselineLightStates.flicker;
 const signatureCountsByZone = Object.fromEntries([...signaturesByZone.entries()].map(([zone, signatures]) => [zone, signatures.size]));
 
@@ -83,7 +87,9 @@ console.log(JSON.stringify({
     supports: gen3PilotSupports,
     legacyModuleProps: gen3PilotLegacyModuleProps,
     validationErrors: gen3PilotValidationErrors,
-    validationSamples: gen3PilotValidationSamples
+    validationSamples: gen3PilotValidationSamples,
+    validationMs: Number(gen3PilotValidationMs.toFixed(2)),
+    validationMicrosecondsPerPilot: Number((gen3PilotValidationMs * 1000 / Math.max(1, gen3PilotCells)).toFixed(2))
   },
   elapsedMs: Number(elapsed.toFixed(2)), microsecondsPerCell: Number((elapsed * 1000 / cells).toFixed(2)), cellsPerSecond: Number((cells / (elapsed / 1000)).toFixed(2)), heapMb: Number((process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)),
   fields: {
