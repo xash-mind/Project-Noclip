@@ -15,6 +15,7 @@ on:
       - vercel.json
       - .github/workflows/renderer-compare.yml
       - scripts/profile-production.py
+      - STATUS.md
 
 permissions:
   contents: read
@@ -63,6 +64,7 @@ jobs:
           NOCLIP_BASE_URL="https://project-noclip.vercel.app" \
           NOCLIP_DEPLOYMENT_COMMIT="${baseline[0]}" \
           NOCLIP_DEPLOYMENT_ID="canonical-production-${baseline[1]}" \
+          NOCLIP_EXPECTED_VERSION="${baseline[1]}" \
           NOCLIP_PROFILE_ARTIFACTS="artifacts/renderer-compare/before" \
           python scripts/profile-production.py
       - name: Build and serve candidate
@@ -84,9 +86,11 @@ jobs:
           CANDIDATE_COMMIT: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
+          candidate_version="v$(tr -d '[:space:]' < VERSION)"
           NOCLIP_BASE_URL="http://127.0.0.1:4173" \
           NOCLIP_DEPLOYMENT_COMMIT="$CANDIDATE_COMMIT" \
           NOCLIP_DEPLOYMENT_ID="local-candidate" \
+          NOCLIP_EXPECTED_VERSION="$candidate_version" \
           NOCLIP_PROFILE_ARTIFACTS="artifacts/renderer-compare/after" \
           python scripts/profile-production.py
       - name: Compare renderer invariants and draw-call regression

@@ -8,19 +8,21 @@ on:
         required: false
         default: https://project-noclip.vercel.app
       deployment_commit:
-        description: Git commit served by the deployment
+        description: Optional explicit Git commit served by the deployment; defaults to accepted STATUS.md
         required: false
-        default: c2d3cb38faacfc7e8e22dae67aa2e8e8af9ddfea
       deployment_id:
-        description: Vercel deployment identifier
+        description: Optional provider deployment identifier; defaults to a canonical production label
         required: false
-        default: dpl_C1FfCuvYVQ7aKaVG6bpUPT2o6Gmp
+      expected_version:
+        description: Optional visible version expected on the deployment; defaults to accepted STATUS.md
+        required: false
   pull_request:
     branches: [main]
     paths:
       - scripts/profile-production.py
       - scripts/benchmark.mjs
       - .github/workflows/profile-production.yml
+      - STATUS.md
 
 permissions:
   contents: read
@@ -50,11 +52,31 @@ jobs:
           REQUESTED_BASE_URL: ${{ github.event.inputs.base_url }}
           REQUESTED_DEPLOYMENT_COMMIT: ${{ github.event.inputs.deployment_commit }}
           REQUESTED_DEPLOYMENT_ID: ${{ github.event.inputs.deployment_id }}
+          REQUESTED_EXPECTED_VERSION: ${{ github.event.inputs.expected_version }}
         run: |
           set -euo pipefail
-          echo "NOCLIP_TARGET_URL=${REQUESTED_BASE_URL:-https://project-noclip.vercel.app}" >> "$GITHUB_ENV"
-          echo "NOCLIP_DEPLOYMENT_COMMIT=${REQUESTED_DEPLOYMENT_COMMIT:-c2d3cb38faacfc7e8e22dae67aa2e8e8af9ddfea}" >> "$GITHUB_ENV"
-          echo "NOCLIP_DEPLOYMENT_ID=${REQUESTED_DEPLOYMENT_ID:-dpl_C1FfCuvYVQ7aKaVG6bpUPT2o6Gmp}" >> "$GITHUB_ENV"
+          readarray -t accepted < <(python - <<'PY'
+          import re
+          from pathlib import Path
+
+          status = Path('STATUS.md').read_text(encoding='utf-8')
+          commit = re.search(r'^\*\*Production release commit:\*\* `([^`]+)`', status, re.MULTILINE)
+          version = re.search(r'^\*\*Visible deployed version:\*\* `([^`]+)`', status, re.MULTILINE)
+          if not commit or not version:
+              raise RuntimeError('STATUS.md does not expose the accepted production commit/version contract')
+          print(commit.group(1))
+          print(version.group(1))
+          PY
+          )
+          target_url="${REQUESTED_BASE_URL:-https://project-noclip.vercel.app}"
+          target_commit="${REQUESTED_DEPLOYMENT_COMMIT:-${accepted[0]}}"
+          target_version="${REQUESTED_EXPECTED_VERSION:-${accepted[1]}}"
+          target_id="${REQUESTED_DEPLOYMENT_ID:-canonical-production-${target_version}}"
+          echo "NOCLIP_TARGET_URL=${target_url}" >> "$GITHUB_ENV"
+          echo "NOCLIP_DEPLOYMENT_COMMIT=${target_commit}" >> "$GITHUB_ENV"
+          echo "NOCLIP_DEPLOYMENT_ID=${target_id}" >> "$GITHUB_ENV"
+          echo "NOCLIP_EXPECTED_VERSION=${target_version}" >> "$GITHUB_ENV"
+          echo "Resolved accepted production target: ${target_commit} / ${target_version} / ${target_id}"
       - name: Run 10,000-cell deterministic benchmark
         shell: bash
         run: |
@@ -71,6 +93,7 @@ jobs:
           NOCLIP_BASE_URL="$NOCLIP_TARGET_URL" \
           NOCLIP_DEPLOYMENT_COMMIT="$NOCLIP_DEPLOYMENT_COMMIT" \
           NOCLIP_DEPLOYMENT_ID="$NOCLIP_DEPLOYMENT_ID" \
+          NOCLIP_EXPECTED_VERSION="$NOCLIP_EXPECTED_VERSION" \
           NOCLIP_PROFILE_ARTIFACTS="artifacts/production-profile" \
           python scripts/profile-production.py
       - name: Publish machine-readable profile summary to Issue 14
@@ -93,7 +116,8 @@ jobs:
               "## Issue #14 production profile: passed", "",
               f"- Public URL: `{profile['baseUrl']}`",
               f"- Accepted deployment commit: `{profile['deployment']['commit']}`",
-              f"- Vercel deployment: `{profile['deployment']['id']}`",
+              f"- Visible version: `{profile['deployment']['version']}`",
+              f"- Deployment identity: `{profile['deployment']['id']}`",
               f"- Profiling workflow commit: `{os.environ['GITHUB_SHA']}`",
               f"- Actions evidence: {run_url}",
               f"- Browser: `{profile['environment']['browser'].get('browserVersion', 'unknown')}`",
@@ -121,12 +145,13 @@ jobs:
               f"- Deterministic World Lab streaming cycle: `{' → '.join(map(str, streaming['loadedCellsSequence']))}` loaded cells; peak `{streaming['peakCellsUnloaded']}` unloaded and `{streaming['peakCellsReloaded']}` reloaded without mutating journey save data.",
               f"- Radius transition settle times: `{', '.join(str(step['settleMs']) + ' ms' for step in streaming['transitions'])}`.",
               f"- 10,000-cell benchmark: `{benchmark['elapsedMs']:.2f} ms` total / `{benchmark['microsecondsPerCell']:.2f} µs/cell` / `{benchmark['cellsPerSecond']:.2f} cells/s`.",
+              f"- Generation 3 Field benchmark: `{benchmark['fields']['samples']}` samples / `{benchmark['fields']['microsecondsPerSample']:.2f} µs/sample` / boundary max Δ `{benchmark['fields']['boundaryMaxDelta']:.8f}`.",
               f"- Connector errors: `{benchmark['connectorErrors']}`; placement errors: `{benchmark['placementErrors']}`; benchmark heap: `{benchmark['heapMb']:.2f} MB`.",
               f"- Save/reload: schema v{profile['saveReload']['version']} preserved, position delta `{profile['saveReload']['positionDeltaMeters']:.4f} m`.",
               f"- Browser console errors: `{len(profile.get('browserErrors', []))}`.",
               "",
               "Headless CI uses SwiftShader, so its absolute FPS is a software-renderer stress observation rather than a physical-GPU FPS claim. Existing Chromium journey smoke remains the separate pointer-lock/input regression gate.",
-              "The artifact contains `profile.json`, `benchmark.json`, and available scenario screenshots. This profiling PR does not modify the deployed game runtime.",
+              "The artifact contains `profile.json`, `benchmark.json`, and available scenario screenshots. This profiling workflow does not modify the deployed game runtime.",
           ])
           for warning in profile.get("warnings", []):
               lines.append(f"- Non-blocking evidence warning: {warning.splitlines()[0]}")

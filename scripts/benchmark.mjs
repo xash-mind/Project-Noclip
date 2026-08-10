@@ -6,6 +6,7 @@ const compile = spawnSync('tsc', ['-p', 'tsconfig.test.json'], { stdio: 'inherit
 if (compile.status !== 0) process.exit(compile.status ?? 1);
 
 const { generateCell, isEssentialSceneryProp, validateCellConnectivity, validateCellPlacement } = await import('../.test-dist/src/world/generator.js');
+const { WORLD_FIELD_NAMES, sampleWorldFields } = await import('../.test-dist/src/world/fields.js');
 const { DEFAULT_TUNING } = await import('../.test-dist/src/world/types.js');
 const start = performance.now();
 let walls = 0; let props = 0; let notes = 0; let loot = 0; let placementErrors = 0; let ordinaryCells = 0; let emptyOrdinaryCells = 0; let optionalSceneryProps = 0;
@@ -33,12 +34,39 @@ for (let x = -50; x < 50; x += 1) {
 const elapsed = performance.now() - start; const connectorErrors = validateCellConnectivity('benchmark-001', 28, DEFAULT_TUNING.extraOpeningChance);
 const baselineLightTotal = baselineLightStates.on + baselineLightStates.off + baselineLightStates.flicker;
 const signatureCountsByZone = Object.fromEntries([...signaturesByZone.entries()].map(([zone, signatures]) => [zone, signatures.size]));
+
+const fieldRanges = Object.fromEntries(WORLD_FIELD_NAMES.map((name) => [name, { min: 1, max: 0 }]));
+const fieldStart = performance.now();
+for (let x = -50; x < 50; x += 1) {
+  for (let z = -50; z < 50; z += 1) {
+    const sample = sampleWorldFields('benchmark-001', x * 14, z * 14);
+    for (const name of WORLD_FIELD_NAMES) {
+      fieldRanges[name].min = Math.min(fieldRanges[name].min, sample[name]);
+      fieldRanges[name].max = Math.max(fieldRanges[name].max, sample[name]);
+    }
+  }
+}
+const fieldElapsed = performance.now() - fieldStart;
+const westBoundary = sampleWorldFields('benchmark-001', 6.999, 3.75);
+const eastBoundary = sampleWorldFields('benchmark-001', 7.001, 3.75);
+const fieldBoundaryMaxDelta = Math.max(...WORLD_FIELD_NAMES.map((name) => Math.abs(westBoundary[name] - eastBoundary[name])));
+const narrowFieldRanges = WORLD_FIELD_NAMES.filter((name) => fieldRanges[name].max - fieldRanges[name].min < 0.15);
+
 console.log(JSON.stringify({
   cells, walls, props, notes, loot, ordinaryCells, emptyOrdinaryCells, emptyOrdinaryRate: Number((emptyOrdinaryCells / Math.max(1, ordinaryCells)).toFixed(4)), optionalSceneryProps,
   compositionSignatures: compositionSignatures.size, signatureCountsByZone, spatialProfiles, maxWallsPerCell, maxPropsPerCell,
   lightGroups, lightFixtures, lightStates, baselineLightStates, baselineOffRate: Number((baselineLightStates.off / Math.max(1, baselineLightTotal)).toFixed(5)), maxLightGroupsPerCell, maxLightFixturesPerCell,
   archetypes: [...archetypes].sort(), connectorErrors: connectorErrors.length, placementErrors, placementSamples,
-  elapsedMs: Number(elapsed.toFixed(2)), microsecondsPerCell: Number((elapsed * 1000 / cells).toFixed(2)), cellsPerSecond: Number((cells / (elapsed / 1000)).toFixed(2)), heapMb: Number((process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2))
+  elapsedMs: Number(elapsed.toFixed(2)), microsecondsPerCell: Number((elapsed * 1000 / cells).toFixed(2)), cellsPerSecond: Number((cells / (elapsed / 1000)).toFixed(2)), heapMb: Number((process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)),
+  fields: {
+    samples: cells,
+    geometry: 'euclidean',
+    elapsedMs: Number(fieldElapsed.toFixed(2)),
+    microsecondsPerSample: Number((fieldElapsed * 1000 / cells).toFixed(2)),
+    boundaryMaxDelta: Number(fieldBoundaryMaxDelta.toFixed(8)),
+    narrowRanges: narrowFieldRanges,
+    ranges: Object.fromEntries(WORLD_FIELD_NAMES.map((name) => [name, { min: Number(fieldRanges[name].min.toFixed(4)), max: Number(fieldRanges[name].max.toFixed(4)), span: Number((fieldRanges[name].max - fieldRanges[name].min).toFixed(4)) }]))
+  }
 }, null, 2));
 
-if (connectorErrors.length || placementErrors || baselineLightStates.off / Math.max(1, baselineLightTotal) >= 0.01 || compositionSignatures.size < 100) process.exit(1);
+if (connectorErrors.length || placementErrors || baselineLightStates.off / Math.max(1, baselineLightTotal) >= 0.01 || compositionSignatures.size < 100 || fieldBoundaryMaxDelta >= 0.001 || narrowFieldRanges.length) process.exit(1);
