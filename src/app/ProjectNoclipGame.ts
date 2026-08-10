@@ -14,6 +14,7 @@ import { canShift, shouldShift } from '../simulation/shifting.js';
 import { GameUI } from '../ui/GameUI.js';
 import { generateCell } from '../world/generator.js';
 import { stableId, unitFloat } from '../world/hash.js';
+import { LIGHT_FIELD_UPDATE_INTERVAL, type LightFieldSample } from '../world/lighting.js';
 import { CELL_SIZE, DEFAULT_TUNING, type CellDescriptor, type WorldTuning } from '../world/types.js';
 import { ZONE_PROFILES } from '../world/zones.js';
 
@@ -23,6 +24,7 @@ const SPRINT_SPEED = 5.15;
 const CROUCH_SPEED = 1.8;
 const SAVE_INTERVAL = 1.5;
 const TOUCH_LOOK_MULTIPLIER = 2.25;
+const EMPTY_LIGHT_FIELD: LightFieldSample = { energy: 0, activeGroups: 0, flickerGroups: 0, nearbyGroups: 0, flickerPulse: 0, temperature: 0.94 };
 
 export class ProjectNoclipGame {
   private readonly store = new IndexedDbSaveStore();
@@ -53,6 +55,9 @@ export class ProjectNoclipGame {
   private drawing = false;
   private activeMark?: SurfaceMark;
   private markedPointCount = 0;
+  private lightField: LightFieldSample = { ...EMPTY_LIGHT_FIELD };
+  private journeyElapsed = 0;
+  private lightFieldAccumulator = 0;
 
   constructor() {
     const canvas = document.querySelector<HTMLCanvasElement>('#game-canvas');
@@ -98,6 +103,7 @@ export class ProjectNoclipGame {
 
   private async launch(save: SaveData): Promise<void> {
     this.save = save; this.yaw = save.position.yaw; this.pitch = save.position.pitch; this.tuning = { ...DEFAULT_TUNING };
+    this.lightField = { ...EMPTY_LIGHT_FIELD }; this.journeyElapsed = 0; this.lightFieldAccumulator = 0;
     this.markerMode = false; this.ui.setMarkerMode(false); this.setupEngine();
     if (!this.app || !this.camera) throw new Error('Engine did not initialize');
     this.renderer = new WorldRenderer(this.app, save);
@@ -105,7 +111,7 @@ export class ProjectNoclipGame {
     this.currentCellX = worldToCell(save.position.x); this.currentCellZ = worldToCell(save.position.z);
     this.updateStreaming(true); this.updateCameraRotation(); this.started = true; this.paused = true;
     this.ui.showGame(); this.ui.updateInventory(save.inventory, save.selectedItemId); this.ui.setPaused(true);
-    await this.ambience.start(save.settings.masterVolume); this.resumeInput();
+    await this.ambience.start(save.settings.masterVolume); this.ambience.setLightField(this.lightField); this.resumeInput();
   }
 
   private setupEngine(): void {
@@ -226,7 +232,16 @@ export class ProjectNoclipGame {
 
   private update(dt: number): void {
     if (!this.started || !this.save || !this.camera || !this.renderer) return;
+    const activeJourney = !this.paused && !this.ui.isLabOpen() && !this.ui.isNoteOpen() && document.hasFocus();
     if (!this.paused && !this.ui.isLabOpen() && !this.ui.isNoteOpen()) this.updateMovement(dt);
+    if (activeJourney) {
+      this.journeyElapsed += dt;
+      this.lightFieldAccumulator += dt;
+      if (this.lightFieldAccumulator >= LIGHT_FIELD_UPDATE_INTERVAL) {
+        this.lightFieldAccumulator %= LIGHT_FIELD_UPDATE_INTERVAL;
+        this.refreshLightField();
+      }
+    }
     this.updateSimulation(dt); this.updateInteraction(); this.renderer.updateDynamicItems(Date.now());
     this.saveAccumulator += dt; this.metricsAccumulator += dt;
     if (this.saveAccumulator >= SAVE_INTERVAL) { this.saveAccumulator = 0; void this.persist(); }
@@ -280,7 +295,7 @@ export class ProjectNoclipGame {
       if (canShift({ occupied: false, observed: false, distanceInCells: distance, stability: visual.descriptor.stability, protectedInteraction: false, preservesPath: true }) && shouldShift(this.save.seed, id, unloadCount, this.tuning.shiftChance)) this.save.shiftEpochs[id] = (this.save.shiftEpochs[id] ?? 0) + 1;
       this.renderer.unloadCell(id);
     }
-    this.updateZoneAtmosphere(); this.notifyZoneEntry();
+    this.updateZoneAtmosphere(); this.refreshLightField(); this.notifyZoneEntry();
   }
 
   private notifyZoneEntry(): void {
@@ -292,8 +307,21 @@ export class ProjectNoclipGame {
     if (!this.app || !this.currentCell) return; const profile = ZONE_PROFILES[this.currentCell.address.zoneId];
     this.app.scene.ambientLight = new pc.Color(0.44 * profile.lightMultiplier, 0.42 * profile.lightMultiplier, 0.25 * profile.lightMultiplier);
     this.app.scene.fogStart = profile.id === 'pillar' ? 18 : profile.id === 'blackout' ? 8 : 26; this.app.scene.fogEnd = profile.id === 'pillar' ? 54 : profile.id === 'blackout' ? 28 : 78;
-    if (this.localLight?.light) this.localLight.light.intensity = this.currentCell.lightFailure ? 0.12 : 0.82 * profile.lightMultiplier;
-    this.ambience.setZone(this.currentCell.address.zoneId === 'blackout', this.currentCell.lightFailure);
+  }
+
+  private refreshLightField(): void {
+    if (!this.save || !this.renderer || !this.camera || !this.localLight?.light || !this.currentCell) return;
+    const position = this.camera.getPosition();
+    this.lightField = this.renderer.updateLightField(position.x, position.z, this.journeyElapsed, this.save.settings.reducedFlicker);
+    this.ambience.setLightField(this.lightField);
+    const profile = ZONE_PROFILES[this.currentCell.address.zoneId];
+    this.localLight.setPosition(position.x, 2.6, position.z);
+    this.localLight.light.intensity = this.lightField.energy * 0.82 * profile.lightMultiplier;
+    this.localLight.light.color = new pc.Color(
+      Math.min(1, 0.78 * this.lightField.temperature),
+      Math.min(1, 0.75 * this.lightField.temperature),
+      0.5
+    );
   }
 
   private updateInteraction(): void {
@@ -418,7 +446,7 @@ export class ProjectNoclipGame {
     const worldDay = this.tuning.worldDayOverride ?? calculateWorldDay(Date.now()); const exposureDay = this.tuning.exposureOverride ?? calculateExposureDay(this.save.exposure); const profile = ZONE_PROFILES[this.currentCell.address.zoneId]; const flashlight = this.getFlashlight();
     this.ui.updateWatch({ worldDay, exposureDay }, `LEVEL 0 / ${profile.label}\n${this.currentCell.roomLabel}`, profile.stability); this.ui.updateStatus(this.save.hydration, flashlight?.charge ?? 0); this.ui.updateInventory(this.save.inventory, this.save.selectedItemId);
     const position = this.camera.getPosition(); const drawCalls = this.app?.stats?.drawCalls?.total ?? 'n/a';
-    this.ui.updateMetrics([`seed          ${this.save.seed}`, `cell          ${this.currentCell.id} / district ${this.currentCell.address.districtId}`, `room          ${this.currentCell.roomArchetype}`, `zone          ${profile.label}`, `loaded cells  ${this.renderer.loadedCellCount}`, `colliders     ${this.renderer.wallCount}`, `interactions  ${this.renderer.interactionCount}`, `draw calls    ${drawCalls}`, `position      ${position.x.toFixed(1)}, ${position.z.toFixed(1)}`, `inventory     ${this.save.inventory.length}/${INVENTORY_CAPACITY}`, `marks         ${this.save.marks.length}`, `notes read    ${this.save.readNoteIds.length}`, `exits found   ${this.save.discoveredExits.join(', ') || 'none'}`].join('\n'));
+    this.ui.updateMetrics([`seed          ${this.save.seed}`, `cell          ${this.currentCell.id} / district ${this.currentCell.address.districtId}`, `room          ${this.currentCell.roomArchetype}`, `zone          ${profile.label}`, `loaded cells  ${this.renderer.loadedCellCount}`, `colliders     ${this.renderer.wallCount}`, `interactions  ${this.renderer.interactionCount}`, `light groups  ${this.renderer.lightGroupCount} / fixtures ${this.renderer.lightFixtureCount}`, `light field   ${this.lightField.energy.toFixed(3)} / active ${this.lightField.activeGroups} / flicker ${this.lightField.flickerGroups} / nearby ${this.lightField.nearbyGroups}`, `draw calls    ${drawCalls}`, `position      ${position.x.toFixed(1)}, ${position.z.toFixed(1)}`, `inventory     ${this.save.inventory.length}/${INVENTORY_CAPACITY}`, `marks         ${this.save.marks.length}`, `notes read    ${this.save.readNoteIds.length}`, `exits found   ${this.save.discoveredExits.join(', ') || 'none'}`].join('\n'));
   }
 
   private async persist(): Promise<void> { if (!this.save || !this.camera) return; const position = this.camera.getPosition(); this.save.position = { x: position.x, y: position.y, z: position.z, yaw: this.yaw, pitch: this.pitch }; this.save.savedAt = Date.now(); await this.store.save(this.save); this.ui.setContinueAvailable(true); }

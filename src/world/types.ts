@@ -44,6 +44,7 @@ export type PropKind = typeof PROP_KINDS[number];
 
 export const FLOOR_PATCH_KINDS = ['damp', 'worn', 'dark', 'dry', 'hole'] as const;
 export type FloorPatchKind = typeof FLOOR_PATCH_KINDS[number];
+export type LightState = 'on' | 'off' | 'flicker';
 
 export interface WorldAddress {
   worldSeed: string;
@@ -108,6 +109,17 @@ export interface NoteSpec {
   source: 'manila-book' | 'office-memo' | 'maintenance-note' | 'warning';
 }
 
+export interface LightGroupSpec {
+  id: string;
+  fixtures: LocalPoint[];
+  rotationY: 0 | 90;
+  state: LightState;
+  intensity: number;
+  temperature: number;
+  flickerRate: number;
+  phase: number;
+}
+
 export interface LootNode {
   id: string;
   localPosition: LocalPoint;
@@ -139,6 +151,7 @@ export interface CellDescriptor {
   notes: NoteSpec[];
   lootNodes: LootNode[];
   exits: ExitDescriptor[];
+  lightGroups: LightGroupSpec[];
   lightFailure: boolean;
   lightTemperature: number;
   ceilingPattern: number;
