@@ -15,9 +15,18 @@ from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
+
+def required_env(name: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise RuntimeError(f"{name} is required for exact production profiling")
+    return value
+
+
 BASE_URL = os.environ.get("NOCLIP_BASE_URL", "https://project-noclip.vercel.app")
-DEPLOYMENT_COMMIT = os.environ.get("NOCLIP_DEPLOYMENT_COMMIT", "c2d3cb38faacfc7e8e22dae67aa2e8e8af9ddfea")
-DEPLOYMENT_ID = os.environ.get("NOCLIP_DEPLOYMENT_ID", "dpl_C1FfCuvYVQ7aKaVG6bpUPT2o6Gmp")
+DEPLOYMENT_COMMIT = required_env("NOCLIP_DEPLOYMENT_COMMIT")
+DEPLOYMENT_ID = required_env("NOCLIP_DEPLOYMENT_ID")
+EXPECTED_VERSION = required_env("NOCLIP_EXPECTED_VERSION")
 ARTIFACT_DIR = Path(os.environ.get("NOCLIP_PROFILE_ARTIFACTS", "artifacts/production-profile"))
 ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 STATIC_SAMPLE_SECONDS = float(os.environ.get("NOCLIP_PROFILE_STATIC_SECONDS", "5"))
@@ -320,7 +329,7 @@ def distance(a: dict[str, float], b: dict[str, float]) -> float:
 def main() -> None:
     report: dict[str, Any] = {
         "baseUrl": BASE_URL,
-        "deployment": {"commit": DEPLOYMENT_COMMIT, "id": DEPLOYMENT_ID},
+        "deployment": {"commit": DEPLOYMENT_COMMIT, "id": DEPLOYMENT_ID, "version": EXPECTED_VERSION},
         "rollback": {"commit": DEPLOYMENT_COMMIT, "deploymentId": DEPLOYMENT_ID},
         "checks": [], "warnings": [], "scenarios": {},
         "environment": {"viewport": {"width": 1440, "height": 900}, "seed": "threshold-001", "normalActiveRadius": 3, "staticSampleSeconds": STATIC_SAMPLE_SECONDS},
@@ -340,6 +349,9 @@ def main() -> None:
         }
         driver.get(BASE_URL)
         wait_for(driver, lambda current: current.execute_script("return document.readyState") == "complete", message="document load")
+        visible_version = wait_for_text(driver, '[data-ui="version-indicator"]', EXPECTED_VERSION, 20)
+        assert visible_version.strip() == EXPECTED_VERSION, f"Expected visible version {EXPECTED_VERSION}, got {visible_version!r}"
+        report["checks"].append(f"visible accepted version {EXPECTED_VERSION} verified")
         new_button = wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="new"]'), message="new journey")
         assert "Begin new local journey" in str(new_button.get_attribute("textContent"))
         new_button.click()
