@@ -8,15 +8,22 @@ The world—not a routine monster—is the main antagonist. Architecture changes
 
 ## Durable principles
 
-- **Vast but planned:** deterministic streaming creates scale; district grammars, archetypes, landmarks and rarity budgets create meaning.
+- **Vast but planned:** deterministic streaming creates scale; multi-scale spatial conditions, hidden laws, landmarks and rarity budgets create meaning.
 - **Empty by design:** most spaces contain no valuable object, entity or player.
 - **Consistent laws:** mystery comes from hidden rules, not arbitrary randomness.
 - **Objects create relationships:** players find different objects, enabling future trade and cooperation.
 - **Rare presence:** ordinary Level 0 isolates; the Manila Room is a future rendezvous exception.
-- **Time changes access:** World Day and Exposure Day gate zones, exits and events.
-- **Renderer independence:** canonical world generation and state remain pure TypeScript data.
+- **Time changes access:** World Day and Exposure Day gate regions, exits and events.
+- **Renderer independence:** canonical world generation and state remain pure TypeScript data where practical.
 - **Progressive fidelity:** richer materials and silhouettes matter, but never at the cost of world scale or stable performance.
+- **Spatial law is content:** Euclidean, distorted and eventually non-Euclidean geography should be deterministic world rules rather than one-off visual tricks.
 
 ## Current durable lesson
 
-Cell-by-cell random variation produces technical infinity but poor exploration. Project Noclip therefore plans Level 0 at multiple scales: district identity first, room archetype second, then deterministic local variation and props. Future levels should follow the same hierarchy.
+Cell-by-cell random variation and recognizable room-module selection can create technical infinity while remaining perceptually repetitive. Project Noclip therefore moves toward **Generation 3**: generate continuous multi-scale world conditions first, solve traversable architecture second, then layer materials, conditions, carvers, rare structures, features, anomalies, entities, items and transitions.
+
+A `Cell` is only a streaming/computation unit. Player-visible architecture should be capable of crossing cell boundaries without exposing the grid.
+
+The current accepted runtime still uses Gen-2 `ZoneId`, room-archetype, spatial-profile and component vocabulary. Those remain supported until verified migration slices replace them; they must not be silently treated as already-converted Gen-3 systems.
+
+Use `WORLD.md` for the canonical human-facing vocabulary/current content catalog and GitHub Issue #31 for the Generation 3 migration direction.
