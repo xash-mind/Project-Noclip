@@ -17,6 +17,8 @@ const CEILING_REACH_MARGIN = 0.48;
 
 export const LIGHT_FIELD_RADIUS = CELL_SIZE * 2.7;
 export const LIGHT_FIELD_UPDATE_INTERVAL = 0.1;
+export const BASELINE_OFF_CHANCE = 0.002;
+export const BASELINE_FLICKER_CHANCE = 0.018;
 
 interface Bounds { minX: number; maxX: number; minZ: number; maxZ: number; }
 
@@ -87,13 +89,32 @@ export function fixturePositionClear(
   return props.filter(reachesCeiling).every((prop) => !overlaps(candidate, propBounds(prop)));
 }
 
-function chooseState(key: string, zoneId: ZoneId): LightState {
+export function lightInstability(zoneId: ZoneId, shiftEpoch: number): number {
+  const zoneBase: Record<ZoneId, number> = {
+    baseline: 0,
+    arch: 0.04,
+    pillar: 0.18,
+    blackout: 0.82,
+    holes: 0.48,
+    manila: 0,
+    'exit-threshold': 0.08
+  };
+  return Math.max(0, Math.min(1, zoneBase[zoneId] + Math.max(0, shiftEpoch) * 0.11));
+}
+
+export function lightStateThresholds(instability: number): { off: number; unstable: number } {
+  const bounded = Math.max(0, Math.min(1, instability));
+  const off = BASELINE_OFF_CHANCE + 0.48 * bounded * bounded;
+  const flicker = BASELINE_FLICKER_CHANCE + 0.26 * bounded;
+  return { off, unstable: Math.min(0.96, off + flicker) };
+}
+
+export function lightStateForInstability(key: string, instability: number): LightState {
   const roll = unitFloat(`${key}:state`);
-  if (zoneId === 'manila') return roll < 0.02 ? 'off' : roll < 0.08 ? 'flicker' : 'on';
-  if (zoneId === 'blackout') return roll < 0.68 ? 'off' : roll < 0.92 ? 'flicker' : 'on';
-  if (zoneId === 'holes') return roll < 0.24 ? 'off' : roll < 0.5 ? 'flicker' : 'on';
-  if (zoneId === 'pillar') return roll < 0.16 ? 'off' : roll < 0.38 ? 'flicker' : 'on';
-  return roll < 0.21 ? 'off' : roll < 0.37 ? 'flicker' : 'on';
+  const thresholds = lightStateThresholds(instability);
+  if (roll < thresholds.off) return 'off';
+  if (roll < thresholds.unstable) return 'flicker';
+  return 'on';
 }
 
 function fixtureCandidates(archetype: RoomArchetype, zoneId: ZoneId): Array<Array<{ x: number; z: number }>> {
@@ -129,6 +150,7 @@ export function generateLightGroups(options: {
   const { seed, x, z, shiftEpoch, zoneId, roomArchetype, ceilingPattern, walls, props } = options;
   const rotationY: 0 | 90 = ceilingPattern % 2 === 0 ? 0 : 90;
   const groups: LightGroupSpec[] = [];
+  const instability = lightInstability(zoneId, shiftEpoch);
 
   fixtureCandidates(roomArchetype, zoneId).forEach((candidates, groupIndex) => {
     const fixtures = candidates
@@ -136,11 +158,14 @@ export function generateLightGroups(options: {
       .map((position) => ({ x: position.x, y: WALL_HEIGHT - 0.08, z: position.z }));
     if (fixtures.length === 0) return;
     const id = stableId('light-group', seed, x, z, shiftEpoch, zoneId, roomArchetype, groupIndex);
+    // Deliberately exclude shiftEpoch from the stability roll. When instability rises, thresholds expand over
+    // the same deterministic roll, so a group may degrade on -> flicker -> off but never become healthier.
+    const stabilityKey = stableId('light-stability', seed, x, z, zoneId, roomArchetype, groupIndex);
     groups.push({
       id,
       fixtures,
       rotationY,
-      state: chooseState(id, zoneId),
+      state: lightStateForInstability(stabilityKey, instability),
       intensity: 0.78 + unitFloat(`${id}:intensity`) * 0.34,
       temperature: 0.86 + unitFloat(`${id}:temperature`) * 0.18,
       flickerRate: 2.2 + unitFloat(`${id}:flicker-rate`) * 3.8,
