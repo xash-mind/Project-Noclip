@@ -1,7 +1,7 @@
 # Project Status
 
 **Last verified runtime:** 2026-08-10 (Asia/Kolkata)  
-**Accepted runtime source / production release:** `d3ff02c4b19a316d15addcc55a8e164658af419b` from PR #30  
+**Production release commit:** `d3ff02c4b19a316d15addcc55a8e164658af419b` from PR #30  
 **Production:** https://project-noclip.vercel.app — HTTP 200, desktop and landscape-touch journeys verified  
 **Visible deployed version:** `v0.2.0-dev.7`  
 **Save schema:** `v2`  
