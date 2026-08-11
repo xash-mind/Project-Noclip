@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { WORLD_FIELD_NAMES, formatFieldDiagnostics, sampleWorldFields } from '../.test-dist/src/world/fields.js';
+import { WORLD_FIELD_NAMES, formatFieldDiagnostics, sampleWorldFieldChannels, sampleWorldFields } from '../.test-dist/src/world/fields.js';
 
 const valuesOnly = (sample) => WORLD_FIELD_NAMES.map((name) => sample[name]);
 
@@ -9,6 +9,12 @@ test('Generation 3 fields reproduce exactly for identical seed and coordinates',
   const second = sampleWorldFields('field-seed', 123.45, -67.89);
   assert.deepEqual(first, second);
   assert.equal(first.geometry, 'euclidean');
+});
+
+test('selective Field sampling exactly matches the canonical full sample', () => {
+  const full = sampleWorldFields('selective-field-seed', -314.25, 808.75);
+  const selective = sampleWorldFieldChannels('selective-field-seed', -314.25, 808.75, ['axisFlow', 'regularity']);
+  assert.deepEqual(selective, { axisFlow: full.axisFlow, regularity: full.regularity });
 });
 
 test('Generation 3 fields remain bounded and vary by seed and geography', () => {
