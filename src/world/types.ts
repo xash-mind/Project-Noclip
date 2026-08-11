@@ -2,6 +2,8 @@ export const CELL_SIZE = 14;
 export const WALL_HEIGHT = 3.2;
 export const WALL_THICKNESS = 0.28;
 export const DOOR_WIDTH = 3.2;
+export const LEVEL0_FOG_START = 26;
+export const LEVEL0_FOG_END = 41;
 
 export type Direction = 'north' | 'east' | 'south' | 'west';
 export type StabilityClass = 'disorienting' | 'semi-stable' | 'stable' | 'rendezvous' | 'terminal';

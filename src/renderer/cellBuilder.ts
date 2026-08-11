@@ -48,9 +48,10 @@ export class RendererCellBuilder {
       : legacyExitFoyer
         ? ZONE_PROFILES['exit-threshold']
         : ZONE_PROFILES[descriptor.address.zoneId];
-    const floorMat = this.getMaterial(`floor:${profile.id}`, profile.floorTint, 'carpet', descriptor.variant % 3, [5, 5]);
-    const ceilingMat = this.getMaterial(`ceiling:${profile.id}`, profile.ceilingTint, 'ceiling', descriptor.ceilingPattern, [4, 4]);
-    const trimMat = this.getMaterial(`trim:${profile.id}`, profile.trimTint, 'wood', descriptor.variant % 2, [2, 2]);
+    const gen3 = descriptor.world.generationVersion === 'gen3-v1';
+    const floorMat = this.getMaterial(`floor:${profile.id}`, profile.floorTint, 'carpet', gen3 ? 0 : descriptor.variant % 3, [5, 5]);
+    const ceilingMat = this.getMaterial(`ceiling:${profile.id}`, profile.ceilingTint, 'ceiling', gen3 ? 0 : descriptor.ceilingPattern, [4, 4]);
+    const trimMat = this.getMaterial(`trim:${profile.id}`, profile.trimTint, 'wood', gen3 ? 0 : descriptor.variant % 2, [2, 2]);
     const concrete = this.getMaterial('concrete', [0.52, 0.52, 0.47], 'concrete', descriptor.variant % 3, [2, 2]);
     const fixtureMat = this.getMaterial(`fixture:${profile.id}`, [0.69, 0.68, 0.53], undefined, 0, [1, 1], [0.84, 0.82, 0.61], descriptor.lightFailure ? 0.03 : 1.3 * profile.lightMultiplier * descriptor.lightTemperature);
 
@@ -60,12 +61,13 @@ export class RendererCellBuilder {
     const colliders: WorldCollider[] = [];
     for (const wallSpec of descriptor.walls) {
       const wallLength = Math.max(wallSpec.sx, wallSpec.sz);
+      const wallRepeats = gen3 ? Math.max(1, Math.round(wallLength / 2.6)) : Math.max(1, wallLength / 2.6);
       const wallMat = legacyExitFoyer
         ? concrete
         : this.getMaterial(
           `wall:${wallSpec.materialId ?? profile.id}`,
           wallSpec.materialId === 'arch-pale-wallpaper' ? ZONE_PROFILES.arch.wallTint : profile.wallTint,
-          'wall', wallSpec.materialVariant ?? descriptor.variant % 4, [Math.max(1, wallLength / 2.6), 1]
+          'wall', wallSpec.materialVariant ?? descriptor.variant % 4, [wallRepeats, 1]
         );
       this.box(wallSpec.id, root, [wallSpec.cx, wallSpec.cy, wallSpec.cz], [wallSpec.sx, wallSpec.sy, wallSpec.sz], wallMat);
       const collider = this.toWorldCollider(descriptor, wallSpec);

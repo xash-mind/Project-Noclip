@@ -178,7 +178,7 @@ export class WorldRenderer {
     }
 
     const profile = ZONE_PROFILES[descriptor.address.zoneId];
-    const floorMat = this.getMaterial(`floor:${profile.id}`, profile.floorTint, 'carpet', descriptor.variant % 3, [5, 5]);
+    const floorMat = this.getMaterial(`floor:${profile.id}`, profile.floorTint, 'carpet', descriptor.world.generationVersion === 'gen3-v1' ? 0 : descriptor.variant % 3, [5, 5]);
     this.addSegmentedFloor(visual.root, holes, floorMat);
     for (const hole of holes) this.addRecessedHole(visual.root, hole, profile.floorTint);
   }

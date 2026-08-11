@@ -19,7 +19,7 @@ import { generateCell } from '../world/generator.js';
 import { stableId, unitFloat } from '../world/hash.js';
 import { LIGHT_FIELD_UPDATE_INTERVAL, type LightFieldSample } from '../world/lighting.js';
 import { manilaRoomCell } from '../world/structures.js';
-import { CELL_SIZE, DEFAULT_TUNING, type CellDescriptor, type RegionId, type WorldTuning } from '../world/types.js';
+import { CELL_SIZE, DEFAULT_TUNING, LEVEL0_FOG_END, LEVEL0_FOG_START, type CellDescriptor, type RegionId, type WorldTuning } from '../world/types.js';
 import { ZONE_PROFILES } from '../world/zones.js';
 
 const PLAYER_HEIGHT = 1.65;
@@ -143,9 +143,9 @@ export class ProjectNoclipGame {
     const app = new pc.Application(this.canvas);
     app.setCanvasResolution(pc.RESOLUTION_AUTO); app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
     app.scene.ambientLight = new pc.Color(0.26, 0.245, 0.135); app.scene.skyboxIntensity = 0;
-    app.scene.fog = pc.FOG_LINEAR; app.scene.fogColor = new pc.Color(0.15, 0.135, 0.075); app.scene.fogStart = 32; app.scene.fogEnd = 100;
+    app.scene.fog = pc.FOG_LINEAR; app.scene.fogColor = new pc.Color(0.15, 0.135, 0.075); app.scene.fogStart = LEVEL0_FOG_START; app.scene.fogEnd = LEVEL0_FOG_END;
     const camera = new pc.Entity('player-camera');
-    camera.addComponent('camera', { clearColor: new pc.Color(0.075, 0.068, 0.038), nearClip: 0.05, farClip: 125, fov: 73 }); app.root.addChild(camera);
+    camera.addComponent('camera', { clearColor: new pc.Color(0.15, 0.135, 0.075), nearClip: 0.05, farClip: 125, fov: 73 }); app.root.addChild(camera);
     const cameraComponent = (camera as unknown as { camera?: ConstructorParameters<typeof CameraFrame>[1] }).camera;
     if (cameraComponent) {
       const cameraFrame = new CameraFrame(app as unknown as ConstructorParameters<typeof CameraFrame>[0], cameraComponent);
@@ -482,10 +482,14 @@ export class ProjectNoclipGame {
 
     const visibleAmbient = Math.pow(1 - blackoutStrength, 1.7);
     this.app.scene.ambientLight = new pc.Color(0.26 * visibleAmbient + 0.002, 0.245 * visibleAmbient + 0.002, 0.135 * visibleAmbient + 0.001);
-    this.app.scene.fogStart = 32 - blackoutStrength * 25;
-    this.app.scene.fogEnd = 100 - blackoutStrength * 71;
+    const fogR = 0.15 * visibleAmbient;
+    const fogG = 0.135 * visibleAmbient;
+    const fogB = 0.075 * visibleAmbient;
+    this.app.scene.fogColor = new pc.Color(fogR, fogG, fogB);
+    this.app.scene.fogStart = LEVEL0_FOG_START - blackoutStrength * (LEVEL0_FOG_START - 7);
+    this.app.scene.fogEnd = LEVEL0_FOG_END - blackoutStrength * (LEVEL0_FOG_END - 29);
     const cameraComponent = (this.camera as unknown as { camera?: { clearColor: pc.Color } }).camera;
-    if (cameraComponent) cameraComponent.clearColor = new pc.Color(0.075 * visibleAmbient, 0.07 * visibleAmbient, 0.036 * visibleAmbient);
+    if (cameraComponent) cameraComponent.clearColor = new pc.Color(fogR, fogG, fogB);
 
     if (this.blackoutGuideLight?.light && sampled && blackoutStrength > 0.52) {
       this.blackoutGuideLight.enabled = true;

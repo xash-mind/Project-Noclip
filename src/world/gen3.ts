@@ -15,7 +15,7 @@ import {
   type WorldTuning
 } from './types.js';
 
-const ARCHITECTURE_GRID = 20;
+const ARCHITECTURE_GRID = 15;
 const ARCH_WALL_GRID = 68;
 const PILLAR_SPACING = 7.2;
 const HOLE_CLUSTER_GRID = 900;
@@ -273,7 +273,7 @@ function wall(
   orientation: 'x' | 'z',
   materialId: MaterialId
 ): WallSpec {
-  return { id, cx, cy, cz, sx, sy, sz, orientation, drawable: true, materialId };
+  return { id, cx, cy, cz, sx, sy, sz, orientation, drawable: true, materialId, materialVariant: 0 };
 }
 
 function prop(
@@ -351,21 +351,24 @@ function addOrdinaryRun(
 function addOrdinaryArchitecture(seed: string, cellX: number, cellZ: number, environment: Gen3Environment, output: WallSpec[]): void {
   const centreX = cellX * CELL_SIZE;
   const centreZ = cellZ * CELL_SIZE;
-  const reach = 88;
+  const reach = 72;
   const minGridX = Math.floor((centreX - reach) / ARCHITECTURE_GRID);
   const maxGridX = Math.ceil((centreX + reach) / ARCHITECTURE_GRID);
   const minGridZ = Math.floor((centreZ - reach) / ARCHITECTURE_GRID);
   const maxGridZ = Math.ceil((centreZ + reach) / ARCHITECTURE_GRID);
   for (let gridX = minGridX; gridX <= maxGridX; gridX += 1) for (let gridZ = minGridZ; gridZ <= maxGridZ; gridZ += 1) {
     const runId = `${gridX}:${gridZ}`;
-    const anchorX = gridX * ARCHITECTURE_GRID + (unitFloat(`${seed}:gen3-run:${runId}:x`) - 0.5) * 14;
-    const anchorZ = gridZ * ARCHITECTURE_GRID + (unitFloat(`${seed}:gen3-run:${runId}:z`) - 0.5) * 14;
-    const fields = sampleWorldFieldChannels(seed, anchorX, anchorZ, ['partitionPressure', 'openness', 'axisFlow', 'roomScale']);
-    const threshold = 0.38 + fields.openness * 0.18;
-    if (fields.partitionPressure < threshold || unitFloat(`${seed}:gen3-run:${runId}:keep`) > 0.78) continue;
+    const anchorX = gridX * ARCHITECTURE_GRID + (unitFloat(`${seed}:gen3-run:${runId}:x`) - 0.5) * 10;
+    const anchorZ = gridZ * ARCHITECTURE_GRID + (unitFloat(`${seed}:gen3-run:${runId}:z`) - 0.5) * 10;
+    const fields = sampleWorldFieldChannels(seed, anchorX, anchorZ, ['partitionPressure', 'openness', 'axisFlow', 'roomScale', 'regularity']);
+    const threshold = 0.34 + fields.openness * 0.18;
+    const keepChance = clamp01(0.8 + fields.partitionPressure * 0.12 - fields.openness * 0.1);
+    if (fields.partitionPressure < threshold || unitFloat(`${seed}:gen3-run:${runId}:keep`) > keepChance) continue;
     if (environment.regionId === 'pillar-field' && unitFloat(`${seed}:gen3-run:${runId}:pillar-suppress`) < 0.82 + environment.regionStrength * 0.17) continue;
-    const axis: 'x' | 'z' = fields.axisFlow < 0.5 ? 'x' : 'z';
-    const length = 24 + fields.roomScale * 62;
+    const directionalStrength = 0.28 + fields.regularity * 0.5;
+    const zProbability = clamp01(0.5 + (fields.axisFlow - 0.5) * 2 * directionalStrength);
+    const axis: 'x' | 'z' = unitFloat(`${seed}:gen3-run:${runId}:axis`) < zProbability ? 'z' : 'x';
+    const length = 20 + fields.roomScale * 50;
     const start = (axis === 'x' ? anchorX : anchorZ) - length / 2;
     const end = start + length;
     addOrdinaryRun(output, seed, cellX, cellZ, runId, axis, axis === 'x' ? anchorZ : anchorX, start, end, 'level-0-wallpaper');
