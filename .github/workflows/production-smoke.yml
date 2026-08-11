@@ -1,4 +1,5 @@
 name: Project Noclip Production Smoke
+# Status-only documentation syncs do not auto-run this workflow; workflow_dispatch remains available for explicit release acceptance.
 
 on:
   workflow_dispatch:
