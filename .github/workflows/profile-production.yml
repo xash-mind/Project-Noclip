@@ -111,6 +111,7 @@ jobs:
           root = Path("artifacts/production-profile")
           profile = json.loads((root / "profile.json").read_text(encoding="utf-8"))
           benchmark = json.loads((root / "benchmark.json").read_text(encoding="utf-8"))
+          generation = benchmark["generation"]
           run_url = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
           lines = [
               "## Issue #14 production profile: passed", "",
@@ -125,9 +126,9 @@ jobs:
               "", "### Fixed renderer scenarios",
           ]
           for key, label in (
-              ("baselineSpawn", "Baseline spawn · radius 3"),
-              ("holeSectionRadius1", "Forced Hole Section · radius 1"),
-              ("worldLabShowcase23", "World Lab · 23-object showcase"),
+              ("defaultSpawn", "Default Level 0 spawn · radius 3"),
+              ("holeCarverRadius1", "Floor-hole Carver evidence · radius 1"),
+              ("worldLabShowcase", f"World Lab · {profile['catalogCount']}-object canonical showcase"),
           ):
               scenario = profile["scenarios"][key]
               frames = scenario["frames"]["frameTimeMs"]
@@ -137,20 +138,24 @@ jobs:
               lines.append(
                   f"- **{label}:** frame p50 `{frames['median']:.3f} ms`, p95 `{frames['p95']:.3f} ms`, "
                   f"median FPS `{fps['median']:.2f}`, main-thread busy `{cpu.get('mainThreadBusyPct', 'n/a')}%`, "
-                  f"draw calls `{metrics.get('drawCalls', 'n/a')}`, loaded cells `{metrics.get('loadedCells', 'n/a')}`"
+                  f"draw calls `{metrics.get('drawCalls', 'n/a')}`, loaded Cells `{metrics.get('loadedCells', 'n/a')}`"
               )
           streaming = profile["scenarios"]["boundedStreamingBands"]
+          pillar = benchmark["pillarField"]
+          blackout = benchmark["blackout"]
+          holes = benchmark["holeCarver"]
+          crossing = benchmark["regionCrossingMinutes"]
           lines.extend([
               "", "### Streaming and generator evidence",
-              f"- Deterministic World Lab streaming cycle: `{' → '.join(map(str, streaming['loadedCellsSequence']))}` loaded cells; peak `{streaming['peakCellsUnloaded']}` unloaded and `{streaming['peakCellsReloaded']}` reloaded without mutating journey save data.",
+              f"- Deterministic World Lab streaming cycle: `{' → '.join(map(str, streaming['loadedCellsSequence']))}` loaded Cells; peak `{streaming['peakCellsUnloaded']}` unloaded and `{streaming['peakCellsReloaded']}` reloaded without mutating journey save data.",
               f"- Radius transition settle times: `{', '.join(str(step['settleMs']) + ' ms' for step in streaming['transitions'])}`.",
-              f"- 10,000-cell benchmark: `{benchmark['elapsedMs']:.2f} ms` total / `{benchmark['microsecondsPerCell']:.2f} µs/cell` / `{benchmark['cellsPerSecond']:.2f} cells/s`.",
-              f"- Generation 3 Field benchmark: `{benchmark['fields']['samples']}` samples / `{benchmark['fields']['microsecondsPerSample']:.2f} µs/sample` / boundary max Δ `{benchmark['fields']['boundaryMaxDelta']:.8f}`.",
-              f"- Connector errors: `{benchmark['connectorErrors']}`; placement errors: `{benchmark['placementErrors']}`; benchmark heap: `{benchmark['heapMb']:.2f} MB`.",
-              f"- Save/reload: schema v{profile['saveReload']['version']} preserved, position delta `{profile['saveReload']['positionDeltaMeters']:.4f} m`.",
+              f"- Generation `{generation['version']}` benchmark: `{generation['cells']}` Cells / `{generation['microsecondsPerCell']:.2f} µs/Cell` / `{generation['cellsPerSecond']:.2f} Cells/s`.",
+              f"- Fidelity gates: forbidden ordinary motifs `{generation['forbiddenOrdinary']}`, placement errors `{generation['placementErrors']}`, Pillar walls/Cell `{pillar['wallsPerCell']}`, Blackout fixtures `{blackout['localFixtures']}`, hole overlaps `{holes['overlaps']}`.",
+              f"- Region travel: Pillar P50 `{crossing['pillarP50']}` min / P90 `{crossing['pillarP90']}` min; Arch P50 `{crossing['archP50']}` min; boundary max Δ `{benchmark['geographyBoundaryDelta']}`.",
+              f"- Save/reload: schema v{profile['saveReload']['version']} / `{profile['saveReload']['generationVersion']}` preserved, position delta `{profile['saveReload']['positionDeltaMeters']:.4f} m`.",
               f"- Browser console errors: `{len(profile.get('browserErrors', []))}`.",
               "",
-              "Headless CI uses SwiftShader, so its absolute FPS is a software-renderer stress observation rather than a physical-GPU FPS claim. Existing Chromium journey smoke remains the separate pointer-lock/input regression gate.",
+              "Headless CI uses SwiftShader, so its absolute FPS is a software-renderer stress observation rather than a physical-GPU FPS claim. Chromium journey smoke remains the separate input and fidelity regression gate.",
               "The artifact contains `profile.json`, `benchmark.json`, and available scenario screenshots. This profiling workflow does not modify the deployed game runtime.",
           ])
           for warning in profile.get("warnings", []):

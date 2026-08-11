@@ -9,6 +9,38 @@ const generated = (overrides = {}) => generateCell({
   tuning: DEFAULT_TUNING, generationVersion: 'gen3-v1', ...overrides
 });
 
+test('new Generation 3 journeys reserve a meaningful forward arrival lane', () => {
+  const cell = generated({
+    seed: 'threshold-001',
+    x: 0,
+    z: 0,
+    tuning: { ...DEFAULT_TUNING, structureOverride: 'none', carverOverride: 'none' }
+  });
+  const lane = { minX: -0.82, maxX: 0.82, minZ: -3.6, maxZ: 0.82 };
+  const overlapsLane = (bounds) => bounds.minX < lane.maxX && bounds.maxX > lane.minX && bounds.minZ < lane.maxZ && bounds.maxZ > lane.minZ;
+  const wallBounds = cell.walls.map((wall) => ({
+    id: wall.id,
+    minX: wall.cx - wall.sx / 2,
+    maxX: wall.cx + wall.sx / 2,
+    minZ: wall.cz - wall.sz / 2,
+    maxZ: wall.cz + wall.sz / 2
+  }));
+  const propBounds = cell.props.filter((prop) => prop.solid).map((prop) => {
+    const rotated = Math.abs((prop.rotationY ?? 0) % 180) > 45;
+    const sizeX = rotated ? prop.scale.z : prop.scale.x;
+    const sizeZ = rotated ? prop.scale.x : prop.scale.z;
+    return {
+      id: prop.id,
+      minX: prop.position.x - sizeX / 2,
+      maxX: prop.position.x + sizeX / 2,
+      minZ: prop.position.z - sizeZ / 2,
+      maxZ: prop.position.z + sizeZ / 2
+    };
+  });
+  const obstruction = [...wallBounds, ...propBounds].find(overlapsLane);
+  assert.equal(obstruction, undefined, `arrival lane obstructed by ${obstruction?.id}`);
+});
+
 test('ordinary architecture is world-space continuous and has no Cell boundary wall cadence', () => {
   const cells = new Map();
   const tuning = { ...DEFAULT_TUNING, regionOverride: 'ordinary-level-0', conditionOverride: 'clear', carverOverride: 'none', structureOverride: 'none' };

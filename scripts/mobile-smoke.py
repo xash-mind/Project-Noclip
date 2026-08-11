@@ -99,25 +99,60 @@ def center_point(driver: webdriver.Chrome, selector: str, pointer_id: int) -> di
     return {"x": rect["left"] + rect["width"] / 2, "y": rect["top"] + rect["height"] / 2, "id": pointer_id, "radiusX": 5, "radiusY": 5, "force": 1}
 
 
-def touch_hold_move(driver: webdriver.Chrome, selector: str, dx: float, dy: float, hold_seconds: float) -> None:
+def touch_move_until(
+    driver: webdriver.Chrome,
+    selector: str,
+    dx: float,
+    dy: float,
+    start_position: tuple[float, float],
+    threshold: float,
+    timeout: float,
+) -> tuple[float, float]:
     point = center_point(driver, selector, 1)
     x = float(point["x"]); y = float(point["y"])
     touch_event(driver, "touchStart", [point])
     touch_event(driver, "touchMove", [{**point, "x": x + dx, "y": y + dy}])
-    time.sleep(hold_seconds)
-    touch_event(driver, "touchEnd", [])
+    try:
+        return wait_for(
+            driver,
+            lambda current: (
+                pos if (pos := metrics_position(current))
+                and math.hypot(pos[0] - start_position[0], pos[1] - start_position[1]) > threshold
+                else False
+            ),
+            timeout=timeout,
+            message="touch movement while the control remains held",
+        )
+    finally:
+        touch_event(driver, "touchEnd", [])
 
 
-def touch_hold_sprint_move(driver: webdriver.Chrome, hold_seconds: float = 0.8) -> None:
+def touch_sprint_move_until(
+    driver: webdriver.Chrome,
+    start_position: tuple[float, float],
+    threshold: float = 0.2,
+    timeout: float = 10,
+) -> tuple[float, float]:
     sprint = center_point(driver, '[data-action="touch-sprint"]', 3)
     move = center_point(driver, '[data-touch="move"]', 4)
     moved = {**move, "y": float(move["y"]) - 43}
     touch_event(driver, "touchStart", [sprint, move])
     wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="touch-sprint"]').get_attribute("aria-pressed") == "true", timeout=3, message="Sprint held state")
     touch_event(driver, "touchMove", [sprint, moved])
-    time.sleep(hold_seconds)
-    touch_event(driver, "touchEnd", [])
-    wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="touch-sprint"]').get_attribute("aria-pressed") == "false", timeout=3, message="Sprint released state")
+    try:
+        return wait_for(
+            driver,
+            lambda current: (
+                pos if (pos := metrics_position(current))
+                and math.hypot(pos[0] - start_position[0], pos[1] - start_position[1]) > threshold
+                else False
+            ),
+            timeout=timeout,
+            message="Sprint plus movement while both controls remain held",
+        )
+    finally:
+        touch_event(driver, "touchEnd", [])
+        wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="touch-sprint"]').get_attribute("aria-pressed") == "false", timeout=3, message="Sprint released state")
 
 
 def touch_drag(driver: webdriver.Chrome, selector: str, dx: float, dy: float, steps: int = 1) -> None:
@@ -230,15 +265,13 @@ def main() -> None:
         assert move_rect["width"] >= 44 and move_rect["height"] >= 44
         checks.append("Sprint, Marker, Interact, Use and Lab targets remain 44px-plus without essential HUD overlap")
 
-        touch_hold_move(driver, '[data-touch="move"]', 0, -43, 1.0)
-        moved_position = wait_for(driver, lambda current: (pos if (pos := metrics_position(current)) and math.hypot(pos[0] - start_position[0], pos[1] - start_position[1]) > 0.3 else False), timeout=12, message="touch movement")
+        moved_position = touch_move_until(driver, '[data-touch="move"]', 0, -43, start_position, threshold=0.3, timeout=12)
         report["movedPosition"] = moved_position
         checks.append("left touch pad still moves the canonical player through the existing movement/collision path")
 
         sprint_start = metrics_position(driver)
         assert sprint_start is not None
-        touch_hold_sprint_move(driver)
-        sprint_end = wait_for(driver, lambda current: (pos if (pos := metrics_position(current)) and math.hypot(pos[0] - sprint_start[0], pos[1] - sprint_start[1]) > 0.2 else False), timeout=10, message="Sprint plus movement")
+        sprint_end = touch_sprint_move_until(driver, sprint_start)
         report["sprintStart"] = sprint_start
         report["sprintEnd"] = sprint_end
         checks.append("Sprint can be held simultaneously with Move and releases cleanly through shared player intent")

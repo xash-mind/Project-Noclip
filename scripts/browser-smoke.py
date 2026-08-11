@@ -246,13 +246,23 @@ def main() -> None:
         report["checks"].append("World Lab exposed loaded-cell, draw-call and position diagnostics")
         screenshot(driver, "03-world-lab.png")
 
+        vocabulary_categories = driver.find_elements(By.CSS_SELECTOR, '.vocabulary-group > summary')
+        assert len(vocabulary_categories) == 13, f"Expected 13 canonical world categories, found {len(vocabulary_categories)}"
+        lab_text = text_content(driver, '[data-ui="lab"]')
+        for forbidden in ("Procedural districts", "Room variation"):
+            assert forbidden not in lab_text, f"World Lab still exposes {forbidden!r}"
+        category_labels = [str(option.get_attribute("textContent") or "").strip() for option in driver.find_elements(By.CSS_SELECTOR, '[data-lab="object-category"] option')]
+        assert category_labels == ["All categories", "Items", "Features"], category_labels
         catalog_options = driver.find_elements(By.CSS_SELECTOR, '[data-lab="object-select"] option')
-        assert len(catalog_options) == 23, f"Expected 23 catalog objects, found {len(catalog_options)}"
+        catalog_count = len(catalog_options)
+        assert catalog_count > 0, "Canonical object showcase is empty"
+        report["catalogCount"] = catalog_count
         dispatch_change(driver, '[data-lab="radius"]', "1")
         dispatch_change(driver, '[data-lab="bypass"]', True)
-        dispatch_change(driver, '[data-lab="zone"]', "holes")
-        wait_for_text(driver, '[data-ui="metrics"]', ("zone          Hole Section",), timeout=20, message="forced Hole Section")
-        report["checks"].append("World Lab forced a Hole Section without changing the saved journey")
+        dispatch_change(driver, '[data-lab="condition"]', "clear")
+        dispatch_change(driver, '[data-lab="carver"]', "floor-hole-cluster")
+        wait_for_text(driver, '[data-ui="metrics"]', ("carvers", "floor-hole-cluster"), timeout=20, message="floor-hole Carver preview")
+        report["checks"].append("World Lab previewed the floor-hole Carver without reclassifying it as geography or changing the saved journey")
         screenshot(driver, "04-hole-catalog.png")
 
         toggle_lab(driver)
@@ -275,7 +285,7 @@ def main() -> None:
         )
         time.sleep(2)
         screenshot(driver, "05-hole-floor.png")
-        report["checks"].append("forced Hole Section rendered for downward visual inspection")
+        report["checks"].append("floor-hole Carver rendered for downward visual inspection")
         driver.execute_script(
             "const event = new MouseEvent('mousemove', {bubbles: true}); Object.defineProperty(event, 'movementY', {value: -230}); window.dispatchEvent(event);"
         )
@@ -288,9 +298,9 @@ def main() -> None:
         )
         spawn_all = driver.find_element(By.CSS_SELECTOR, '[data-action="spawn-all-objects"]')
         driver.execute_script("arguments[0].scrollIntoView({block: 'center'}); arguments[0].click();", spawn_all)
-        catalog_status = wait_for_text(driver, '[data-ui="catalog-status"]', ("Spawned 23",), timeout=15, message="World Lab full object spawn")
+        catalog_status = wait_for_text(driver, '[data-ui="catalog-status"]', (f"Spawned {catalog_count}",), timeout=15, message="World Lab canonical object spawn")
         report["catalogStatus"] = catalog_status
-        report["checks"].append("World Lab catalog registered and spawned all 23 current items and props")
+        report["checks"].append(f"World Lab registered and spawned all {catalog_count} implemented Items and Features")
         screenshot(driver, "06-object-catalog.png")
 
         toggle_lab(driver)

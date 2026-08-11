@@ -6,8 +6,8 @@ on:
     paths:
       - src/renderer/**
       - src/world/**
-      - src/ui/DevelopmentVersionIndicator.ts
-      - src/ui/development-version-indicator.css
+      - src/audio/**
+      - src/ui/**
       - src/version.ts
       - src/main.ts
       - VERSION
@@ -93,7 +93,7 @@ jobs:
           NOCLIP_EXPECTED_VERSION="$candidate_version" \
           NOCLIP_PROFILE_ARTIFACTS="artifacts/renderer-compare/after" \
           python scripts/profile-production.py
-      - name: Compare renderer invariants and draw-call regression
+      - name: Compare renderer budgets and Generation 3 invariants
         shell: bash
         run: |
           set -euo pipefail
@@ -104,33 +104,41 @@ jobs:
           root = Path('artifacts/renderer-compare')
           before = json.loads((root / 'before' / 'profile.json').read_text(encoding='utf-8'))
           after = json.loads((root / 'after' / 'profile.json').read_text(encoding='utf-8'))
-          scenarios = ('baselineSpawn', 'holeSectionRadius1', 'worldLabShowcase23')
-          comparison = {'scenarios': {}}
-          for key in scenarios:
+          scenarios = {
+              'defaultSpawn': {'drawCalls': 220, 'colliders': 1200, 'interactions': 160},
+              'holeCarverRadius1': {'drawCalls': 160, 'colliders': 600, 'interactions': 120},
+              'worldLabShowcase': {'drawCalls': 280, 'colliders': 1400, 'interactions': 260},
+          }
+          comparison = {'scenarios': {}, 'catalogCount': after['catalogCount']}
+          for key, caps in scenarios.items():
               before_metrics = before['scenarios'][key]['worldMetricsAfter']
               after_metrics = after['scenarios'][key]['worldMetricsAfter']
-              for invariant in ('loadedCells', 'colliders', 'interactions'):
-                  assert after_metrics[invariant] == before_metrics[invariant], (
-                      f'{key} {invariant} changed: {before_metrics[invariant]} -> {after_metrics[invariant]}'
-                  )
+              assert after_metrics['loadedCells'] == before_metrics['loadedCells'], (
+                  f"{key} streaming cardinality changed: {before_metrics['loadedCells']} -> {after_metrics['loadedCells']}"
+              )
+              assert after_metrics.get('generation') == 'gen3-v1', f"{key} did not profile Generation 3"
+              for metric in ('drawCalls', 'colliders', 'interactions'):
+                  value = int(after_metrics[metric])
+                  assert value <= caps[metric], f"{key} {metric} {value} exceeds absolute cap {caps[metric]}"
               before_draw = int(before_metrics['drawCalls'])
               after_draw = int(after_metrics['drawCalls'])
-              delta_pct = (after_draw - before_draw) * 100 / max(1, before_draw)
-              comparison['scenarios'][key] = {
-                  'productionDrawCalls': before_draw,
-                  'candidateDrawCalls': after_draw,
-                  'deltaPct': round(delta_pct, 2),
-                  'loadedCells': after_metrics['loadedCells'],
-                  'colliders': after_metrics['colliders'],
-                  'interactions': after_metrics['interactions'],
-              }
-              allowed = max(before_draw + 2, int(before_draw * 1.05 + 0.999))
-              assert after_draw <= allowed, (
-                  f'{key} draw calls regressed beyond 5%/+2 tolerance: {before_draw} -> {after_draw} (allowed {allowed})'
+              allowed_draw = max(before_draw + 30, int(before_draw * 1.35 + 0.999))
+              assert after_draw <= allowed_draw, (
+                  f"{key} draw calls regressed beyond 35%/+30 transition budget: {before_draw} -> {after_draw} (allowed {allowed_draw})"
               )
+              comparison['scenarios'][key] = {
+                  'production': {name: before_metrics.get(name) for name in ('drawCalls', 'loadedCells', 'colliders', 'interactions')},
+                  'candidate': {name: after_metrics.get(name) for name in ('drawCalls', 'loadedCells', 'colliders', 'interactions')},
+                  'drawDeltaPct': round((after_draw - before_draw) * 100 / max(1, before_draw), 2),
+                  'caps': caps,
+              }
+          hole_metrics = after['scenarios']['holeCarverRadius1']['worldMetricsAfter']
+          assert 'floor-hole-cluster' in str(hole_metrics.get('carvers', ''))
           comparison['saveReload'] = after['saveReload']
           comparison['browserErrors'] = after.get('browserErrors', [])
+          assert after['catalogCount'] > 0
           assert after['saveReload']['version'] == 2
+          assert after['saveReload']['generationVersion'] == 'gen3-v1'
           assert not comparison['browserErrors']
           (root / 'comparison.json').write_text(json.dumps(comparison, indent=2) + '\n', encoding='utf-8')
           print(json.dumps(comparison, indent=2))

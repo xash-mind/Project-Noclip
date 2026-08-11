@@ -154,6 +154,27 @@ function reserveOriginArrival(x: number, z: number, walls: readonly WallSpec[], 
   };
 }
 
+function reserveGen3OriginArrival(x: number, z: number, walls: readonly WallSpec[], props: readonly PropSpec[]): { walls: WallSpec[]; props: PropSpec[] } {
+  if (x !== 0 || z !== 0) return { walls: [...walls], props: [...props] };
+  // New journeys face north. Preserve a short, deterministic first-walk lane
+  // as well as the spawn disc so a valid origin cannot immediately read as a
+  // trap on keyboard or touch. This applies only to gen3-v1; frozen Gen2
+  // geometry remains byte-for-byte governed by its compatibility path.
+  const forwardLane: PlacementBounds = {
+    id: 'gen3-origin-forward-lane',
+    minX: -0.82,
+    maxX: 0.82,
+    minZ: -3.6,
+    maxZ: 0.82
+  };
+  const obstructsArrival = (bounds: PlacementBounds): boolean =>
+    circleOverlapsBounds(0, 0, PLAYER_ARRIVAL_CLEARANCE, bounds) || boundsOverlap(bounds, forwardLane);
+  return {
+    walls: walls.filter((wall) => !obstructsArrival(wallBounds(wall))),
+    props: props.filter((prop) => !prop.solid || !obstructsArrival(propBounds(prop)))
+  };
+}
+
 function reserveTransitions(exits: readonly ExitDescriptor[], walls: readonly WallSpec[], props: readonly PropSpec[]): { walls: WallSpec[]; props: PropSpec[] } {
   if (exits.length === 0) return { walls: [...walls], props: [...props] };
   const overlapsTransition = (bounds: PlacementBounds): boolean => exits.some((exit) => {
@@ -385,7 +406,9 @@ export function generateGen3Cell(options: GenerateCellOptions): CellDescriptor {
 
   // Generation 3 Features already own their rarity and independent seed domain.
   // Do not pass them through Generation 2's room-scenery lottery a second time.
-  const arrivalSafe = reserveOriginArrival(x, z, walls, props);
+  const arrivalSafe = manilaRoom
+    ? { walls: [...walls], props: [...props] }
+    : reserveGen3OriginArrival(x, z, walls, props);
   featureIds = featureIds.filter((id) => arrivalSafe.props.some((prop) => prop.id === id));
   const ceilingPattern = intInRange(`${seed}:gen3-ceiling:${x}:${z}`, 0, 4);
   const lightingZone = manilaRoom ? 'manila' : zoneId;
