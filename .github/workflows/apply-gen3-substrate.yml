@@ -1,12 +1,13 @@
 name: Apply Gen3 substrate correction
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/gen3-substrate-density-continuity
-    paths:
-      - tools/apply-gen3-substrate.py
-      - .github/workflows/apply-gen3-substrate.yml
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 permissions:
   contents: write
@@ -19,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent/gen3-substrate-density-continuity
+          ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
