@@ -69,6 +69,7 @@ test('clustered light field modulates the existing ambience graph with bounded s
   await ambience.start(0.68);
   assert.equal(ambience.getDebugState().active, true);
   assert.equal(ambience.getDebugState().graphStarts, 1);
+  assert.equal(ambience.getDebugState().humLayers, 3);
 
   ambience.setLightField(field());
   let debug = ambience.getDebugState();
@@ -88,6 +89,21 @@ test('clustered light field modulates the existing ambience graph with bounded s
   ambience.setLightField(field({ flickerPulse: 0 }));
   ambience.setLightField(field({ flickerPulse: 0.7 }));
   assert.equal(ambience.getDebugState().flickerStarts, before + 2, 'a later distinct flicker interval may produce one more snap');
+});
+
+test('deep Blackout removes local hum while the external boundary cue rises gradually', async () => {
+  const ambience = new ProceduralAmbience();
+  await ambience.start(0.68);
+  ambience.setLightField(field({ energy: 1 }));
+  ambience.setEnvironment(1, 0);
+  assert.equal(ambience.getDebugState().targetHumGain, 0);
+  ambience.setEnvironment(0.8, 0.25);
+  const distant = ambience.getDebugState().targetHumGain;
+  ambience.setEnvironment(0.6, 0.8);
+  const near = ambience.getDebugState().targetHumGain;
+  assert.ok(distant > 0);
+  assert.ok(near > distant);
+  assert.ok(near <= AMBIENCE_TUNING.externalEscapeHumGain);
 });
 
 test('lifecycle resume suppresses an immediate clustered flicker snap', async () => {

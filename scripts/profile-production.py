@@ -113,6 +113,30 @@ def dispatch_change(driver: webdriver.Chrome, selector: str, value: str | bool) 
     )
 
 
+def selector_exists(driver: webdriver.Chrome, selector: str) -> bool:
+    return bool(driver.execute_script("return Boolean(document.querySelector(arguments[0]));", selector))
+
+
+def reset_world_overrides(driver: webdriver.Chrome) -> None:
+    if selector_exists(driver, '[data-lab="zone"]'):
+        # Accepted Gen2 production remains a valid comparison target.
+        dispatch_change(driver, '[data-lab="zone"]', "")
+        return
+    for selector in ('[data-lab="condition"]', '[data-lab="carver"]', '[data-lab="structure"]'):
+        dispatch_change(driver, selector, "")
+
+
+def preview_hole_carver(driver: webdriver.Chrome) -> str:
+    if selector_exists(driver, '[data-lab="zone"]'):
+        dispatch_change(driver, '[data-lab="zone"]', "holes")
+        wait_for_metrics(driver, lambda value: value.get("zone") == "Hole Section" and value.get("loadedCells") == 9, "Gen2 hole compatibility scene")
+        return "gen2-zone-adapter"
+    dispatch_change(driver, '[data-lab="condition"]', "clear")
+    dispatch_change(driver, '[data-lab="carver"]', "floor-hole-cluster")
+    wait_for_metrics(driver, lambda value: "floor-hole-cluster" in str(value.get("carvers", "")) and value.get("loadedCells") == 9, "floor-hole Carver preview")
+    return "gen3-carver"
+
+
 def lab_is_open(driver: webdriver.Chrome) -> bool:
     return "visible" in driver.find_element(By.CSS_SELECTOR, '[data-ui="lab"]').get_attribute("class").split()
 
@@ -142,10 +166,14 @@ def parse_metrics(text: str) -> dict[str, Any]:
         return match.group(1).strip() if match else None
 
     result: dict[str, Any] = {"raw": text}
-    cell = value_for("cell")
+    cell = value_for("stream cell") or value_for("cell")
     if cell:
         result["cell"] = cell.split(" / ", 1)[0]
-    for label, key in (("seed", "seed"), ("room", "room"), ("zone", "zone")):
+    for label, key in (
+        ("seed", "seed"), ("generation", "generation"), ("level", "level"),
+        ("region", "region"), ("geometry", "geometry"), ("carvers", "carvers"),
+        ("structures", "structures"), ("room", "room"), ("zone", "zone"),
+    ):
         value = value_for(label)
         if value is not None:
             result[key] = value
@@ -280,7 +308,7 @@ def sample_static(driver: webdriver.Chrome, name: str, warnings: list[str]) -> d
 
 def profile_streaming_bands(driver: webdriver.Chrome) -> dict[str, Any]:
     ensure_lab(driver, True)
-    dispatch_change(driver, '[data-lab="zone"]', "")
+    reset_world_overrides(driver)
     dispatch_change(driver, '[data-lab="bypass"]', False)
     dispatch_change(driver, '[data-lab="radius"]', "3")
     start = wait_for_metrics(driver, lambda value: value.get("loadedCells") == 49, "streaming start radius 3")
@@ -363,32 +391,34 @@ def main() -> None:
         report["checks"].append("new threshold-001 journey and WebGL renderer verified")
         time.sleep(2)
 
-        report["scenarios"]["baselineSpawn"] = sample_static(driver, "baseline-spawn", warnings)
-        baseline = report["scenarios"]["baselineSpawn"]["worldMetricsAfter"]
-        assert baseline.get("seed") == "threshold-001" and baseline.get("loadedCells") == 49
-        report["checks"].append("baseline spawn profiled at radius 3")
+        report["scenarios"]["defaultSpawn"] = sample_static(driver, "default-spawn", warnings)
+        default_spawn = report["scenarios"]["defaultSpawn"]["worldMetricsAfter"]
+        assert default_spawn.get("seed") == "threshold-001" and default_spawn.get("loadedCells") == 49
+        report["checks"].append("default Level 0 spawn profiled at radius 3")
 
         ensure_lab(driver, True)
         dispatch_change(driver, '[data-lab="radius"]', "1")
         dispatch_change(driver, '[data-lab="bypass"]', True)
-        dispatch_change(driver, '[data-lab="zone"]', "holes")
-        wait_for_metrics(driver, lambda value: value.get("zone") == "Hole Section" and value.get("loadedCells") == 9, "forced Hole Section")
+        report["holePreviewMode"] = preview_hole_carver(driver)
         ensure_lab(driver, False)
         ensure_pointer_lock(driver)
-        report["scenarios"]["holeSectionRadius1"] = sample_static(driver, "hole-section-radius-1", warnings)
-        report["checks"].append("forced Hole Section profiled at radius 1")
+        report["scenarios"]["holeCarverRadius1"] = sample_static(driver, "hole-carver-radius-1", warnings)
+        report["checks"].append("floor-hole Carver evidence profiled at radius 1")
 
         ensure_lab(driver, True)
-        dispatch_change(driver, '[data-lab="zone"]', "")
+        reset_world_overrides(driver)
         dispatch_change(driver, '[data-lab="bypass"]', False)
         dispatch_change(driver, '[data-lab="radius"]', "3")
         wait_for_metrics(driver, lambda value: value.get("loadedCells") == 49, "normal radius restored")
+        catalog_count = len(driver.find_elements(By.CSS_SELECTOR, '[data-lab="object-select"] option'))
+        assert catalog_count > 0, "World Lab object showcase is empty"
+        report["catalogCount"] = catalog_count
         driver.execute_script("arguments[0].click();", driver.find_element(By.CSS_SELECTOR, '[data-action="spawn-all-objects"]'))
-        report["catalogStatus"] = wait_for_text(driver, '[data-ui="catalog-status"]', "Spawned 23", 15)
+        report["catalogStatus"] = wait_for_text(driver, '[data-ui="catalog-status"]', f"Spawned {catalog_count}", 15)
         ensure_lab(driver, False)
         ensure_pointer_lock(driver)
-        report["scenarios"]["worldLabShowcase23"] = sample_static(driver, "world-lab-showcase-23", warnings)
-        report["checks"].append("World Lab 23-object showcase profiled at radius 3")
+        report["scenarios"]["worldLabShowcase"] = sample_static(driver, "world-lab-showcase", warnings)
+        report["checks"].append(f"World Lab {catalog_count}-object canonical showcase profiled at radius 3")
 
         ensure_lab(driver, True)
         driver.execute_script("arguments[0].click();", driver.find_element(By.CSS_SELECTOR, '[data-action="clear-lab-objects"]'))
@@ -409,8 +439,9 @@ def main() -> None:
         continued = wait_for(driver, lambda current: read_save(current), 15, "continued save")
         position_delta = distance(before_position, position(continued))
         assert continued.get("version") == 2 and continued.get("characterId") == character_id and continued.get("seed") == "threshold-001" and position_delta < 0.25
-        report["saveReload"] = {"version": 2, "characterIdPreserved": True, "seed": "threshold-001", "positionDeltaMeters": round(position_delta, 4)}
-        report["checks"].append("refresh/Continue preserved save schema v2, character, seed and position")
+        generation_version = str(continued.get("generationVersion") or "gen2")
+        report["saveReload"] = {"version": 2, "generationVersion": generation_version, "characterIdPreserved": True, "seed": "threshold-001", "positionDeltaMeters": round(position_delta, 4)}
+        report["checks"].append(f"refresh/Continue preserved save schema v2, {generation_version}, character, seed and position")
 
         errors = browser_log_errors(driver)
         report["browserErrors"] = errors

@@ -1,7 +1,7 @@
 import * as pc from 'playcanvas';
 import type { DroppedItemState, SaveData, SurfaceMark } from '../persistence/types.js';
 import { resolveCircleAgainstAabbs } from '../physics/collision.js';
-import { sampleLightField, type LightFieldSample } from '../world/lighting.js';
+import { sampleLightField, selectSpatialFixtureLights, type LightFieldSample, type SpatialFixtureLight } from '../world/lighting.js';
 import { CELL_SIZE, type CellDescriptor, type FloorPatchSpec } from '../world/types.js';
 import { ZONE_PROFILES } from '../world/zones.js';
 import { registerObjectCatalogShowcaseHost, type ObjectCatalogEntry } from './objectCatalog.js';
@@ -151,12 +151,12 @@ export class WorldRenderer {
       const active = group.state !== 'off';
       const fixtureMat = this.getMaterial(
         `fixture:${profile.id}:${group.state}`,
-        active ? [0.69, 0.68, 0.53] : [0.28, 0.28, 0.23],
+        active ? [0.98, 0.96, 0.76] : [0.32, 0.32, 0.27],
         undefined,
         0,
         [1, 1],
-        active ? [0.84, 0.82, 0.61] : [0.01, 0.01, 0.008],
-        active ? (group.state === 'flicker' ? 0.78 : 1.12) * profile.lightMultiplier : 0.02
+        active ? [1, 0.95, 0.68] : [0.01, 0.01, 0.008],
+        active ? (group.state === 'flicker' ? 1.35 : 2.35) * profile.lightMultiplier : 0.02
       );
       group.fixtures.forEach((fixture, index) => {
         this.box(`${group.id}:fixture:${index}`, visual.root, [fixture.x, fixture.y, fixture.z], [2.2, 0.08, 0.38], fixtureMat, group.rotationY);
@@ -211,20 +211,14 @@ export class WorldRenderer {
 
   private addRecessedHole(root: pc.Entity, hole: FloorPatchSpec, floorTint: [number, number, number]): void {
     const voidMat = this.getMaterial('hole:void:recessed', [0.002, 0.002, 0.001]);
-    const sideMat = this.getMaterial('hole:side:recessed', [floorTint[0] * 0.28, floorTint[1] * 0.25, floorTint[2] * 0.18], 'concrete', hole.id.length % 3);
-    const rimMat = this.getMaterial('hole:rim:recessed', [floorTint[0] * 0.86, floorTint[1] * 0.8, floorTint[2] * 0.62], 'carpet', hole.id.length % 3);
+    const sideMat = this.getMaterial('hole:side:recessed', [0.006, 0.006, 0.004]);
     const x = hole.position.x; const z = hole.position.z; const sx = hole.scale.x; const sz = hole.scale.z;
-    this.box(`${hole.id}:depth`, root, [x, -0.72, z], [sx * 0.92, 0.04, sz * 0.92], voidMat);
-    const sideDepth = 0.58; const sideY = -sideDepth / 2; const edge = 0.08;
+    this.box(`${hole.id}:depth`, root, [x, -4.6, z], [sx * 0.94, 0.04, sz * 0.94], voidMat);
+    const sideDepth = 4.5; const sideY = -sideDepth / 2; const edge = 0.035;
     this.box(`${hole.id}:north-side`, root, [x, sideY, z - sz / 2], [sx, sideDepth, edge], sideMat);
     this.box(`${hole.id}:south-side`, root, [x, sideY, z + sz / 2], [sx, sideDepth, edge], sideMat);
     this.box(`${hole.id}:west-side`, root, [x - sx / 2, sideY, z], [edge, sideDepth, sz], sideMat);
     this.box(`${hole.id}:east-side`, root, [x + sx / 2, sideY, z], [edge, sideDepth, sz], sideMat);
-    const rim = 0.12;
-    this.box(`${hole.id}:north-rim`, root, [x, 0.028, z - sz / 2], [sx + rim, 0.056, rim], rimMat);
-    this.box(`${hole.id}:south-rim`, root, [x, 0.028, z + sz / 2], [sx + rim, 0.056, rim], rimMat);
-    this.box(`${hole.id}:west-rim`, root, [x - sx / 2, 0.028, z], [rim, 0.056, Math.max(0.1, sz - rim)], rimMat);
-    this.box(`${hole.id}:east-rim`, root, [x + sx / 2, 0.028, z], [rim, 0.056, Math.max(0.1, sz - rim)], rimMat);
   }
 
   clearLabShowcase(): void {
@@ -234,17 +228,19 @@ export class WorldRenderer {
   }
 
   updateLightField(playerX: number, playerZ: number, elapsedSeconds: number, reducedFlicker: boolean): LightFieldSample {
-    return sampleLightField(
-      [...this.loaded.values()].flatMap((visual) => visual.descriptor.lightGroups.map((group) => ({
+    return sampleLightField(this.lightSources(), playerX, playerZ, elapsedSeconds, reducedFlicker);
+  }
+
+  spatialFixtureLights(playerX: number, playerZ: number, elapsedSeconds: number, reducedFlicker: boolean, limit = 4): SpatialFixtureLight[] {
+    return selectSpatialFixtureLights(this.lightSources(), playerX, playerZ, elapsedSeconds, reducedFlicker, limit);
+  }
+
+  private lightSources() {
+    return [...this.loaded.values()].flatMap((visual) => visual.descriptor.lightGroups.map((group) => ({
         cellX: visual.descriptor.address.cellX,
         cellZ: visual.descriptor.address.cellZ,
         group
-      }))),
-      playerX,
-      playerZ,
-      elapsedSeconds,
-      reducedFlicker
-    );
+      })));
   }
 
   updateDynamicItems(now: number): void {

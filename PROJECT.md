@@ -52,8 +52,9 @@ Project Noclip is a living, persistent browser-first recreation of the Backrooms
 - Stable world/surface/item identities support persistence, markers, Transitions, and future multiplayer authority.
 - IndexedDB stores journey state and supports schema migration.
 - Vercel is the intended deployment target.
-- The accepted runtime still uses Gen-2 `ZoneId`, room-archetype, spatial-profile and structural-component generation.
-- Generation 3 target architecture is: **seed → multi-scale Fields → architecture + Geometry solver → continuous Level 0 → Materials/Conditions + Carvers + Structures + Features + Anomalies/Entities/Items/Transitions → runtime mutations/save deltas**.
+- New journeys use the Generation 3 `gen3-v1` path: **seed + generation version → kilometre-scale Region/Condition Fields → world-space architecture + Euclidean Geometry solver → Materials/Conditions → Carvers → Structures → Features/Items/Transitions → runtime mutations/save deltas**.
+- Existing pre-versioned journeys migrate to a frozen `gen2` compatibility path and are never silently regenerated.
+- `ZoneId`, room archetypes, spatial profiles, and structural components are no longer new-world design inputs; they remain compatibility metadata for Gen2 saves and a narrow renderer adapter only.
 - Cells remain streaming/computation units and must not become player-visible room boundaries.
 
 ## World vocabulary and catalog
@@ -76,7 +77,7 @@ Preferred everyday design vocabulary:
 - **Item**
 - **Transition**
 
-`Field`, `Cell`, `District`, seed domains, room archetypes, spatial profiles, components and props are engine/legacy vocabulary rather than peer design categories.
+`Field`, `Cell`, seed domains, cache radius, and generation version are engine vocabulary. `District`, `ZoneId`, room archetype, spatial profile, component, and generic Prop are Gen2 compatibility vocabulary rather than peer design categories.
 
 Simplification rules:
 
@@ -94,7 +95,10 @@ Generation 3 migration direction lives in GitHub Issue #31. `WORLD.md` is the ca
 ## Durable constraints
 
 - Do not return to isolated per-cell random room generation.
-- Do not treat recognizable ordinary room modules as the long-term base-world generator; move toward field-driven spatial conditions incrementally.
+- New journeys must not import hard district/Zone/archetype/component selection into Generation 3.
+- Do not reintroduce alcoves, baseline arches, freestanding Arch motifs, framed hole recesses, or other prominent unsupported geometry for procedural variety.
+- Cells are cache/streaming units only; no wall, light, Region, or architecture cadence may reset at their boundaries.
+- Tune Regions against crossing-time distributions and player-visible fidelity, not raw Cell counts.
 - Preserve save compatibility or provide tested migrations.
 - Preserve deterministic topology/connectivity laws for Euclidean Geometry; define equally deterministic laws before introducing any Non-Euclidean behaviour.
 - Keep offline and future connected-world authority separate.

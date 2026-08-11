@@ -1,3 +1,9 @@
+/**
+ * FROZEN GENERATION 2 COMPATIBILITY ONLY.
+ *
+ * District-era room archetypes/components are retained for old saves. New
+ * journeys must use gen3.ts plus canonical Structures, Carvers and Conditions.
+ */
 import { intInRange, stableId, unitFloat, weightedChoice } from './hash.js';
 import { makeNote } from './notes.js';
 import {

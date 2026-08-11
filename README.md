@@ -17,19 +17,21 @@ Agents and contributors should read, in order:
 
 `docs/CURRENT_STATE.md` is retained as the Iteration 2 historical snapshot. `STATUS.md` is the current accepted-state record going forward.
 
-## Level 0 Alpha 0.2
+## Level 0 Generation 3 / 0.3 development
 
-- Deterministic 5×5 spatial districts rather than isolated random rooms.
-- Sixteen room archetypes across baseline, arch, pillar, blackout, hole, Manila and threshold spaces.
-- Procedural wallpaper, carpet, ceiling-grid, concrete and wood materials.
+- Continuous world-space Level 0 architecture driven by deterministic multi-scale Fields; Cells are streaming/cache units, never rooms.
+- Kilometre-capable Ordinary Level 0, Pillar Field, and Arch Rooms Regions with measured travel-time budgets.
+- Blackout Conditions with zero local light/buzz, rare floor-hole Carvers, Manila as one Structure, and exits as Transitions rather than geography.
+- Reference-calibrated wallpaper, carpet, suspended ceiling, spatial fixture lighting with restrained bloom, and layered fluorescent ambience.
+- Generation-versioned saves: new journeys use `gen3-v1`; existing journeys remain on frozen `gen2` generation.
 - Smooth swept-circle wall collision and diagonal sliding.
 - Sparse persistent loot and one-time starter rolls.
 - Flashlight, batteries, Almond Water, working glow sticks and limited marker strokes.
 - Hardcoded environmental notes with a readable document interface.
-- World Day + Exposure gates for zones and exits.
+- World Day + Exposure gates for Regions, Conditions, Carvers, Structures, and Transitions.
 - Small Manila Room with one table and a central ledger book.
-- IndexedDB persistence with v1→v2 migration.
-- World Lab developer controls.
+- IndexedDB persistence with v1→v2 and generation-version migration.
+- World Lab controls and locators using the canonical `WORLD.md` vocabulary.
 
 ## Commands
 

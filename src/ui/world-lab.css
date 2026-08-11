@@ -1,0 +1,36 @@
+.vocabulary-group {
+  border-top: 1px solid rgba(219, 204, 112, 0.14);
+  padding: 0.45rem 0;
+}
+
+.vocabulary-group summary {
+  display: flex;
+  justify-content: space-between;
+  cursor: pointer;
+  color: #d8cf94;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.72rem;
+}
+
+.vocabulary-group summary span { color: var(--muted); }
+
+.vocabulary-entry {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.12rem 0.65rem;
+  padding: 0.5rem 0.3rem;
+  border-top: 1px dotted rgba(219, 204, 112, 0.1);
+}
+
+.vocabulary-entry strong { font-size: 0.72rem; }
+.vocabulary-entry span {
+  color: #a9a37d;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+}
+.vocabulary-entry small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.66rem;
+}

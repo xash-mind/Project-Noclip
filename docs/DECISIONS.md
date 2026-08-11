@@ -1,23 +1,16 @@
-# Project Noclip — Decisions
+# Durable decisions index
 
-**Updated:** 2026-08-03
+Architecture decisions with meaningful alternatives belong in `docs/adr/`. This file is a compact index, not a parallel specification.
 
-1. Browser-first TypeScript + Vite + PlayCanvas client.
-2. Canonical generation/simulation remain renderer-independent.
-3. Vercel hosts the client; future Nakama/PostgreSQL services run separately.
-4. Offline and Connected World characters remain separate.
-5. Level 0 is mostly empty and has no routine combat.
-6. Items are found; starter rolls remain 15% none, 60% one, 25% two.
-7. Stable item IDs/ownership/revisions remain trade-ready.
-8. Static geography regenerates from seeds; saves store deltas.
-9. Markers store bounded vector strokes, not images.
-10. World Day and Exposure Day are separate authority concepts.
-11. Zones and exits are timeline-gated; developer bypass exists only in World Lab.
-12. Level 1 is not available at world start and is positioned farther from spawn.
-13. Level 0 uses 5×5 deterministic district planning plus room archetypes; per-cell random zone selection is rejected.
-14. The Manila Room is a delayed small room containing one table and one central ledger book.
-15. Existing v1 local journeys migrate to save schema v2 rather than being erased.
-16. Collision uses sub-stepped swept-circle/AABB response and sliding; wall-order snapping is rejected.
-17. Activated glow sticks are persistent world lights with a ten-minute decay model.
-18. Hardcoded notes are temporary worldbuilding/UI validation content, not final lore lock.
-19. Only one verified preview should be produced before each production promotion.
+1. Renderer-independent deterministic world state remains the authority.
+2. Geometry has only Euclidean and Non-Euclidean canonical values.
+3. Cells are streaming/cache units, never rooms or geography.
+4. New journeys use `gen3-v1`; existing/unversioned saves remain on frozen `gen2`.
+5. Generation 3 derives Regions and Blackout pressure from continuous kilometre-scale Fields.
+6. Ordinary architecture is world-space partition generation, not hard district/Zone/archetype/component composition.
+7. Pillar Field and Arch Rooms are Regions; Blackout is a Condition; holes are Carvers; Manila and Red Rooms are Structures; exits are Transitions. Threshold is not geography.
+8. Region tuning is accepted through crossing-time distributions and browser-visible fidelity, not Cell counts.
+9. Non-Euclidean behaviour requires an explicit deterministic, save-safe design. Red Rooms remain blocked until their closed loop is approved.
+10. World Lab and runtime diagnostics share the canonical `WORLD.md` vocabulary registry.
+
+See `docs/adr/0001-generation-versioned-gen3-cutover.md` for the Generation 3 compatibility decision.

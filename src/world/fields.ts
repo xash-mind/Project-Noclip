@@ -1,4 +1,7 @@
 import { hashString } from './hash.js';
+import type { GeometryKind } from './types.js';
+
+export type { GeometryKind } from './types.js';
 
 export const WORLD_FIELD_NAMES = [
   'openness',
@@ -19,7 +22,14 @@ export const WORLD_FIELD_NAMES = [
 ] as const;
 
 export type WorldFieldName = typeof WORLD_FIELD_NAMES[number];
-export type GeometryKind = 'euclidean' | 'non-euclidean';
+
+export const GEOGRAPHY_FIELD_NAMES = [
+  'pillarAffinity',
+  'archAffinity',
+  'blackoutPressure',
+  'holePressure'
+] as const;
+export type GeographyFieldName = typeof GEOGRAPHY_FIELD_NAMES[number];
 
 export interface WorldFieldSample extends Record<WorldFieldName, number> {
   geometry: GeometryKind;
@@ -30,10 +40,17 @@ interface OctaveSpec {
   weight: number;
 }
 
-const OCTAVES: readonly OctaveSpec[] = [
+const LOCAL_OCTAVES: readonly OctaveSpec[] = [
   { scaleMeters: 168, weight: 0.52 },
   { scaleMeters: 56, weight: 0.31 },
   { scaleMeters: 21, weight: 0.17 }
+];
+
+/** Region-scale Fields are intentionally measured in kilometres, not Cells. */
+const GEOGRAPHY_OCTAVES: readonly OctaveSpec[] = [
+  { scaleMeters: 8400, weight: 0.6 },
+  { scaleMeters: 3150, weight: 0.27 },
+  { scaleMeters: 1050, weight: 0.13 }
 ];
 
 const UINT32_RANGE = 0x100000000;
@@ -93,11 +110,11 @@ function valueNoise(seedHash: number, fieldIndex: number, octaveIndex: number, w
   return lerp(north, south, tz);
 }
 
-function sampleScalarField(seedHash: number, fieldIndex: number, worldX: number, worldZ: number): number {
+function sampleScalarField(seedHash: number, fieldIndex: number, worldX: number, worldZ: number, octaves: readonly OctaveSpec[]): number {
   let value = 0;
   let totalWeight = 0;
-  for (let octaveIndex = 0; octaveIndex < OCTAVES.length; octaveIndex += 1) {
-    const octave = OCTAVES[octaveIndex]!;
+  for (let octaveIndex = 0; octaveIndex < octaves.length; octaveIndex += 1) {
+    const octave = octaves[octaveIndex]!;
     value += valueNoise(seedHash, fieldIndex, octaveIndex, worldX, worldZ, octave.scaleMeters) * octave.weight;
     totalWeight += octave.weight;
   }
@@ -108,16 +125,16 @@ function sampleScalarField(seedHash: number, fieldIndex: number, worldX: number,
  * Deterministic Generation 3 field sampler.
  *
  * Coordinates are world-space metres rather than Cell coordinates so sampling
- * remains continuous across streaming boundaries. The bounded Generation 3
- * architecture pilot consumes structural channels; other generation paths can
- * continue treating the full sample as read-only diagnostics until migrated.
+ * remains continuous across streaming boundaries. Generation 3 layers sample
+ * only their owned channels so Region, Geometry, Condition and Carver seed
+ * domains remain independent while diagnostics can still inspect the full set.
  */
 export function sampleWorldFields(seed: string, worldX: number, worldZ: number): WorldFieldSample {
   const seedHash = hashString(`${seed}:gen3-fields`);
   const values = {} as Record<WorldFieldName, number>;
   for (let fieldIndex = 0; fieldIndex < WORLD_FIELD_NAMES.length; fieldIndex += 1) {
     const name = WORLD_FIELD_NAMES[fieldIndex]!;
-    values[name] = sampleScalarField(seedHash, fieldIndex, worldX, worldZ);
+    values[name] = sampleScalarField(seedHash, fieldIndex, worldX, worldZ, LOCAL_OCTAVES);
   }
   return { ...values, geometry: 'euclidean' };
 }
@@ -139,9 +156,35 @@ export function sampleWorldFieldChannels<const Names extends readonly WorldField
   const values: Partial<Record<WorldFieldName, number>> = {};
   for (const name of names) {
     const fieldIndex = WORLD_FIELD_NAMES.indexOf(name);
-    values[name] = sampleScalarField(seedHash, fieldIndex, worldX, worldZ);
+    values[name] = sampleScalarField(seedHash, fieldIndex, worldX, worldZ, LOCAL_OCTAVES);
   }
   return values as Record<Names[number], number>;
+}
+
+export interface WorldGeographySample extends Record<GeographyFieldName, number> {
+  geometry: GeometryKind;
+}
+
+/**
+ * Continuous kilometre-scale Fields used to derive coherent Level 0 geography.
+ * They are separate from local architecture Fields so tuning wallpaper, columns,
+ * or partitions cannot accidentally move a whole Region.
+ */
+export function sampleWorldGeography(seed: string, worldX: number, worldZ: number): WorldGeographySample {
+  const seedHash = hashString(`${seed}:gen3-geography`);
+  const values = {} as Record<GeographyFieldName, number>;
+  for (let fieldIndex = 0; fieldIndex < GEOGRAPHY_FIELD_NAMES.length; fieldIndex += 1) {
+    const name = GEOGRAPHY_FIELD_NAMES[fieldIndex]!;
+    values[name] = sampleScalarField(seedHash, fieldIndex, worldX, worldZ, GEOGRAPHY_OCTAVES);
+  }
+  return { ...values, geometry: 'euclidean' };
+}
+
+export function formatGeographyDiagnostics(sample: WorldGeographySample): string[] {
+  return [
+    `geography A   pillar ${sample.pillarAffinity.toFixed(2)} / arch ${sample.archAffinity.toFixed(2)}`,
+    `geography B   blackout ${sample.blackoutPressure.toFixed(2)} / holes ${sample.holePressure.toFixed(2)}`
+  ];
 }
 
 export function formatFieldDiagnostics(sample: WorldFieldSample): string[] {

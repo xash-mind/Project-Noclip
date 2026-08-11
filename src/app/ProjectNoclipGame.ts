@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { CameraFrame } from 'playcanvas/build/playcanvas/src/extras/render-passes/camera-frame.js';
 import { ProceduralAmbience } from '../audio/Ambience.js';
 import { PlayerIntent } from '../input/PlayerIntent.js';
 import { addToInventory, INVENTORY_CAPACITY, removeFromInventory, updateInventoryItem } from '../inventory/inventory.js';
@@ -12,10 +13,13 @@ import { WorldRenderer, type InteractionVisual, type WorldItemVisual } from '../
 import { addStableTime, calculateExposureDay, calculateWorldDay, canonicalEdgeId, EMPTY_EXPOSURE, recordTraversal } from '../simulation/timeline.js';
 import { canShift, shouldShift } from '../simulation/shifting.js';
 import { GameUI } from '../ui/GameUI.js';
+import { estimateBlackoutExtent, estimateRegionExtent, locateNearestBlackout, locateNearestHoleCluster, locateNearestRegion, sampleGen3Environment, type RegionExtentEstimate } from '../world/gen3.js';
+import { formatFieldDiagnostics, formatGeographyDiagnostics } from '../world/fields.js';
 import { generateCell } from '../world/generator.js';
 import { stableId, unitFloat } from '../world/hash.js';
 import { LIGHT_FIELD_UPDATE_INTERVAL, type LightFieldSample } from '../world/lighting.js';
-import { CELL_SIZE, DEFAULT_TUNING, type CellDescriptor, type WorldTuning } from '../world/types.js';
+import { manilaRoomCell } from '../world/structures.js';
+import { CELL_SIZE, DEFAULT_TUNING, type CellDescriptor, type RegionId, type WorldTuning } from '../world/types.js';
 import { ZONE_PROFILES } from '../world/zones.js';
 
 const PLAYER_HEIGHT = 1.65;
@@ -25,6 +29,20 @@ const CROUCH_SPEED = 1.8;
 const SAVE_INTERVAL = 1.5;
 const TOUCH_LOOK_MULTIPLIER = 2.25;
 const EMPTY_LIGHT_FIELD: LightFieldSample = { energy: 0, activeGroups: 0, flickerGroups: 0, nearbyGroups: 0, flickerPulse: 0, temperature: 0.94 };
+const REGION_LABELS: Record<RegionId, string> = {
+  'ordinary-level-0': 'Ordinary Level 0',
+  'pillar-field': 'Pillar Field',
+  'arch-rooms': 'Arch Rooms'
+};
+
+interface PlayCanvasRenderControl {
+  autoRender: boolean;
+  renderNextFrame: boolean;
+}
+
+function renderControl(app: pc.Application): PlayCanvasRenderControl {
+  return app as unknown as PlayCanvasRenderControl;
+}
 
 export class ProjectNoclipGame {
   private readonly store = new IndexedDbSaveStore();
@@ -34,7 +52,9 @@ export class ProjectNoclipGame {
   private readonly ui: GameUI;
   private app?: pc.Application;
   private camera?: pc.Entity;
-  private localLight?: pc.Entity;
+  private cameraFrame?: CameraFrame;
+  private fixtureLights: pc.Entity[] = [];
+  private blackoutGuideLight?: pc.Entity;
   private flashlight?: pc.Entity;
   private renderer?: WorldRenderer;
   private save?: SaveData;
@@ -58,6 +78,8 @@ export class ProjectNoclipGame {
   private lightField: LightFieldSample = { ...EMPTY_LIGHT_FIELD };
   private journeyElapsed = 0;
   private lightFieldAccumulator = 0;
+  private regionExtent?: RegionExtentEstimate;
+  private regionExtentKey = '';
 
   constructor() {
     const canvas = document.querySelector<HTMLCanvasElement>('#game-canvas');
@@ -67,6 +89,8 @@ export class ProjectNoclipGame {
       onNewGame: (seed) => void this.startNew(seed), onContinue: () => void this.continueGame(), onReset: () => void this.resetGame(),
       onResume: () => this.resumeInput(), onSelectItem: (id) => this.selectItem(id), onTuningChange: (patch) => this.updateTuning(patch),
       onSeedChange: (seed) => void this.startNew(seed), onSimulateStarter: () => this.simulateStarters(), onExportTuning: () => this.exportTuning(),
+      onLocateRegion: (regionId) => this.locateRegion(regionId),
+      onLocateBlackout: () => this.locateBlackout(), onLocateHoleCluster: () => this.locateHoleCluster(), onLocateManilaRoom: () => this.locateManilaRoom(),
       onTouchMove: (forward, strafe) => this.handleTouchMove(forward, strafe), onTouchSprint: (active) => this.handleTouchSprint(active),
       onTouchLook: (dx, dy) => this.handleTouchLook(dx, dy), onTouchPrimaryStart: () => this.handleTouchPrimaryStart(), onTouchPrimaryEnd: () => this.handleTouchPrimaryEnd(),
       onTouchInteract: () => this.handleTouchInteract(), onTouchUse: () => this.handleTouchUse(), onTouchMarker: () => this.handleTouchMarker(),
@@ -85,10 +109,10 @@ export class ProjectNoclipGame {
     const characterId = stableId('character', seed, createdAt);
     const inventory = rollStarterDefinitions(characterId).map((definitionId, index) => createItemInstance(definitionId, `starter:${characterId}:${index}`, 'starter', { type: 'character', id: characterId }, createdAt));
     const save: SaveData = {
-      version: 2, characterId, seed, createdAt, starterRolled: true,
+      version: 2, characterId, seed, generationVersion: 'gen3-v1', createdAt, starterRolled: true,
       position: { x: 0, y: PLAYER_HEIGHT, z: 0, yaw: 0, pitch: 0 }, inventory, selectedItemId: inventory[0]?.instanceId,
       droppedItems: [], pickedLootNodeIds: [], marks: [], hydration: 0.76, exposure: structuredClone(EMPTY_EXPOSURE),
-      shiftEpochs: {}, unloadCounts: {}, discoveredExits: [], readNoteIds: [], enteredZoneIds: ['baseline'],
+      shiftEpochs: {}, unloadCounts: {}, discoveredExits: [], readNoteIds: [], enteredZoneIds: [], enteredRegionIds: ['ordinary-level-0'],
       settings: { sensitivity: 0.095, reducedMotion: false, reducedFlicker: false, masterVolume: 0.68 }, savedAt: createdAt
     };
     await this.store.save(save); await this.launch(save);
@@ -103,7 +127,7 @@ export class ProjectNoclipGame {
 
   private async launch(save: SaveData): Promise<void> {
     this.save = save; this.yaw = save.position.yaw; this.pitch = save.position.pitch; this.tuning = { ...DEFAULT_TUNING };
-    this.lightField = { ...EMPTY_LIGHT_FIELD }; this.journeyElapsed = 0; this.lightFieldAccumulator = 0;
+    this.lightField = { ...EMPTY_LIGHT_FIELD }; this.journeyElapsed = 0; this.lightFieldAccumulator = 0; this.regionExtent = undefined; this.regionExtentKey = '';
     this.markerMode = false; this.ui.setMarkerMode(false); this.setupEngine();
     if (!this.app || !this.camera) throw new Error('Engine did not initialize');
     this.renderer = new WorldRenderer(this.app, save);
@@ -118,16 +142,34 @@ export class ProjectNoclipGame {
     if (this.app) { for (const id of [...(this.renderer?.loaded.keys() ?? [])]) this.renderer?.unloadCell(id); return; }
     const app = new pc.Application(this.canvas);
     app.setCanvasResolution(pc.RESOLUTION_AUTO); app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
-    app.scene.ambientLight = new pc.Color(0.46, 0.43, 0.27); app.scene.skyboxIntensity = 0;
-    app.scene.fog = pc.FOG_LINEAR; app.scene.fogColor = new pc.Color(0.15, 0.135, 0.075); app.scene.fogStart = 28; app.scene.fogEnd = 78;
+    app.scene.ambientLight = new pc.Color(0.26, 0.245, 0.135); app.scene.skyboxIntensity = 0;
+    app.scene.fog = pc.FOG_LINEAR; app.scene.fogColor = new pc.Color(0.15, 0.135, 0.075); app.scene.fogStart = 32; app.scene.fogEnd = 100;
     const camera = new pc.Entity('player-camera');
-    camera.addComponent('camera', { clearColor: new pc.Color(0.075, 0.068, 0.038), nearClip: 0.05, farClip: 105, fov: 73 }); app.root.addChild(camera);
-    const localLight = new pc.Entity('local-fluorescent-light');
-    localLight.addComponent('light', { type: 'omni', color: new pc.Color(0.78, 0.75, 0.5), range: 16, intensity: 0.82, castShadows: false }); app.root.addChild(localLight);
+    camera.addComponent('camera', { clearColor: new pc.Color(0.075, 0.068, 0.038), nearClip: 0.05, farClip: 125, fov: 73 }); app.root.addChild(camera);
+    const cameraComponent = (camera as unknown as { camera?: ConstructorParameters<typeof CameraFrame>[1] }).camera;
+    if (cameraComponent) {
+      const cameraFrame = new CameraFrame(app as unknown as ConstructorParameters<typeof CameraFrame>[0], cameraComponent);
+      cameraFrame.bloom.intensity = 0.024;
+      cameraFrame.bloom.blurLevel = 6;
+      cameraFrame.grading.enabled = true;
+      cameraFrame.grading.brightness = 1.06;
+      cameraFrame.grading.contrast = 0.96;
+      cameraFrame.grading.saturation = 0.9;
+      cameraFrame.update();
+      this.cameraFrame = cameraFrame;
+    }
+    this.fixtureLights = Array.from({ length: 8 }, (_, index) => {
+      const light = new pc.Entity(`spatial-fluorescent-light:${index}`);
+      light.addComponent('light', { type: 'omni', color: new pc.Color(0.95, 0.91, 0.62), range: 23.5, intensity: 0, castShadows: false });
+      light.enabled = false; app.root.addChild(light); return light;
+    });
+    const blackoutGuideLight = new pc.Entity('blackout-external-glimmer');
+    blackoutGuideLight.addComponent('light', { type: 'omni', color: new pc.Color(0.88, 0.84, 0.56), range: 22, intensity: 0, castShadows: false });
+    blackoutGuideLight.enabled = false; app.root.addChild(blackoutGuideLight);
     const flashlight = new pc.Entity('flashlight');
     flashlight.addComponent('light', { type: 'spot', color: new pc.Color(0.93, 0.91, 0.72), range: 18, intensity: 1.35, innerConeAngle: 24, outerConeAngle: 38, castShadows: false });
     camera.addChild(flashlight); flashlight.setLocalPosition(0, -0.08, -0.2); flashlight.setLocalEulerAngles(0, 180, 0); flashlight.enabled = false;
-    this.app = app; this.camera = camera; this.localLight = localLight; this.flashlight = flashlight;
+    this.app = app; this.camera = camera; this.blackoutGuideLight = blackoutGuideLight; this.flashlight = flashlight;
     app.on('update', (dt) => this.update(Math.min(dt, 0.05))); app.start(); window.addEventListener('resize', () => app.resizeCanvas());
   }
 
@@ -178,8 +220,20 @@ export class ProjectNoclipGame {
     if (open) {
       this.paused = true;
       this.ui.setPaused(false);
+      // World Lab is an inspection surface. Keep one current frame behind it,
+      // but do not burn CPU/GPU rendering an obscured paused journey.
+      if (this.app) {
+        const rendering = renderControl(this.app);
+        rendering.renderNextFrame = true;
+        rendering.autoRender = false;
+      }
       if (document.pointerLockElement === this.canvas) document.exitPointerLock();
       return;
+    }
+    if (this.app) {
+      const rendering = renderControl(this.app);
+      rendering.autoRender = true;
+      rendering.renderNextFrame = true;
     }
     this.resumeInput();
   }
@@ -257,7 +311,7 @@ export class ProjectNoclipGame {
     const fx = -Math.sin(radians), fz = -Math.cos(radians), rx = Math.cos(radians), rz = -Math.sin(radians); const current = this.camera.getPosition();
     const desiredX = current.x + (fx * forwardInput / length + rx * strafeInput / length) * speed * dt; const desiredZ = current.z + (fz * forwardInput / length + rz * strafeInput / length) * speed * dt;
     const [x, z] = this.renderer.resolveMovement(current.x, current.z, desiredX, desiredZ);
-    this.camera.setPosition(x, intent.crouching ? 1.12 : PLAYER_HEIGHT, z); this.localLight?.setPosition(x, 2.6, z); this.ambience.step(speed / WALK_SPEED);
+    this.camera.setPosition(x, intent.crouching ? 1.12 : PLAYER_HEIGHT, z); this.ambience.step(speed / WALK_SPEED);
     const nextCellX = worldToCell(x), nextCellZ = worldToCell(z);
     if (nextCellX !== this.currentCellX || nextCellZ !== this.currentCellZ) {
       this.save.exposure = recordTraversal(this.save.exposure, canonicalEdgeId(this.currentCellX, this.currentCellZ, nextCellX, nextCellZ), 140);
@@ -284,7 +338,7 @@ export class ProjectNoclipGame {
     if (!this.save || !this.renderer) return;
     const exposure = this.tuning.exposureOverride ?? calculateExposureDay(this.save.exposure); const worldDay = this.tuning.worldDayOverride ?? calculateWorldDay(Date.now()); const desired = new Set<string>(); const radius = Math.max(1, Math.min(4, Math.round(this.tuning.activeRadius)));
     for (let x = this.currentCellX - radius; x <= this.currentCellX + radius; x += 1) for (let z = this.currentCellZ - radius; z <= this.currentCellZ + radius; z += 1) {
-      const id = `${x}:${z}`; desired.add(id); const descriptor = generateCell({ seed: this.save.seed, x, z, worldDay, exposure, shiftEpoch: this.save.shiftEpochs[id] ?? 0, tuning: this.tuning });
+      const id = `${x}:${z}`; desired.add(id); const descriptor = generateCell({ seed: this.save.seed, x, z, worldDay, exposure, shiftEpoch: this.save.shiftEpochs[id] ?? 0, tuning: this.tuning, generationVersion: this.save.generationVersion });
       const existing = this.renderer.loaded.get(id)?.descriptor;
       if (!existing) this.renderer.loadCell(descriptor); else if (force || existing.address.shiftEpoch !== descriptor.address.shiftEpoch || existing.address.zoneId !== descriptor.address.zoneId || existing.roomArchetype !== descriptor.roomArchetype) this.renderer.refreshCell(descriptor);
       if (x === this.currentCellX && z === this.currentCellZ) this.currentCell = descriptor;
@@ -292,36 +346,152 @@ export class ProjectNoclipGame {
     for (const [id, visual] of [...this.renderer.loaded.entries()]) {
       if (desired.has(id)) continue;
       const distance = Math.max(Math.abs(visual.descriptor.address.cellX - this.currentCellX), Math.abs(visual.descriptor.address.cellZ - this.currentCellZ)); const unloadCount = (this.save.unloadCounts[id] ?? 0) + 1; this.save.unloadCounts[id] = unloadCount;
-      if (canShift({ occupied: false, observed: false, distanceInCells: distance, stability: visual.descriptor.stability, protectedInteraction: false, preservesPath: true }) && shouldShift(this.save.seed, id, unloadCount, this.tuning.shiftChance)) this.save.shiftEpochs[id] = (this.save.shiftEpochs[id] ?? 0) + 1;
+      if (this.save.generationVersion === 'gen2' && canShift({ occupied: false, observed: false, distanceInCells: distance, stability: visual.descriptor.stability, protectedInteraction: false, preservesPath: true }) && shouldShift(this.save.seed, id, unloadCount, this.tuning.shiftChance)) this.save.shiftEpochs[id] = (this.save.shiftEpochs[id] ?? 0) + 1;
       this.renderer.unloadCell(id);
     }
-    this.updateZoneAtmosphere(); this.refreshLightField(); this.notifyZoneEntry();
+    if (this.app) {
+      const rendering = renderControl(this.app);
+      if (!rendering.autoRender) rendering.renderNextFrame = true;
+    }
+    this.refreshRegionExtent(); this.refreshLightField(); this.notifyRegionEntry();
   }
 
-  private notifyZoneEntry(): void {
-    if (!this.save || !this.currentCell) return; const zone = this.currentCell.address.zoneId;
-    if (!this.save.enteredZoneIds.includes(zone)) { this.save.enteredZoneIds.push(zone); this.ui.toast(`The architecture changes: ${ZONE_PROFILES[zone].label}.`, 4200); void this.persist(); }
+  private notifyRegionEntry(): void {
+    if (!this.save || !this.currentCell) return;
+    if (this.save.generationVersion === 'gen2') {
+      const zone = this.currentCell.address.zoneId;
+      if (!this.save.enteredZoneIds.includes(zone)) { this.save.enteredZoneIds.push(zone); this.ui.toast(`The legacy architecture changes: ${ZONE_PROFILES[zone].label}.`, 4200); void this.persist(); }
+      return;
+    }
+    const region = this.currentCell.world.regionId;
+    if (!this.save.enteredRegionIds.includes(region)) {
+      this.save.enteredRegionIds.push(region);
+      this.ui.toast(`The Region changes: ${REGION_LABELS[region]}.`, 4200);
+      void this.persist();
+    }
   }
 
-  private updateZoneAtmosphere(): void {
-    if (!this.app || !this.currentCell) return; const profile = ZONE_PROFILES[this.currentCell.address.zoneId];
-    this.app.scene.ambientLight = new pc.Color(0.44 * profile.lightMultiplier, 0.42 * profile.lightMultiplier, 0.25 * profile.lightMultiplier);
-    this.app.scene.fogStart = profile.id === 'pillar' ? 18 : profile.id === 'blackout' ? 8 : 26; this.app.scene.fogEnd = profile.id === 'pillar' ? 54 : profile.id === 'blackout' ? 28 : 78;
+  private refreshRegionExtent(): void {
+    if (!this.save || !this.currentCell || this.save.generationVersion !== 'gen3-v1') return;
+    const worldDay = this.tuning.worldDayOverride ?? calculateWorldDay(Date.now());
+    const exposure = this.tuning.exposureOverride ?? calculateExposureDay(this.save.exposure);
+    const key = `${this.currentCell.world.regionId}:${Math.floor(this.currentCellX / 16)}:${Math.floor(this.currentCellZ / 16)}:${worldDay}:${Math.floor(exposure * 4)}`;
+    if (key === this.regionExtentKey) return;
+    this.regionExtentKey = key;
+    this.regionExtent = estimateRegionExtent({
+      seed: this.save.seed, worldX: this.currentCellX * CELL_SIZE, worldZ: this.currentCellZ * CELL_SIZE,
+      target: this.currentCell.world.regionId, worldDay, exposure, tuning: this.tuning
+    });
+  }
+
+  private locateRegion(regionId: RegionId): void {
+    if (!this.save || !this.camera || this.save.generationVersion !== 'gen3-v1') {
+      this.ui.toast('Region locating is available for Generation 3 journeys.');
+      return;
+    }
+    const worldDay = this.tuning.worldDayOverride ?? calculateWorldDay(Date.now());
+    const exposure = this.tuning.exposureOverride ?? calculateExposureDay(this.save.exposure);
+    const position = this.camera.getPosition();
+    const occurrence = locateNearestRegion({
+      seed: this.save.seed, originX: position.x, originZ: position.z, target: regionId,
+      worldDay, exposure, tuning: this.tuning
+    });
+    if (!occurrence) {
+      this.ui.toast(`${REGION_LABELS[regionId]} was not found within 12 km. Check timeline gates or enable the local bypass.`, 5600);
+      return;
+    }
+    this.camera.setPosition(occurrence.worldX, position.y, occurrence.worldZ);
+    this.currentCellX = worldToCell(occurrence.worldX); this.currentCellZ = worldToCell(occurrence.worldZ);
+    this.regionExtentKey = '';
+    this.updateStreaming(true);
+    const walkingMinutes = occurrence.distanceMeters / WALK_SPEED / 60;
+    this.ui.toast(`Located ${REGION_LABELS[regionId]} ${occurrence.distanceMeters.toFixed(0)} m away (about ${walkingMinutes.toFixed(1)} walking minutes).`, 6200);
+    void this.persist();
+  }
+
+  private locateBlackout(): void {
+    if (!this.save || !this.camera || this.save.generationVersion !== 'gen3-v1') { this.ui.toast('Blackout locating is available for Generation 3 journeys.'); return; }
+    const worldDay = this.tuning.worldDayOverride ?? calculateWorldDay(Date.now());
+    const exposure = this.tuning.exposureOverride ?? calculateExposureDay(this.save.exposure);
+    const position = this.camera.getPosition();
+    const occurrence = locateNearestBlackout({ seed: this.save.seed, originX: position.x, originZ: position.z, worldDay, exposure, tuning: this.tuning });
+    if (!occurrence) { this.ui.toast('No natural Blackout core was found within 12 km. Check its Day 7 / Exposure 1.6 gate or enable the bypass.', 5600); return; }
+    this.tuning = { ...this.tuning, conditionOverride: undefined };
+    this.camera.setPosition(occurrence.worldX, position.y, occurrence.worldZ);
+    this.currentCellX = worldToCell(occurrence.worldX); this.currentCellZ = worldToCell(occurrence.worldZ);
+    this.updateStreaming(true);
+    const extent = estimateBlackoutExtent({ seed: this.save.seed, worldX: occurrence.worldX, worldZ: occurrence.worldZ, worldDay, exposure, tuning: this.tuning });
+    this.ui.toast(`Located a natural Blackout ${occurrence.distanceMeters.toFixed(0)} m away; this local crossing is about ${extent.crossingMinutes.toFixed(1)} walking minutes.`, 6500);
+    void this.persist();
+  }
+
+  private locateHoleCluster(): void {
+    if (!this.save || !this.camera || this.save.generationVersion !== 'gen3-v1') { this.ui.toast('Carver locating is available for Generation 3 journeys.'); return; }
+    const worldDay = this.tuning.worldDayOverride ?? calculateWorldDay(Date.now());
+    const exposure = this.tuning.exposureOverride ?? calculateExposureDay(this.save.exposure);
+    const position = this.camera.getPosition();
+    const occurrence = locateNearestHoleCluster({ seed: this.save.seed, originX: position.x, originZ: position.z, worldDay, exposure, tuning: this.tuning });
+    if (!occurrence) { this.ui.toast('No natural floor-hole cluster was found within 12 km. Check its Day 10 / Exposure 2.2 gate or enable the bypass.', 5600); return; }
+    this.tuning = { ...this.tuning, carverOverride: undefined };
+    const safeX = occurrence.worldX + occurrence.radius + 5;
+    this.camera.setPosition(safeX, position.y, occurrence.worldZ);
+    this.currentCellX = worldToCell(safeX); this.currentCellZ = worldToCell(occurrence.worldZ);
+    this.updateStreaming(true);
+    this.ui.toast(`Located a natural ${occurrence.radius.toFixed(0)} m floor-hole cluster ${occurrence.distanceMeters.toFixed(0)} m away. You were placed on its outer bypass side.`, 6500);
+    void this.persist();
+  }
+
+  private locateManilaRoom(): void {
+    if (!this.save || !this.camera || this.save.generationVersion !== 'gen3-v1') { this.ui.toast('Structure locating is available for Generation 3 journeys.'); return; }
+    const worldDay = this.tuning.worldDayOverride ?? calculateWorldDay(Date.now());
+    const exposure = this.tuning.exposureOverride ?? calculateExposureDay(this.save.exposure);
+    if (!this.tuning.gateBypass && (worldDay < 1 || exposure < 0.25)) { this.ui.toast('The Manila Room is gated until World Day 1 / Exposure 0.25. Enable the local bypass to inspect it now.', 5400); return; }
+    const target = manilaRoomCell(this.save.seed); const position = this.camera.getPosition();
+    const worldX = target.cellX * CELL_SIZE; const worldZ = target.cellZ * CELL_SIZE;
+    const distance = Math.hypot(worldX - position.x, worldZ - position.z);
+    this.tuning = { ...this.tuning, structureOverride: undefined };
+    this.camera.setPosition(worldX, position.y, worldZ); this.currentCellX = target.cellX; this.currentCellZ = target.cellZ;
+    this.updateStreaming(true);
+    this.ui.toast(`Located the natural Manila Room ${distance.toFixed(0)} m away (about ${(distance / WALK_SPEED / 60).toFixed(1)} walking minutes).`, 6200);
+    void this.persist();
   }
 
   private refreshLightField(): void {
-    if (!this.save || !this.renderer || !this.camera || !this.localLight?.light || !this.currentCell) return;
+    if (!this.save || !this.renderer || !this.camera || !this.currentCell || !this.app) return;
     const position = this.camera.getPosition();
     this.lightField = this.renderer.updateLightField(position.x, position.z, this.journeyElapsed, this.save.settings.reducedFlicker);
     this.ambience.setLightField(this.lightField);
-    const profile = ZONE_PROFILES[this.currentCell.address.zoneId];
-    this.localLight.setPosition(position.x, 2.6, position.z);
-    this.localLight.light.intensity = this.lightField.energy * 0.82 * profile.lightMultiplier;
-    this.localLight.light.color = new pc.Color(
-      Math.min(1, 0.78 * this.lightField.temperature),
-      Math.min(1, 0.75 * this.lightField.temperature),
-      0.5
-    );
+    const worldDay = this.tuning.worldDayOverride ?? calculateWorldDay(Date.now());
+    const exposure = this.tuning.exposureOverride ?? calculateExposureDay(this.save.exposure);
+    const sampled = this.save.generationVersion === 'gen3-v1'
+      ? sampleGen3Environment(this.save.seed, position.x, position.z, worldDay, exposure, this.tuning)
+      : undefined;
+    const blackoutStrength = sampled?.blackoutStrength ?? this.currentCell.world.blackoutStrength;
+    const blackoutEscapeCue = sampled?.blackoutEscapeCue ?? this.currentCell.world.blackoutEscapeCue;
+    this.ambience.setEnvironment(blackoutStrength, blackoutEscapeCue);
+
+    const spatial = this.renderer.spatialFixtureLights(position.x, position.z, this.journeyElapsed, this.save.settings.reducedFlicker, this.fixtureLights.length);
+    this.fixtureLights.forEach((entity, index) => {
+      const source = spatial[index];
+      if (!source || !entity.light) { entity.enabled = false; return; }
+      entity.enabled = true;
+      entity.setPosition(source.worldX, source.worldY, source.worldZ);
+      entity.light.intensity = source.intensity * (1 - blackoutStrength);
+      entity.light.color = new pc.Color(Math.min(1, 0.98 * source.temperature), Math.min(1, 0.93 * source.temperature), 0.62);
+    });
+
+    const visibleAmbient = Math.pow(1 - blackoutStrength, 1.7);
+    this.app.scene.ambientLight = new pc.Color(0.26 * visibleAmbient + 0.002, 0.245 * visibleAmbient + 0.002, 0.135 * visibleAmbient + 0.001);
+    this.app.scene.fogStart = 32 - blackoutStrength * 25;
+    this.app.scene.fogEnd = 100 - blackoutStrength * 71;
+    const cameraComponent = (this.camera as unknown as { camera?: { clearColor: pc.Color } }).camera;
+    if (cameraComponent) cameraComponent.clearColor = new pc.Color(0.075 * visibleAmbient, 0.07 * visibleAmbient, 0.036 * visibleAmbient);
+
+    if (this.blackoutGuideLight?.light && sampled && blackoutStrength > 0.52) {
+      this.blackoutGuideLight.enabled = true;
+      this.blackoutGuideLight.setPosition(position.x + sampled.blackoutExitDirection.x * 18, 2.35, position.z + sampled.blackoutExitDirection.z * 18);
+      this.blackoutGuideLight.light.intensity = 0.025 + blackoutEscapeCue * 0.24;
+    } else if (this.blackoutGuideLight) this.blackoutGuideLight.enabled = false;
   }
 
   private updateInteraction(): void {
@@ -337,7 +507,7 @@ export class ProjectNoclipGame {
     if (!this.save || !this.renderer || !this.interaction) return;
     if (this.interaction.kind === 'item') this.pickupItem(this.interaction);
     else if (this.interaction.kind === 'exit') {
-      if (!this.interaction.enabled) { this.ui.toast(`The threshold remains inert. World Day ${this.interaction.minimumWorldDay} and Exposure ${this.interaction.minimumExposure.toFixed(1)} are required.`, 4800); return; }
+      if (!this.interaction.enabled) { this.ui.toast(`The Transition remains inert. World Day ${this.interaction.minimumWorldDay} and Exposure ${this.interaction.minimumExposure.toFixed(1)} are required.`, 4800); return; }
       if (!this.save.discoveredExits.includes(this.interaction.destinationId)) this.save.discoveredExits.push(this.interaction.destinationId);
       this.save.pendingTransition = { destinationId: this.interaction.destinationId, exitId: this.interaction.id, discoveredAt: Date.now() }; this.ui.toast(`Transition recorded: ${this.interaction.destinationId}.`, 4200); void this.persist();
     } else if (this.interaction.kind === 'note') {
@@ -413,7 +583,7 @@ export class ProjectNoclipGame {
     if (!marker || (marker.charge ?? 0) <= 0.01) { this.ui.toast('The marker is dry.'); return; }
     const hit = this.renderer.raycastWall(this.camera.getPosition(), forwardFromAngles(this.yaw, this.pitch), 3.2);
     if (!hit) { this.ui.toast('Move closer and aim directly at a wall.'); return; }
-    this.activeMark = { id: stableId('mark', this.save.characterId, Date.now(), this.save.marks.length), creatorId: this.save.characterId, surfaceId: hit.wall.id, cellId: hit.wall.cellId, shiftEpoch: hit.wall.shiftEpoch, points: [[hit.u, hit.v]], thickness: 1, ink: 'black', scope: this.currentCell.address.zoneId === 'manila' ? 'encounter' : 'personal', faceSign: hit.faceSign, createdAt: Date.now(), revision: 1 };
+    this.activeMark = { id: stableId('mark', this.save.characterId, Date.now(), this.save.marks.length), creatorId: this.save.characterId, surfaceId: hit.wall.id, cellId: hit.wall.cellId, shiftEpoch: hit.wall.shiftEpoch, points: [[hit.u, hit.v]], thickness: 1, ink: 'black', scope: this.currentCell.world.structureIds.includes('manila-room') ? 'encounter' : 'personal', faceSign: hit.faceSign, createdAt: Date.now(), revision: 1 };
     this.drawing = true; this.markedPointCount = 1; this.renderer.addMarkVisual(this.activeMark);
   }
 
@@ -444,13 +614,67 @@ export class ProjectNoclipGame {
   private updateUI(): void {
     if (!this.save || !this.renderer || !this.currentCell || !this.camera) return;
     const worldDay = this.tuning.worldDayOverride ?? calculateWorldDay(Date.now()); const exposureDay = this.tuning.exposureOverride ?? calculateExposureDay(this.save.exposure); const profile = ZONE_PROFILES[this.currentCell.address.zoneId]; const flashlight = this.getFlashlight();
-    this.ui.updateWatch({ worldDay, exposureDay }, `LEVEL 0 / ${profile.label}\n${this.currentCell.roomLabel}`, profile.stability); this.ui.updateStatus(this.save.hydration, flashlight?.charge ?? 0); this.ui.updateInventory(this.save.inventory, this.save.selectedItemId);
+    const regionLabel = this.save.generationVersion === 'gen3-v1' ? REGION_LABELS[this.currentCell.world.regionId] : `Legacy ${profile.label}`;
+    this.ui.updateWatch({ worldDay, exposureDay }, `LEVEL 0 / ${regionLabel}`, this.currentCell.stability); this.ui.updateStatus(this.save.hydration, flashlight?.charge ?? 0); this.ui.updateInventory(this.save.inventory, this.save.selectedItemId);
     const position = this.camera.getPosition(); const drawCalls = this.app?.stats?.drawCalls?.total ?? 'n/a';
-    this.ui.updateMetrics([`seed          ${this.save.seed}`, `cell          ${this.currentCell.id} / district ${this.currentCell.address.districtId}`, `room          ${this.currentCell.roomArchetype}`, `zone          ${profile.label}`, `loaded cells  ${this.renderer.loadedCellCount}`, `colliders     ${this.renderer.wallCount}`, `interactions  ${this.renderer.interactionCount}`, `light groups  ${this.renderer.lightGroupCount} / fixtures ${this.renderer.lightFixtureCount}`, `light field   ${this.lightField.energy.toFixed(3)} / active ${this.lightField.activeGroups} / flicker ${this.lightField.flickerGroups} / nearby ${this.lightField.nearbyGroups}`, `draw calls    ${drawCalls}`, `position      ${position.x.toFixed(1)}, ${position.z.toFixed(1)}`, `inventory     ${this.save.inventory.length}/${INVENTORY_CAPACITY}`, `marks         ${this.save.marks.length}`, `notes read    ${this.save.readNoteIds.length}`, `exits found   ${this.save.discoveredExits.join(', ') || 'none'}`].join('\n'));
+    const semantic = this.currentCell.world;
+    const environment = sampleGen3Environment(this.save.seed, position.x, position.z, worldDay, exposureDay, this.tuning);
+    const extent = this.regionExtent;
+    const manilaTarget = manilaRoomCell(this.save.seed);
+    const manilaDistance = Math.hypot(manilaTarget.cellX * CELL_SIZE - position.x, manilaTarget.cellZ * CELL_SIZE - position.z);
+    const semanticLines = this.save.generationVersion === 'gen3-v1' ? [
+      `generation     ${semantic.generationVersion}`,
+      `level          Level 0`,
+      `region         ${REGION_LABELS[semantic.regionId]} / strength ${semantic.regionStrength.toFixed(2)}`,
+      `geometry       ${semantic.geometry}`,
+      `materials      ${semantic.materialIds.join(', ')}`,
+      `conditions     ${semantic.conditionIds.join(', ') || 'none'}`,
+      `features       ${semantic.featureIds.length || 'none'}`,
+      `structures     ${semantic.structureIds.join(', ') || 'none'}`,
+      `carvers        ${semantic.carverIds.join(', ') || 'none'}`,
+      `transitions    ${semantic.transitionIds.join(', ') || 'none'}`,
+      `region extent  ${extent ? `${extent.eastWestMeters.toFixed(0)} m E/W · ${extent.northSouthMeters.toFixed(0)} m N/S · ${extent.capped ? '>' : ''}${extent.crossingMinutes.toFixed(1)} walking min` : 'sampling'}`,
+      `blackout cue   strength ${environment.blackoutStrength.toFixed(2)} · exit cue ${environment.blackoutEscapeCue.toFixed(2)} · gate Day 7 / Exp 1.6`,
+      `hole Carver    8% candidate rate per 900 m grid · gate Day 10 / Exp 2.2`,
+      `Manila Room    ${manilaDistance.toFixed(0)} m / ${(manilaDistance / WALK_SPEED / 60).toFixed(1)} walking min · gate Day 1 / Exp 0.25`,
+      `Item nodes     ${(this.tuning.lootChance * 100).toFixed(1)}% base chance · independent seed domain`,
+      ...formatGeographyDiagnostics(environment.geography),
+      ...formatFieldDiagnostics(environment.fields)
+    ] : [
+      `generation     gen2 (frozen save compatibility)`,
+      `legacy zone    ${profile.label}`,
+      `legacy room    ${this.currentCell.roomArchetype}`
+    ];
+    this.ui.updateMetrics([
+      `seed           ${this.save.seed}`,
+      ...semanticLines,
+      `stream cell    ${this.currentCell.id} (cache only)`,
+      `loaded cells   ${this.renderer.loadedCellCount}`,
+      `colliders      ${this.renderer.wallCount}`,
+      `interactions   ${this.renderer.interactionCount}`,
+      `light groups   ${this.renderer.lightGroupCount} / fixtures ${this.renderer.lightFixtureCount}`,
+      `light field    ${this.lightField.energy.toFixed(3)} / active ${this.lightField.activeGroups} / flicker ${this.lightField.flickerGroups} / nearby ${this.lightField.nearbyGroups}`,
+      `draw calls     ${drawCalls}`,
+      `position       ${position.x.toFixed(1)}, ${position.z.toFixed(1)}`,
+      `inventory      ${this.save.inventory.length}/${INVENTORY_CAPACITY}`,
+      `marks          ${this.save.marks.length}`,
+      `notes read     ${this.save.readNoteIds.length}`,
+      `exits found    ${this.save.discoveredExits.join(', ') || 'none'}`
+    ].join('\n'));
   }
 
   private async persist(): Promise<void> { if (!this.save || !this.camera) return; const position = this.camera.getPosition(); this.save.position = { x: position.x, y: position.y, z: position.z, yaw: this.yaw, pitch: this.pitch }; this.save.savedAt = Date.now(); await this.store.save(this.save); this.ui.setContinueAvailable(true); }
-  private updateTuning(patch: Partial<WorldTuning>): void { this.tuning = { ...this.tuning, ...patch }; if (this.started) this.updateStreaming(true); }
+  private updateTuning(patch: Partial<WorldTuning>): void {
+    this.tuning = { ...this.tuning, ...patch };
+    this.ui.setLabAudioMonitor(this.tuning.labAudioMonitor);
+    this.regionExtentKey = '';
+    if (this.started && this.camera && (patch.structureOverride === 'manila-room' || patch.carverOverride === 'floor-hole-cluster')) {
+      const position = this.camera.getPosition();
+      this.camera.setPosition(0, position.y, 0); this.currentCellX = 0; this.currentCellZ = 0;
+      this.ui.toast(patch.structureOverride === 'manila-room' ? 'Moved to the isolated Manila Room test at the origin.' : 'Moved to the isolated floor-hole Carver preview at the origin.', 4600);
+    }
+    if (this.started) this.updateStreaming(true);
+  }
   private simulateStarters(): void { const stats = simulateStarterRolls(this.save?.seed ?? 'threshold-001', 1000); this.ui.updateStarterStats(`1,000 deterministic rolls\nnone  ${stats.none} (${(stats.none / 10).toFixed(1)}%)\none   ${stats.one} (${(stats.one / 10).toFixed(1)}%)\ntwo   ${stats.two} (${(stats.two / 10).toFixed(1)}%)`); }
   private exportTuning(): void { const blob = new Blob([JSON.stringify({ version: 2, tuning: this.tuning }, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'project-noclip-world-tuning.json'; anchor.click(); URL.revokeObjectURL(url); }
   private async resetGame(): Promise<void> { await this.store.clear(); window.location.reload(); }

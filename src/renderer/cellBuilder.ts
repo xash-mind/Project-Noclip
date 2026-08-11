@@ -42,7 +42,12 @@ export class RendererCellBuilder {
     const root = new pc.Entity(`cell:${descriptor.id}:${descriptor.roomArchetype}`);
     root.setPosition(descriptor.address.cellX * CELL_SIZE, 0, descriptor.address.cellZ * CELL_SIZE);
     this.app.root.addChild(root);
-    const profile = ZONE_PROFILES[descriptor.address.zoneId];
+    const legacyExitFoyer = descriptor.world.generationVersion === 'gen2' && descriptor.world.structureIds.includes('exit-structure');
+    const profile = descriptor.world.structureIds.includes('manila-room')
+      ? ZONE_PROFILES.manila
+      : legacyExitFoyer
+        ? ZONE_PROFILES['exit-threshold']
+        : ZONE_PROFILES[descriptor.address.zoneId];
     const floorMat = this.getMaterial(`floor:${profile.id}`, profile.floorTint, 'carpet', descriptor.variant % 3, [5, 5]);
     const ceilingMat = this.getMaterial(`ceiling:${profile.id}`, profile.ceilingTint, 'ceiling', descriptor.ceilingPattern, [4, 4]);
     const trimMat = this.getMaterial(`trim:${profile.id}`, profile.trimTint, 'wood', descriptor.variant % 2, [2, 2]);
@@ -55,14 +60,20 @@ export class RendererCellBuilder {
     const colliders: WorldCollider[] = [];
     for (const wallSpec of descriptor.walls) {
       const wallLength = Math.max(wallSpec.sx, wallSpec.sz);
-      const wallMat = descriptor.address.zoneId === 'exit-threshold'
+      const wallMat = legacyExitFoyer
         ? concrete
-        : this.getMaterial(`wall:${profile.id}`, profile.wallTint, 'wall', wallSpec.materialVariant ?? descriptor.variant % 4, [Math.max(1, wallLength / 2.6), 1]);
+        : this.getMaterial(
+          `wall:${wallSpec.materialId ?? profile.id}`,
+          wallSpec.materialId === 'arch-pale-wallpaper' ? ZONE_PROFILES.arch.wallTint : profile.wallTint,
+          'wall', wallSpec.materialVariant ?? descriptor.variant % 4, [Math.max(1, wallLength / 2.6), 1]
+        );
       this.box(wallSpec.id, root, [wallSpec.cx, wallSpec.cy, wallSpec.cz], [wallSpec.sx, wallSpec.sy, wallSpec.sz], wallMat);
       const collider = this.toWorldCollider(descriptor, wallSpec);
       colliders.push(collider); this.walls.set(collider.id, collider);
-      const horizontal = wallSpec.orientation === 'z';
-      this.box(`${wallSpec.id}:skirting`, root, [wallSpec.cx, 0.12, wallSpec.cz], [horizontal ? wallSpec.sx : wallSpec.sx + 0.035, 0.23, horizontal ? wallSpec.sz + 0.035 : wallSpec.sz], trimMat);
+      if (wallSpec.cy - wallSpec.sy / 2 < 0.04) {
+        const horizontal = wallSpec.orientation === 'z';
+        this.box(`${wallSpec.id}:skirting`, root, [wallSpec.cx, 0.12, wallSpec.cz], [horizontal ? wallSpec.sx : wallSpec.sx + 0.035, 0.23, horizontal ? wallSpec.sz + 0.035 : wallSpec.sz], trimMat);
+      }
     }
 
     this.addLighting(descriptor, root, fixtureMat);
@@ -95,14 +106,8 @@ export class RendererCellBuilder {
 
   private addHolePatch(root: pc.Entity, patch: FloorPatchSpec, profile: ZoneProfile): void {
     const voidMat = this.getMaterial('hole:void', [0.003, 0.003, 0.002], undefined);
-    const rimMat = this.getMaterial(`hole:rim:${profile.id}`, [profile.floorTint[0] * 0.72, profile.floorTint[1] * 0.68, profile.floorTint[2] * 0.58], 'carpet', patch.id.length % 3, [1, 1]);
     const x = patch.position.x; const z = patch.position.z; const sx = patch.scale.x; const sz = patch.scale.z;
     this.box(`${patch.id}:void`, root, [x, -0.08, z], [sx, 0.18, sz], voidMat);
-    const rim = 0.14;
-    this.box(`${patch.id}:north-rim`, root, [x, 0.035, z - sz / 2], [sx + rim, 0.07, rim], rimMat);
-    this.box(`${patch.id}:south-rim`, root, [x, 0.035, z + sz / 2], [sx + rim, 0.07, rim], rimMat);
-    this.box(`${patch.id}:west-rim`, root, [x - sx / 2, 0.035, z], [rim, 0.07, sz - rim], rimMat);
-    this.box(`${patch.id}:east-rim`, root, [x + sx / 2, 0.035, z], [rim, 0.07, sz - rim], rimMat);
   }
 
   private materialsForProp(profile: ZoneProfile, prop: PropSpec): Record<PropSpec['kind'], pc.StandardMaterial> {
@@ -204,7 +209,7 @@ export class RendererCellBuilder {
       const visual = this.addExitVisual(descriptor, root, exit, worldX, worldZ);
       interactions.push(visual); this.interactions.set(visual.id, visual);
     }
-    if (descriptor.address.zoneId === 'manila') {
+    if (descriptor.world.structureIds.includes('manila-room')) {
       const visual: SeatVisual = { kind: 'seat', id: `manila-wait:${descriptor.id}`, entity: root, x: worldX + 2.3, y: 0.5, z: worldZ + 1.8 };
       interactions.push(visual); this.interactions.set(visual.id, visual);
     }

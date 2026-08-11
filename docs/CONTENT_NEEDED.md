@@ -5,9 +5,9 @@ Procedural temporary materials now exist for wallpaper, damp carpet, ceiling gri
 - Authored wallpaper variants with wear masks and normal/roughness maps.
 - Higher-quality damp/dry carpet sets.
 - Modular fluorescent fixtures, ceiling damage and trim.
-- Distinct props for every room family.
+- Distinct authored assets for implemented Features and Structures.
 - Final flashlight, battery, Almond Water, marker, glow stick, note, string, can and pry-tool models.
 - Manila Room table and book models.
 - Distinct exit assets for Level 1, 13, 14, 27 and 483.
-- Original layered hum, damp footsteps, electrical faults and object sounds.
+- Final original layered fluorescent hum, damp footsteps, electrical faults and object sounds. The procedural Web Audio bed remains the calibrated runtime fallback.
 - Licensing ledger for every non-original asset.

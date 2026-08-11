@@ -106,26 +106,29 @@ def main() -> None:
         if resume.is_displayed():
             driver.execute_script("arguments[0].click();", resume)
             time.sleep(1)
-        watch = wait_for_text(driver, '[data-ui="watch"]', ("PROJECT NOCLIP", "LEVEL 0", "field-solved open office"), timeout=15, message="Generation 3 pilot watch label")
-        report["pilotWatch"] = watch
-        driver.save_screenshot(str(ARTIFACT_DIR / "01-gen3-field-solved-open-office.png"))
-        report["checks"].append("fixed sparse-1 origin exercised the Generation 3 field-solved open-office pilot in the normal renderer path")
+        watch = wait_for_text(driver, '[data-ui="watch"]', ("PROJECT NOCLIP", "LEVEL 0", "Ordinary Level 0"), timeout=15, message="Generation 3 ordinary Level 0 watch label")
+        ordinary_metrics = wait_for_text(driver, '[data-ui="metrics"]', ("generation", "gen3-v1", "region", "Ordinary Level 0"), timeout=15, message="Generation 3 ordinary metrics")
+        report["ordinaryWatch"] = watch
+        report["ordinaryMetrics"] = ordinary_metrics
+        driver.save_screenshot(str(ARTIFACT_DIR / "01-gen3-ordinary-level-0.png"))
+        report["checks"].append("fixed sparse-1 origin exercised continuous ordinary Generation 3 Level 0 in the normal renderer path")
 
         toggle_lab(driver)
         wait_for(driver, lambda current: lab_visible(current), message="World Lab open")
         dispatch_change(driver, '[data-lab="radius"]', "1")
         dispatch_change(driver, '[data-lab="bypass"]', True)
-        dispatch_change(driver, '[data-lab="zone"]', "arch")
-        metrics = wait_for_text(driver, '[data-ui="metrics"]', ("zone          Arch Rooms",), timeout=20, message="forced Arch Room")
+        dispatch_change(driver, '[data-lab="region"]', "arch-rooms")
+        driver.execute_script("arguments[0].click();", driver.find_element(By.CSS_SELECTOR, '[data-action="locate-region"]'))
+        metrics = wait_for_text(driver, '[data-ui="metrics"]', ("generation", "gen3-v1", "region", "Arch Rooms"), timeout=30, message="located Arch Rooms Region")
         report["archMetrics"] = metrics
-        driver.save_screenshot(str(ARTIFACT_DIR / "02-forced-arch-lab.png"))
-        report["checks"].append("World Lab forced an unchanged legacy Arch Room under the normal deterministic renderer path")
+        driver.save_screenshot(str(ARTIFACT_DIR / "02-located-arch-rooms-lab.png"))
+        report["checks"].append("World Lab located a natural Arch Rooms Region through kilometre-scale Region geography")
 
         toggle_lab(driver)
         wait_for(driver, lambda current: not lab_visible(current), message="World Lab close")
         time.sleep(2)
-        driver.save_screenshot(str(ARTIFACT_DIR / "03-forced-arch-room.png"))
-        report["checks"].append("forced Arch Room browser view captured to guard an out-of-pilot ordinary generation path")
+        driver.save_screenshot(str(ARTIFACT_DIR / "03-arch-rooms-region.png"))
+        report["checks"].append("Arch Rooms browser view captured to guard continuous pale divider architecture")
 
         errors = browser_errors(driver)
         report["browserErrors"] = errors

@@ -1,11 +1,14 @@
-Open `xash-mind/Project-Noclip` and treat the repository as the source of truth.
+# Superseded build prompt
 
-Read, in order:
-1. `docs/CURRENT_STATE.md`
-2. `docs/VISION.md`
-3. `docs/LEVEL_0_SPEC.md`
-4. `docs/DECISIONS.md`
-5. `docs/CONTENT_NEEDED.md`
-6. `MASTER_BUILD_PROMPT.md`
+This file is retained only so old links fail safely. It is not an active source of architecture or work selection.
 
-Execute the master prompt as implementation work, not another planning exercise. Test continuously. Before finishing, update project memory and rewrite `MASTER_BUILD_PROMPT.md` for the next verified iteration.
+Use the canonical fast-read path instead:
+
+1. `AGENTS.md`
+2. `PROJECT.md`
+3. `STATUS.md`
+4. `WORLD.md` when world content/generation is relevant
+5. Relevant GitHub Issues and Pull Requests
+6. The relevant Project Operations playbook and Engineering Standards
+
+Generation 3 Issue #31 and Level 0 fidelity Issue #37 supersede all district/Zone/archetype instructions formerly stored here. New journeys use `gen3-v1`; Gen2 exists only for old-save compatibility.

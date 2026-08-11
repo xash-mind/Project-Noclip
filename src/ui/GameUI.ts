@@ -1,9 +1,22 @@
 import './mobile-controls.css';
+import './world-lab.css';
 import { ITEM_DEFINITIONS } from '../items/definitions.js';
 import type { ItemInstance } from '../items/types.js';
 import { clearObjectCatalogShowcase, filterObjectCatalog, OBJECT_CATALOG, OBJECT_CATALOG_CATEGORIES, spawnObjectCatalogEntries } from '../renderer/objectCatalog.js';
 import type { TimelineSnapshot } from '../simulation/timeline.js';
-import type { WorldTuning, ZoneId } from '../world/types.js';
+import { WORLD_VOCABULARY_CATEGORIES, worldCatalogByCategory } from '../world/catalog.js';
+import type { RegionId, WorldTuning } from '../world/types.js';
+
+function worldVocabularyMarkup(): string {
+  const grouped = worldCatalogByCategory();
+  return WORLD_VOCABULARY_CATEGORIES.map((category) => {
+    const entries = grouped.get(category) ?? [];
+    return `<details class="vocabulary-group"${category === 'Regions' || category === 'Conditions' ? ' open' : ''}>
+      <summary>${category}<span>${entries.length}</span></summary>
+      ${entries.map((entry) => `<div class="vocabulary-entry"><strong>${entry.label}</strong><span>${entry.status} · ${entry.labAction}</span><small>${entry.description}</small></div>`).join('')}
+    </details>`;
+  }).join('');
+}
 
 export interface UIHandlers {
   onNewGame(seed: string): void;
@@ -15,6 +28,10 @@ export interface UIHandlers {
   onSeedChange(seed: string): void;
   onSimulateStarter(): void;
   onExportTuning(): void;
+  onLocateRegion(regionId: RegionId): void;
+  onLocateBlackout(): void;
+  onLocateHoleCluster(): void;
+  onLocateManilaRoom(): void;
   onTouchMove(forward: number, strafe: number): void;
   onTouchSprint(active: boolean): void;
   onTouchLook(deltaX: number, deltaY: number): void;
@@ -65,7 +82,7 @@ export class GameUI {
     this.root.innerHTML = `
       <section class="title-screen" data-ui="title">
         <div class="title-card ui-panel">
-          <p class="eyebrow">Project Noclip / Level 0 Alpha 0.2</p>
+          <p class="eyebrow">Project Noclip / Level 0 Generation 3</p>
           <h1>NOCLIP</h1>
           <p class="subtitle">An empty place with consistent rules. Objects are scarce. Routes are not.</p>
           <div class="menu-grid">
@@ -118,31 +135,43 @@ export class GameUI {
           <button class="primary" data-action="close-note">Put it down</button>
         </article>
       </section>
-      <aside class="world-lab ui-panel" data-ui="lab">
+      <aside class="world-lab ui-panel" data-ui="lab" data-audio-monitor="true">
         <button class="lab-close" data-action="close-lab" aria-label="Close World Lab">Close Lab</button>
         <p class="eyebrow">Development authority / local only</p><h2>World Lab</h2>
         <section class="lab-section">
-          <h3>World controls</h3>
+          <div class="lab-section-heading"><h3>World controls</h3><span>Generation 3 / gen3-v1</span></div>
+          <p class="lab-copy">Cells stream the world; they do not classify or bound its geography. Locate Regions, sample Conditions, preview Carvers, and isolate Structures.</p>
           <div class="lab-grid">
             <label class="full">Seed<input data-lab="seed" value="threshold-001" /></label>
-            <label>Zone<select data-lab="zone"><option value="">Procedural districts</option><option value="baseline">Baseline</option><option value="arch">Arch</option><option value="pillar">Pillar</option><option value="blackout">Blackout</option><option value="holes">Holes</option><option value="manila">Manila</option><option value="exit-threshold">Threshold</option></select></label>
+            <label>Region locator<select data-lab="region"><option value="ordinary-level-0">Ordinary Level 0</option><option value="pillar-field">Pillar Field</option><option value="arch-rooms">Arch Rooms</option></select></label>
+            <button data-action="locate-region">Locate nearest Region</button>
+            <label>Condition sample<select data-lab="condition"><option value="">Natural Conditions</option><option value="clear">Clear local Blackout</option><option value="blackout">Blackout preview</option></select></label>
+            <button data-action="locate-blackout">Locate natural Blackout</button>
+            <label>Carver preview<select data-lab="carver"><option value="">Natural Carvers</option><option value="none">No floor-hole cluster</option><option value="floor-hole-cluster">Floor-hole cluster</option></select></label>
+            <button data-action="locate-hole-cluster">Locate natural hole cluster</button>
+            <label>Structure test<select data-lab="structure"><option value="">Natural Structures</option><option value="none">No Structure</option><option value="manila-room">Manila Room at origin</option></select></label>
+            <button data-action="locate-manila-room">Locate natural Manila Room</button>
             <label>Active radius<input data-lab="radius" type="number" min="1" max="4" value="3" /></label>
-            <label>Room variation<input data-lab="variation" type="number" min=".25" max="2" step=".05" value="1" /></label>
             <label>World Day<input data-lab="world-day" type="number" min="0" max="9999" placeholder="Authority" /></label>
             <label>Exposure<input data-lab="exposure" type="number" min="0" max="999" step=".25" placeholder="Authority" /></label>
             <label>Loot chance<input data-lab="loot" type="number" min="0" max=".5" step=".01" value=".085" /></label>
-            <label>Shift chance<input data-lab="shift" type="number" min="0" max="1" step=".01" value=".18" /></label>
             <label class="full"><span><input data-lab="bypass" type="checkbox" /> Bypass timeline gates locally</span></label>
+            <label class="full"><span><input data-lab="audio-monitor" type="checkbox" checked /> Keep ambience audible while inspecting World Lab</span></label>
             <button data-action="apply-seed">Regenerate with seed</button>
             <button data-action="simulate">Simulate 1,000 starters</button>
             <button class="full" data-action="export">Export tuning JSON</button>
           </div>
         </section>
+        <section class="lab-section world-vocabulary">
+          <div class="lab-section-heading"><h3>Canonical world vocabulary</h3><span>${WORLD_VOCABULARY_CATEGORIES.length} categories</span></div>
+          <p class="lab-copy">This canonical registry is shared with runtime diagnostics. Legacy compatibility metadata is intentionally hidden from world-content controls.</p>
+          ${worldVocabularyMarkup()}
+        </section>
         <section class="lab-section object-catalog">
           <div class="lab-section-heading"><h3>Object showcase</h3><span>${OBJECT_CATALOG.length} registered</span></div>
           <p class="lab-copy">Disposable local models for visual QA. Spawning here never changes the journey save or canonical world generation.</p>
           <div class="catalog-controls">
-            <label>Search<input type="search" data-lab="object-search" placeholder="flashlight, chair, pipe…" autocomplete="off" /></label>
+            <label>Search<input type="search" data-lab="object-search" placeholder="flashlight, chair, cabinet…" autocomplete="off" /></label>
             <label>Category<select data-lab="object-category"><option value="">All categories</option></select></label>
             <label class="full">Object<select data-lab="object-select"></select></label>
           </div>
@@ -217,12 +246,24 @@ export class GameUI {
 
     const bindNumber = (selector: string, key: keyof WorldTuning) => this.required<HTMLInputElement>(selector).addEventListener('change', (event) => this.handlers.onTuningChange({ [key]: Number((event.target as HTMLInputElement).value) }));
     bindNumber('[data-lab="radius"]', 'activeRadius');
-    bindNumber('[data-lab="variation"]', 'roomVariation');
     bindNumber('[data-lab="loot"]', 'lootChance');
-    bindNumber('[data-lab="shift"]', 'shiftChance');
-    this.required<HTMLSelectElement>('[data-lab="zone"]').addEventListener('change', (event) => {
+    this.required('[data-action="locate-region"]').addEventListener('click', () => {
+      this.handlers.onLocateRegion(this.required<HTMLSelectElement>('[data-lab="region"]').value as RegionId);
+    });
+    this.required('[data-action="locate-blackout"]').addEventListener('click', () => this.handlers.onLocateBlackout());
+    this.required('[data-action="locate-hole-cluster"]').addEventListener('click', () => this.handlers.onLocateHoleCluster());
+    this.required('[data-action="locate-manila-room"]').addEventListener('click', () => this.handlers.onLocateManilaRoom());
+    this.required<HTMLSelectElement>('[data-lab="condition"]').addEventListener('change', (event) => {
       const value = (event.target as HTMLSelectElement).value;
-      this.handlers.onTuningChange({ zoneOverride: value ? value as ZoneId : undefined });
+      this.handlers.onTuningChange({ conditionOverride: value ? value as WorldTuning['conditionOverride'] : undefined });
+    });
+    this.required<HTMLSelectElement>('[data-lab="carver"]').addEventListener('change', (event) => {
+      const value = (event.target as HTMLSelectElement).value;
+      this.handlers.onTuningChange({ carverOverride: value ? value as WorldTuning['carverOverride'] : undefined });
+    });
+    this.required<HTMLSelectElement>('[data-lab="structure"]').addEventListener('change', (event) => {
+      const value = (event.target as HTMLSelectElement).value;
+      this.handlers.onTuningChange({ structureOverride: value ? value as WorldTuning['structureOverride'] : undefined });
     });
     this.required<HTMLInputElement>('[data-lab="world-day"]').addEventListener('change', (event) => {
       const value = (event.target as HTMLInputElement).value;
@@ -233,6 +274,7 @@ export class GameUI {
       this.handlers.onTuningChange({ exposureOverride: value === '' ? undefined : Number(value) });
     });
     this.required<HTMLInputElement>('[data-lab="bypass"]').addEventListener('change', (event) => this.handlers.onTuningChange({ gateBypass: (event.target as HTMLInputElement).checked }));
+    this.required<HTMLInputElement>('[data-lab="audio-monitor"]').addEventListener('change', (event) => this.handlers.onTuningChange({ labAudioMonitor: (event.target as HTMLInputElement).checked }));
     this.installTouchControls();
   }
 
@@ -358,6 +400,7 @@ export class GameUI {
     return open;
   }
   isLabOpen(): boolean { return this.lab.classList.contains('visible'); }
+  setLabAudioMonitor(enabled: boolean): void { this.lab.dataset.audioMonitor = String(enabled); }
   isNoteOpen(): boolean { return this.noteOverlay.classList.contains('visible'); }
   setMarkerMode(active: boolean): void {
     this.markerMode.classList.toggle('visible', active);

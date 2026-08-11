@@ -71,61 +71,77 @@ function noiseValue(x: number, y: number, variant: number): number {
 
 export function canvasTexture(app: pc.Application, kind: TextureKind, variant: number): pc.Texture {
   const canvas = document.createElement('canvas');
-  canvas.width = 128;
-  canvas.height = 128;
+  const size = 256;
+  canvas.width = size;
+  canvas.height = size;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Canvas texture unavailable');
   const noise = (x: number, y: number) => noiseValue(x, y, variant);
 
   if (kind === 'wall') {
-    context.fillStyle = variant % 3 === 0 ? '#d8ca82' : variant % 3 === 1 ? '#d1c47c' : '#c9bb70';
-    context.fillRect(0, 0, 128, 128);
-    for (let y = 0; y < 128; y += 4) for (let x = 0; x < 128; x += 4) {
+    context.fillStyle = variant % 3 === 0 ? '#e3d58e' : variant % 3 === 1 ? '#ddd087' : '#d8c87e';
+    context.fillRect(0, 0, size, size);
+    for (let y = 0; y < size; y += 4) for (let x = 0; x < size; x += 4) {
       const n = noise(x, y);
-      context.fillStyle = `rgba(${98 + n % 22},${86 + n % 18},${42 + n % 12},${0.018 + (n % 6) / 500})`;
+      context.fillStyle = `rgba(${104 + n % 24},${91 + n % 21},${47 + n % 14},${0.014 + (n % 7) / 620})`;
       context.fillRect(x, y, 4, 4);
     }
-    context.lineWidth = 1;
-    for (let x = 0; x <= 128; x += 16) {
-      context.strokeStyle = 'rgba(76,65,28,.16)';
-      context.beginPath(); context.moveTo(x + 4, 0); context.lineTo(x + 4, 128); context.stroke();
-      context.strokeStyle = 'rgba(255,244,177,.13)';
-      context.beginPath(); context.moveTo(x + 11, 0); context.lineTo(x + 11, 128); context.stroke();
+    context.lineWidth = 1.25;
+    for (let x = -8; x <= size; x += 32) {
+      context.strokeStyle = 'rgba(91,76,30,.18)';
+      context.beginPath();
+      for (let y = 0; y <= size; y += 8) {
+        const wave = Math.sin((y + variant * 11) / 19) * 3.4;
+        if (y === 0) context.moveTo(x + 12 + wave, y); else context.lineTo(x + 12 + wave, y);
+      }
+      context.stroke();
+      context.strokeStyle = 'rgba(255,246,182,.2)';
+      context.beginPath(); context.moveTo(x + 20, 0); context.lineTo(x + 20, size); context.stroke();
+      for (let y = 18; y < size; y += 42) {
+        context.strokeStyle = 'rgba(103,85,34,.13)';
+        context.beginPath(); context.arc(x + 13, y, 6, -1.2, 1.15); context.stroke();
+        context.beginPath(); context.arc(x + 13, y + 18, 5, 1.9, 4.4); context.stroke();
+      }
     }
   } else if (kind === 'carpet') {
-    context.fillStyle = variant % 2 === 0 ? '#9b8b58' : '#91814f';
-    context.fillRect(0, 0, 128, 128);
-    for (let y = 0; y < 128; y += 2) for (let x = 0; x < 128; x += 2) {
+    context.fillStyle = variant % 2 === 0 ? '#91815a' : '#88784f';
+    context.fillRect(0, 0, size, size);
+    for (let y = 0; y < size; y += 2) for (let x = 0; x < size; x += 2) {
       const n = noise(x, y);
-      context.fillStyle = `rgba(${76 + n % 30},${66 + n % 25},${34 + n % 18},${0.08 + (n % 8) / 100})`;
+      context.fillStyle = `rgba(${67 + n % 34},${57 + n % 28},${31 + n % 20},${0.07 + (n % 9) / 110})`;
       context.fillRect(x, y, 1 + n % 2, 2);
     }
-    context.strokeStyle = 'rgba(228,205,129,.08)';
+    context.strokeStyle = 'rgba(229,207,143,.07)';
     context.lineWidth = 1;
-    for (let y = 3 + variant; y < 128; y += 9) { context.beginPath(); context.moveTo(0, y); context.lineTo(128, y); context.stroke(); }
+    for (let y = 3 + variant; y < size; y += 11) { context.beginPath(); context.moveTo(0, y); context.lineTo(size, y); context.stroke(); }
   } else if (kind === 'ceiling') {
-    context.fillStyle = '#d5d2b4'; context.fillRect(0, 0, 128, 128);
+    context.fillStyle = '#e0ddc1'; context.fillRect(0, 0, size, size);
     context.strokeStyle = 'rgba(47,48,38,.32)'; context.lineWidth = 2;
-    for (let x = 0; x <= 128; x += 32) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x, 128); context.stroke(); }
-    for (let y = 0; y <= 128; y += 32) { context.beginPath(); context.moveTo(0, y); context.lineTo(128, y); context.stroke(); }
+    for (let x = 0; x <= size; x += 64) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x, size); context.stroke(); }
+    for (let y = 0; y <= size; y += 64) { context.beginPath(); context.moveTo(0, y); context.lineTo(size, y); context.stroke(); }
+    for (let index = 0; index < 420; index += 1) {
+      const x = noise(index, 81) % size; const y = noise(index, 82) % size;
+      context.fillStyle = `rgba(70,68,52,${0.012 + (noise(index, 83) % 5) / 260})`;
+      context.fillRect(x, y, 1, 1);
+    }
   } else if (kind === 'concrete') {
-    context.fillStyle = '#c1c0b5'; context.fillRect(0, 0, 128, 128);
-    for (let index = 0; index < 250; index += 1) {
-      const x = noise(index, 1) % 128; const y = noise(index, 2) % 128;
+    context.fillStyle = '#c1c0b5'; context.fillRect(0, 0, size, size);
+    for (let index = 0; index < 700; index += 1) {
+      const x = noise(index, 1) % size; const y = noise(index, 2) % size;
       context.fillStyle = `rgba(30,30,26,${0.025 + (noise(index, 3) % 8) / 150})`;
       context.fillRect(x, y, 2, 2);
     }
   } else if (kind === 'paper') {
-    context.fillStyle = '#eee2ba'; context.fillRect(0, 0, 128, 128);
-    for (let index = 0; index < 180; index += 1) {
-      const x = noise(index, 4) % 128; const y = noise(index, 5) % 128;
+    context.fillStyle = '#eee2ba'; context.fillRect(0, 0, size, size);
+    for (let index = 0; index < 480; index += 1) {
+      const x = noise(index, 4) % size; const y = noise(index, 5) % size;
       context.fillStyle = `rgba(70,55,26,${0.015 + (noise(index, 6) % 5) / 180})`;
       context.fillRect(x, y, 1, 1);
     }
   } else {
-    context.fillStyle = '#b77e50'; context.fillRect(0, 0, 128, 128);
+    context.fillStyle = '#b77e50'; context.fillRect(0, 0, size, size);
     context.strokeStyle = 'rgba(42,22,10,.25)';
-    for (let y = 8; y < 128; y += 14) { context.beginPath(); context.moveTo(0, y); context.bezierCurveTo(30, y - 3, 70, y + 4, 128, y); context.stroke(); }
+    for (let y = 8; y < size; y += 18) { context.beginPath(); context.moveTo(0, y); context.bezierCurveTo(60, y - 3, 140, y + 4, size, y); context.stroke(); }
   }
 
   const texture = new pc.Texture(app.graphicsDevice, { mipmaps: true });
@@ -140,7 +156,7 @@ export function canvasTexture(app: pc.Application, kind: TextureKind, variant: n
 export function makeMaterial(diffuse: [number, number, number], texture?: pc.Texture, tiling: [number, number] = [1, 1], emissive?: [number, number, number], emissiveIntensity = 1): pc.StandardMaterial {
   const result = new pc.StandardMaterial();
   result.diffuse = color(diffuse);
-  result.gloss = 0.08;
+  result.gloss = emissive ? 0.22 : texture ? 0.07 : 0.12;
   result.metalness = 0;
   if (texture) { result.diffuseMap = texture; result.diffuseMapTiling = new pc.Vec2(tiling[0], tiling[1]); }
   if (emissive) { result.emissive = color(emissive); result.emissiveIntensity = emissiveIntensity; }

@@ -49,7 +49,7 @@ class FakeClassList {
 }
 
 class FakeElement {
-  constructor() { this.hidden = false; this.classList = new FakeClassList(); }
+  constructor() { this.hidden = false; this.classList = new FakeClassList(); this.dataset = {}; }
 }
 
 const canvas = new FakeElement();
@@ -121,6 +121,7 @@ function resetJourneyUi() {
   hud.hidden = false;
   pause.classList.remove('visible');
   lab.classList.remove('visible');
+  delete lab.dataset.audioMonitor;
   note.classList.remove('visible');
   fakeDocument.pointerLockElement = canvas;
   fakeDocument.hidden = false;
@@ -174,6 +175,10 @@ test('DOM lifecycle resolver covers desktop pointer lock and landscape touch', (
   resetJourneyUi();
   lab.classList.add('visible');
   assert.equal(readJourneyAudioLifecycle().labOpen, true);
+  lab.dataset.audioMonitor = 'true';
+  assert.equal(readJourneyAudioLifecycle().labOpen, false);
+  assert.equal(readJourneyAudioLifecycle().paused, false);
+  delete lab.dataset.audioMonitor;
   lab.classList.remove('visible');
   note.classList.add('visible');
   assert.equal(readJourneyAudioLifecycle().noteOpen, true);
@@ -232,12 +237,12 @@ test('ambience graph is reused, lifecycle transitions mute smoothly, and resume 
   assert.equal(ambience.getDebugState().active, false);
 });
 
-test('fluorescent hum is measurably gentler while retaining its identity', () => {
+test('fluorescent hum is audible on ordinary speakers while retaining a subtle calibrated ceiling', () => {
   assert.equal(AMBIENCE_TUNING.humWaveform, 'triangle');
   assert.ok(AMBIENCE_TUNING.masterScale < 0.28);
-  assert.ok(AMBIENCE_TUNING.normalHumGain < 0.025);
+  assert.ok(AMBIENCE_TUNING.normalHumGain >= 0.035 && AMBIENCE_TUNING.normalHumGain <= 0.05);
   assert.ok(AMBIENCE_TUNING.failedHumGain < AMBIENCE_TUNING.normalHumGain);
-  assert.ok(AMBIENCE_TUNING.blackoutHumGain < AMBIENCE_TUNING.failedHumGain);
+  assert.equal(AMBIENCE_TUNING.blackoutHumGain, 0);
 });
 
 test('suspended and unavailable Web Audio states degrade without duplicating graphs', async () => {

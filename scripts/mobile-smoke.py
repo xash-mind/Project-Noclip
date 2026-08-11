@@ -99,25 +99,60 @@ def center_point(driver: webdriver.Chrome, selector: str, pointer_id: int) -> di
     return {"x": rect["left"] + rect["width"] / 2, "y": rect["top"] + rect["height"] / 2, "id": pointer_id, "radiusX": 5, "radiusY": 5, "force": 1}
 
 
-def touch_hold_move(driver: webdriver.Chrome, selector: str, dx: float, dy: float, hold_seconds: float) -> None:
+def touch_move_until(
+    driver: webdriver.Chrome,
+    selector: str,
+    dx: float,
+    dy: float,
+    start_position: tuple[float, float],
+    threshold: float,
+    timeout: float,
+) -> tuple[float, float]:
     point = center_point(driver, selector, 1)
     x = float(point["x"]); y = float(point["y"])
     touch_event(driver, "touchStart", [point])
     touch_event(driver, "touchMove", [{**point, "x": x + dx, "y": y + dy}])
-    time.sleep(hold_seconds)
-    touch_event(driver, "touchEnd", [])
+    try:
+        return wait_for(
+            driver,
+            lambda current: (
+                pos if (pos := metrics_position(current))
+                and math.hypot(pos[0] - start_position[0], pos[1] - start_position[1]) > threshold
+                else False
+            ),
+            timeout=timeout,
+            message="touch movement while the control remains held",
+        )
+    finally:
+        touch_event(driver, "touchEnd", [])
 
 
-def touch_hold_sprint_move(driver: webdriver.Chrome, hold_seconds: float = 0.8) -> None:
+def touch_sprint_move_until(
+    driver: webdriver.Chrome,
+    start_position: tuple[float, float],
+    threshold: float = 0.2,
+    timeout: float = 10,
+) -> tuple[float, float]:
     sprint = center_point(driver, '[data-action="touch-sprint"]', 3)
     move = center_point(driver, '[data-touch="move"]', 4)
     moved = {**move, "y": float(move["y"]) - 43}
     touch_event(driver, "touchStart", [sprint, move])
     wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="touch-sprint"]').get_attribute("aria-pressed") == "true", timeout=3, message="Sprint held state")
     touch_event(driver, "touchMove", [sprint, moved])
-    time.sleep(hold_seconds)
-    touch_event(driver, "touchEnd", [])
-    wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="touch-sprint"]').get_attribute("aria-pressed") == "false", timeout=3, message="Sprint released state")
+    try:
+        return wait_for(
+            driver,
+            lambda current: (
+                pos if (pos := metrics_position(current))
+                and math.hypot(pos[0] - start_position[0], pos[1] - start_position[1]) > threshold
+                else False
+            ),
+            timeout=timeout,
+            message="Sprint plus movement while both controls remain held",
+        )
+    finally:
+        touch_event(driver, "touchEnd", [])
+        wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="touch-sprint"]').get_attribute("aria-pressed") == "false", timeout=3, message="Sprint released state")
 
 
 def touch_drag(driver: webdriver.Chrome, selector: str, dx: float, dy: float, steps: int = 1) -> None:
@@ -230,15 +265,13 @@ def main() -> None:
         assert move_rect["width"] >= 44 and move_rect["height"] >= 44
         checks.append("Sprint, Marker, Interact, Use and Lab targets remain 44px-plus without essential HUD overlap")
 
-        touch_hold_move(driver, '[data-touch="move"]', 0, -43, 1.0)
-        moved_position = wait_for(driver, lambda current: (pos if (pos := metrics_position(current)) and math.hypot(pos[0] - start_position[0], pos[1] - start_position[1]) > 0.3 else False), timeout=12, message="touch movement")
+        moved_position = touch_move_until(driver, '[data-touch="move"]', 0, -43, start_position, threshold=0.3, timeout=12)
         report["movedPosition"] = moved_position
         checks.append("left touch pad still moves the canonical player through the existing movement/collision path")
 
         sprint_start = metrics_position(driver)
         assert sprint_start is not None
-        touch_hold_sprint_move(driver)
-        sprint_end = wait_for(driver, lambda current: (pos if (pos := metrics_position(current)) and math.hypot(pos[0] - sprint_start[0], pos[1] - sprint_start[1]) > 0.2 else False), timeout=10, message="Sprint plus movement")
+        sprint_end = touch_sprint_move_until(driver, sprint_start)
         report["sprintStart"] = sprint_start
         report["sprintEnd"] = sprint_end
         checks.append("Sprint can be held simultaneously with Move and releases cleanly through shared player intent")
@@ -278,20 +311,26 @@ def main() -> None:
         }
         seeded["inventory"] = [item for item in seeded.get("inventory", []) if item.get("definitionId") != "marker"] + [marker]
         seeded["selectedItemId"] = marker["instanceId"]
-        seeded["position"] = {"x": 4.0, "y": 1.65, "z": -5.35, "yaw": 0, "pitch": 0}
+        # threshold-001 / gen3-v1 owns a continuous north-south partition at
+        # world X -2.527. Stand east of it and face west so marker coverage is
+        # tied to canonical Generation 3 geometry, not a removed Gen2 room wall.
+        seeded["position"] = {"x": -0.7, "y": 1.65, "z": 0.0, "yaw": 90, "pitch": 0}
         write_save(driver, seeded)
         driver.refresh()
         wait_for(driver, lambda current: displayed(current, '[data-action="continue"]'), timeout=20, message="Continue after marker setup")
         click_button(driver, '[data-action="continue"]')
         wait_for(driver, lambda current: displayed(current, '[data-ui="touch-controls"]'), timeout=35, message="touch controls after Continue")
-        wait_for(driver, lambda current: (pos if (pos := metrics_position(current)) and abs(pos[0] - 4.0) < 0.3 and abs(pos[1] + 5.35) < 0.3 else False), timeout=15, message="marker test position")
+        wait_for(driver, lambda current: (pos if (pos := metrics_position(current)) and abs(pos[0] + 0.7) < 0.3 and abs(pos[1]) < 0.3 else False), timeout=15, message="Generation 3 marker test position")
         click_button(driver, '[data-action="touch-marker"]')
         wait_for(driver, lambda current: displayed(current, '[data-ui="marker-mode"]'), timeout=5, message="touch marker mode")
         touch_marker_text = str(driver.find_element(By.CSS_SELECTOR, '.touch-marker-instruction').get_attribute("textContent") or "")
         assert "drag" in touch_marker_text.lower() and "look" in touch_marker_text.lower()
         assert "primary" not in touch_marker_text.lower()
         assert not displayed(driver, '.desktop-marker-instruction')
-        touch_drag(driver, '[data-touch="look"]', 10, 0, steps=1)
+        # This wall is a long world-space run; 24 px clears the persisted
+        # mark sampler's normalized point threshold while remaining a small,
+        # ordinary camera gesture on a mobile look surface.
+        touch_drag(driver, '[data-touch="look"]', 24, 0, steps=1)
         marked_save = wait_for(driver, lambda current: (save if (save := read_save(current)) and len(save.get("marks", [])) >= 1 else False), timeout=12, message="persisted touch marker stroke")
         report["persistedMarks"] = len(marked_save.get("marks", []))
         checks.append("Marker arms from the mobile action and a raw Look touch gesture persists a SurfaceMark without ambiguous primary-button wording")
