@@ -2,11 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateCell, validateCellPlacement } from '../.test-dist/src/world/generator.js';
 import { estimateRegionExtent, locateNearestRegion, sampleGen3Environment } from '../.test-dist/src/world/gen3.js';
-import { DEFAULT_TUNING, CELL_SIZE, WALL_HEIGHT } from '../.test-dist/src/world/types.js';
+import { DEFAULT_TUNING, CELL_SIZE, LEVEL0_FOG_END, WALL_HEIGHT } from '../.test-dist/src/world/types.js';
 
 const generated = (overrides = {}) => generateCell({
   seed: 'gen3-architecture', x: 0, z: 0, worldDay: 40, exposure: 10, shiftEpoch: 0,
   tuning: DEFAULT_TUNING, generationVersion: 'gen3-v1', ...overrides
+});
+
+test('default streaming envelope extends beyond the ordinary Level 0 fog', () => {
+  const nearestCardinalStreamEdge = DEFAULT_TUNING.activeRadius * CELL_SIZE;
+  assert.ok(nearestCardinalStreamEdge >= LEVEL0_FOG_END + 1, `fog ends at ${LEVEL0_FOG_END} m but the nearest stream edge is ${nearestCardinalStreamEdge} m`);
 });
 
 test('new Generation 3 journeys reserve a meaningful forward arrival lane', () => {
@@ -70,6 +75,11 @@ test('ordinary architecture is world-space continuous and has no Cell boundary w
     }
   }
   assert.ok(matchedSeams >= 80, `only ${matchedSeams} naturally continuing partition seams`);
+  const ordinaryWalls = [...cells.values()].flatMap((cell) => cell.walls);
+  const xShare = ordinaryWalls.filter((wall) => wall.orientation === 'x').length / Math.max(1, ordinaryWalls.length);
+  assert.ok(ordinaryWalls.length > cells.size, `ordinary architecture is still too sparse: ${ordinaryWalls.length} wall pieces across ${cells.size} Cells`);
+  assert.ok(xShare > 0.2 && xShare < 0.8, `ordinary architecture still has a dominant cardinal direction: ${(xShare * 100).toFixed(1)}% x-oriented`);
+  assert.ok(ordinaryWalls.every((wall) => wall.materialVariant === 0), 'Gen3 wall finish variant leaked Cell-local identity');
 });
 
 test('Region geography is continuous across Cell boundaries and has kilometre-capable cores', () => {
