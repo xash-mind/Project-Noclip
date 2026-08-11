@@ -1,10 +1,12 @@
 # Level 0 Raw Reference Ledger
 
-Append new AI-analyzed reference entries below this line. Do not manually synthesize this file into a second visual-grammar document.
+This is the append-only visual/audio evidence and provenance history for **Level 0**.
 
-The Notion **Reference update** prompt processes entries with `**Processing status:** UNPROCESSED`, reconciles them against existing evidence for the same affected target, promotes supported durable conclusions into the normal Project Noclip orientation/canonical surfaces, and changes their status to `PROMOTED` or `BLOCKED`.
+Do not manually pre-process references before adding them. Each manual **Reference update** run receives one URL plus the user-supplied `Applies to`, `Context`, and `Source tier`, inspects the supplied media, reconciles it against existing evidence for the same affected target, appends one complete entry here, and finalizes that entry as `PROMOTED`, `EVIDENCE-ONLY`, or `BLOCKED` in the same run.
 
-Do not delete processed entries; this file remains the provenance/evidence history.
+Normal `Continue` runs should not traverse this ledger by default. Durable supported conclusions are promoted into the ordinary Project Noclip orientation surfaces that those runs already read, primarily `WORLD.md` and relevant GitHub issues/ADRs.
+
+Do not delete processed entries; this file remains the source-evidence history.
 
 ---
 
