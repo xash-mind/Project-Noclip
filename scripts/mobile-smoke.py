@@ -311,20 +311,26 @@ def main() -> None:
         }
         seeded["inventory"] = [item for item in seeded.get("inventory", []) if item.get("definitionId") != "marker"] + [marker]
         seeded["selectedItemId"] = marker["instanceId"]
-        seeded["position"] = {"x": 4.0, "y": 1.65, "z": -5.35, "yaw": 0, "pitch": 0}
+        # threshold-001 / gen3-v1 owns a continuous north-south partition at
+        # world X -2.527. Stand east of it and face west so marker coverage is
+        # tied to canonical Generation 3 geometry, not a removed Gen2 room wall.
+        seeded["position"] = {"x": -0.7, "y": 1.65, "z": 0.0, "yaw": 90, "pitch": 0}
         write_save(driver, seeded)
         driver.refresh()
         wait_for(driver, lambda current: displayed(current, '[data-action="continue"]'), timeout=20, message="Continue after marker setup")
         click_button(driver, '[data-action="continue"]')
         wait_for(driver, lambda current: displayed(current, '[data-ui="touch-controls"]'), timeout=35, message="touch controls after Continue")
-        wait_for(driver, lambda current: (pos if (pos := metrics_position(current)) and abs(pos[0] - 4.0) < 0.3 and abs(pos[1] + 5.35) < 0.3 else False), timeout=15, message="marker test position")
+        wait_for(driver, lambda current: (pos if (pos := metrics_position(current)) and abs(pos[0] + 0.7) < 0.3 and abs(pos[1]) < 0.3 else False), timeout=15, message="Generation 3 marker test position")
         click_button(driver, '[data-action="touch-marker"]')
         wait_for(driver, lambda current: displayed(current, '[data-ui="marker-mode"]'), timeout=5, message="touch marker mode")
         touch_marker_text = str(driver.find_element(By.CSS_SELECTOR, '.touch-marker-instruction').get_attribute("textContent") or "")
         assert "drag" in touch_marker_text.lower() and "look" in touch_marker_text.lower()
         assert "primary" not in touch_marker_text.lower()
         assert not displayed(driver, '.desktop-marker-instruction')
-        touch_drag(driver, '[data-touch="look"]', 10, 0, steps=1)
+        # This wall is a long world-space run; 24 px clears the persisted
+        # mark sampler's normalized point threshold while remaining a small,
+        # ordinary camera gesture on a mobile look surface.
+        touch_drag(driver, '[data-touch="look"]', 24, 0, steps=1)
         marked_save = wait_for(driver, lambda current: (save if (save := read_save(current)) and len(save.get("marks", [])) >= 1 else False), timeout=12, message="persisted touch marker stroke")
         report["persistedMarks"] = len(marked_save.get("marks", []))
         checks.append("Marker arms from the mobile action and a raw Look touch gesture persists a SurfaceMark without ambiguous primary-button wording")
