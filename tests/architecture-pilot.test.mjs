@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   isBaselineArchitecturePilot,
+  measureBaselineArchitectureSeam,
   solveBaselineArchitecturePilot,
+  validateBaselineArchitectureContinuity,
   validateBaselineArchitecturePilot
 } from '../.test-dist/src/world/architecture.js';
 import { generateCell, isEssentialSceneryProp, validateCellConnectivity, validateCellPlacement } from '../.test-dist/src/world/generator.js';
@@ -40,6 +42,7 @@ test('Generation 3 pilot preserves supplied markable identity slots while replac
   assert.deepEqual(first.componentIds, []);
   assert.match(first.compositionSignature, /^gen3-field-pilot:/);
   assert.deepEqual(validateBaselineArchitecturePilot(first.walls, first.props), []);
+  assert.deepEqual(validateBaselineArchitectureContinuity(input.seed, input.cellX, input.cellZ, first.walls, first.props), []);
   // Renderer collider IDs for solid props remain `solid:${prop.id}`, so persisted
   // SurfaceMark references remain addressable after the geometry migration.
   assert.deepEqual(first.props.map((prop) => `solid:${prop.id}`), ['solid:legacy-divider', 'solid:legacy-bench', 'solid:legacy-pillar']);
@@ -55,6 +58,7 @@ test('fixed sparse-1 origin now exercises the bounded field-solved open-office p
   assert.deepEqual(cell.componentIds, []);
   assert.ok(cell.props.every((prop) => prop.kind === 'column'));
   assert.deepEqual(validateBaselineArchitecturePilot(internalWalls(cell), cell.props), []);
+  assert.deepEqual(validateBaselineArchitectureContinuity('sparse-1', 0, 0, internalWalls(cell), cell.props), []);
   assert.deepEqual(validateCellPlacement(cell), []);
   assert.deepEqual(cell.lootNodes.map((node, index) => node.id), cell.lootNodes.map((_node, index) => stableId('loot', 'sparse-1', 0, 0, index)));
 });
@@ -82,6 +86,7 @@ test('pilot sweep remains deterministic, traversable and materially field-varied
     assert.deepEqual(cell, generateCell(options));
     assert.ok(cell.props.every((prop) => prop.kind === 'column'));
     for (const error of validateBaselineArchitecturePilot(internalWalls(cell), cell.props)) failures.push(`${cell.id}: ${error}`);
+    for (const error of validateBaselineArchitectureContinuity(options.seed, x, z, internalWalls(cell), cell.props)) failures.push(`${cell.id}: ${error}`);
     for (const error of validateCellPlacement(cell)) failures.push(`${cell.id}: ${error}`);
 
     if (!legacyIdentityChecked && (x !== 0 || z !== 0)) {
@@ -102,4 +107,46 @@ test('pilot sweep remains deterministic, traversable and materially field-varied
   assert.equal(legacyIdentityChecked, true);
   assert.deepEqual(failures.slice(0, 20), []);
   assert.deepEqual(validateCellConnectivity('gen3-pilot-sweep', 28, DEFAULT_TUNING.extraOpeningChance), []);
+});
+
+test('Slice C pilot geometry keeps one world-space cadence across representative Cell seams', () => {
+  const seed = 'gen3-continuity-sweep';
+  const cells = new Map();
+  const localPartitionOffsets = new Set();
+  const failures = [];
+
+  for (let x = -12; x <= 12; x += 1) for (let z = -12; z <= 12; z += 1) {
+    const result = solveBaselineArchitecturePilot({
+      seed,
+      cellX: x,
+      cellZ: z,
+      legacyWallIds: [`wall:${x}:${z}:a`, `wall:${x}:${z}:b`, `wall:${x}:${z}:c`, `wall:${x}:${z}:d`],
+      legacySolidPropIds: [`support:${x}:${z}:a`, `support:${x}:${z}:b`]
+    });
+    for (const error of validateBaselineArchitecturePilot(result.walls, result.props)) failures.push(`${x}:${z}: ${error}`);
+    for (const error of validateBaselineArchitectureContinuity(seed, x, z, result.walls, result.props)) failures.push(`${x}:${z}: ${error}`);
+    for (const wall of result.walls) localPartitionOffsets.add((wall.orientation === 'z' ? wall.cz : wall.cx).toFixed(3));
+    cells.set(`${x}:${z}`, { cellX: x, cellZ: z, walls: result.walls });
+  }
+
+  let eligibleSeams = 0;
+  let expectedLines = 0;
+  let matchingLines = 0;
+  for (const cell of cells.values()) {
+    for (const [dx, dz, direction] of [[1, 0, 'east'], [0, 1, 'south']]) {
+      const neighbor = cells.get(`${cell.cellX + dx}:${cell.cellZ + dz}`);
+      if (!neighbor) continue;
+      const seam = measureBaselineArchitectureSeam(cell, neighbor, direction);
+      if (seam.expectedLines === 0) continue;
+      eligibleSeams += 1;
+      expectedLines += seam.expectedLines;
+      matchingLines += seam.matchingLines;
+    }
+  }
+
+  assert.deepEqual(failures.slice(0, 20), []);
+  assert.ok(localPartitionOffsets.size >= 50, `only ${localPartitionOffsets.size} local offsets; cadence still appears Cell-reset`);
+  assert.ok(eligibleSeams >= 400, `only ${eligibleSeams} representative continuity seams`);
+  assert.ok(expectedLines >= 700, `only ${expectedLines} expected cross-Cell partition lines`);
+  assert.equal(matchingLines, expectedLines);
 });

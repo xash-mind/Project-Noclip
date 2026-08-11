@@ -107,7 +107,7 @@ These terms remain important to agents/code, but Sash does not need to use them 
 | **Field** | Smooth deterministic value sampled from seed/world coordinates that can drive generation. | **Implemented and partially consumed.** `src/world/fields.ts` samples all canonical Gen-3 Fields continuously; the bounded baseline `open-office` architecture pilot now consumes structural Fields while most Level 0 generation remains legacy. |
 | **Cell** | Streaming/computation unit. | Implemented. **Never a room.** |
 | **District** | Coarse deterministic planning grouping. | Current generator groups cells into 5×5 districts for legacy zone selection. |
-| **Seed domain** | Independent deterministic namespace for a generation layer. | **Implemented for the Field sampler**; broader layer-by-layer separation remains Generation 3 direction. |
+| **Seed domain** | Independent deterministic namespace for a generation layer. | **Implemented for the Field sampler and bounded architecture-continuity lattice**; broader layer-by-layer separation remains Generation 3 direction. |
 
 ### Implemented Gen-3 Field framework
 
@@ -137,21 +137,25 @@ Framework laws:
 - values are bounded to `0..1`;
 - deterministic domains are separated from current generator hashes and from one another;
 - current Geometry metadata is **Euclidean** only;
-- Slice B consumes structural Fields only on the bounded ordinary baseline `open-office` pilot; other ordinary paths remain on accepted legacy generation until later migrations.
+- the bounded ordinary baseline `open-office` pilot consumes structural Fields, including selective structural-channel probes for its wider continuity guide; other ordinary paths remain on accepted legacy generation until later migrations.
 
-### Implemented Gen-3 architecture pilot
+### Implemented Gen-3 architecture and continuity pilot
 
 One bounded ordinary-Level-0 path now uses `src/world/architecture.ts` instead of emitting recognizable Gen-2 structural modules:
 
 - scope: legacy `baseline` cells classified as `open-office`;
 - `axisFlow`, `openness`, `partitionPressure`, `roomScale`, `columnPressure`, `regularity` and `connectivityPressure` solve internal partitions/supports;
+- a slow heading/corridor guide blends the centre sample with wider world-space probes so neighboring pilot Cells do not independently threshold the same architecture decision;
+- partition cadence and support candidates are anchored to seed-domain world-space lattices rather than restarting from each Cell centre;
+- compatible partition runs can meet at east/south pilot seams, while any run that would cross the protected connector corridor remains inset;
 - Cell boundary openings remain the existing deterministic Euclidean connector law;
 - legacy `open-office` remains migration metadata, not proof that the new geometry is still room-template driven;
 - emitted pilot `componentIds` are empty and its composition signature is Field-derived;
 - legacy markable/collidable wall and solid-prop IDs are reused as compatibility identity slots so existing saved marker evidence remains addressable without a save-schema migration;
 - non-structural legacy module decoration is not emitted on the pilot path;
 - a coarse player-radius reachability validator requires the centre to reach all four interior edge bands;
-- cross-Cell architectural continuity is **not** solved yet and remains the next Generation 3 migration boundary.
+- lattice and seam validators require emitted geometry to retain world-space cadence and require every eligible representative partition line to match its neighbor;
+- this is a bounded Slice-C continuity substrate, **not complete continuous-Level-0 migration**: legacy boundary-wall representation, sparse pilot eligibility and non-pilot architecture can still reveal Cell cadence and remain later work.
 
 Developer diagnostics:
 
@@ -159,7 +163,7 @@ Developer diagnostics:
 npm run fields:lab -- [seed] [worldX] [worldZ]
 ```
 
-The normal 10,000-cell benchmark also reports a separate 10,000-sample Field timing/range/Cell-boundary continuity section plus bounded architecture-pilot coverage/validation. Human-facing output should still usually be discussed as Regions, Geometry, Materials, Conditions, Features, Structures, etc.
+The normal 10,000-cell benchmark also reports a separate 10,000-sample Field timing/range/Cell-boundary continuity section plus bounded architecture-pilot coverage, world-lattice validation and eligible seam matching. Human-facing output should still usually be discussed as Regions, Geometry, Materials, Conditions, Features, Structures, etc.
 
 ---
 
@@ -381,7 +385,7 @@ These terms remain in code/issues until Gen 3 actually replaces them. They are t
 
 `open-office`, `split-suite`, `narrow-hall`, `alcove-ring`, `service-corner`, `wide-lobby`, `arch-gallery`, `arch-crossing`, `pillar-grid`, `pillar-aisle`, `maintenance-bay`, `flooded-corridor`, `hole-gallery`, `broken-floor`, `manila-room`, `transition-foyer`
 
-`open-office` remains a legacy classifier/migration label, but baseline `open-office` internal geometry is now Field-solved by the bounded Slice-B pilot instead of being emitted from its Gen-2 structural modules.
+`open-office` remains a legacy classifier/migration label, but baseline `open-office` internal geometry is now Field-solved by the bounded pilot instead of being emitted from its Gen-2 structural modules. Its current partitions/supports use the Slice-C world-space continuity substrate while legacy Cell boundary walls remain intact.
 
 ## Legacy spatial profiles
 
@@ -403,9 +407,9 @@ These terms remain in code/issues until Gen 3 actually replaces them. They are t
 
 ```text
 WORLD SEED
-  -> MULTI-SCALE FIELDS                 [engine]  <- Slice A framework implemented; Slice B pilot consumes structural Fields
+  -> MULTI-SCALE FIELDS                 [engine]  <- Slice A framework implemented; bounded pilot consumes structural Fields
   -> ARCHITECTURE + GEOMETRY SOLVER    [world]   <- bounded baseline open-office pilot implemented
-  -> CONTINUOUS LEVEL 0                           <- cross-Cell continuity remains next
+  -> CONTINUOUS LEVEL 0                           <- Slice C world-lattice/seam substrate implemented on pilot; broader migration remains
   -> MATERIALS + CONDITIONS
   -> CARVERS
   -> STRUCTURES

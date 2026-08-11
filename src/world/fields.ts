@@ -108,9 +108,9 @@ function sampleScalarField(seedHash: number, fieldIndex: number, worldX: number,
  * Deterministic Generation 3 field sampler.
  *
  * Coordinates are world-space metres rather than Cell coordinates so sampling
- * remains continuous across streaming boundaries. The sampler is intentionally
- * read-only for Slice A: current Gen-2 zone/layout/connector behavior does not
- * consume these values yet.
+ * remains continuous across streaming boundaries. The bounded Generation 3
+ * architecture pilot consumes structural channels; other generation paths can
+ * continue treating the full sample as read-only diagnostics until migrated.
  */
 export function sampleWorldFields(seed: string, worldX: number, worldZ: number): WorldFieldSample {
   const seedHash = hashString(`${seed}:gen3-fields`);
@@ -120,6 +120,28 @@ export function sampleWorldFields(seed: string, worldX: number, worldZ: number):
     values[name] = sampleScalarField(seedHash, fieldIndex, worldX, worldZ);
   }
   return { ...values, geometry: 'euclidean' };
+}
+
+/**
+ * Sample only the channels required by a downstream generation layer.
+ *
+ * This preserves the exact canonical Field values while avoiding the cost of
+ * calculating all 15 channels for wider continuity probes that only need a
+ * small structural subset.
+ */
+export function sampleWorldFieldChannels<const Names extends readonly WorldFieldName[]>(
+  seed: string,
+  worldX: number,
+  worldZ: number,
+  names: Names
+): Record<Names[number], number> {
+  const seedHash = hashString(`${seed}:gen3-fields`);
+  const values: Partial<Record<WorldFieldName, number>> = {};
+  for (const name of names) {
+    const fieldIndex = WORLD_FIELD_NAMES.indexOf(name);
+    values[name] = sampleScalarField(seedHash, fieldIndex, worldX, worldZ);
+  }
+  return values as Record<Names[number], number>;
 }
 
 export function formatFieldDiagnostics(sample: WorldFieldSample): string[] {

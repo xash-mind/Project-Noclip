@@ -5,7 +5,7 @@ rmSync('.test-dist', { recursive: true, force: true });
 const compile = spawnSync('tsc', ['-p', 'tsconfig.test.json'], { stdio: 'inherit' });
 if (compile.status !== 0) process.exit(compile.status ?? 1);
 
-const { validateBaselineArchitecturePilot } = await import('../.test-dist/src/world/architecture.js');
+const { measureBaselineArchitectureSeam, validateBaselineArchitectureContinuity, validateBaselineArchitecturePilot } = await import('../.test-dist/src/world/architecture.js');
 const { generateCell, isEssentialSceneryProp, validateCellConnectivity, validateCellPlacement } = await import('../.test-dist/src/world/generator.js');
 const { WORLD_FIELD_NAMES, sampleWorldFields } = await import('../.test-dist/src/world/fields.js');
 const { DEFAULT_TUNING } = await import('../.test-dist/src/world/types.js');
@@ -13,7 +13,8 @@ const start = performance.now();
 let walls = 0; let props = 0; let notes = 0; let loot = 0; let placementErrors = 0; let ordinaryCells = 0; let emptyOrdinaryCells = 0; let optionalSceneryProps = 0;
 let lightGroups = 0; let lightFixtures = 0; let maxLightGroupsPerCell = 0; let maxLightFixturesPerCell = 0; let maxWallsPerCell = 0; let maxPropsPerCell = 0;
 let gen3PilotCells = 0; let gen3PilotWalls = 0; let gen3PilotSupports = 0; let gen3PilotValidationErrors = 0; let gen3PilotLegacyModuleProps = 0; let gen3PilotValidationMs = 0;
-const gen3PilotSignatures = new Set(); const gen3PilotValidationSamples = [];
+let gen3ContinuityEligibleSeams = 0; let gen3ContinuityExpectedLines = 0; let gen3ContinuityMatchingLines = 0; let gen3ContinuityErrors = 0;
+const gen3PilotSignatures = new Set(); const gen3PilotValidationSamples = []; const gen3PilotCellsById = new Map();
 const lightStates = { on: 0, off: 0, flicker: 0 }; const baselineLightStates = { on: 0, off: 0, flicker: 0 }; const placementSamples = [];
 const archetypes = new Set(); const compositionSignatures = new Set(); const signaturesByZone = new Map(); const spatialProfiles = {}; const cells = 10000;
 
@@ -38,9 +39,14 @@ for (let x = -50; x < 50; x += 1) {
       gen3PilotSupports += cell.props.length;
       gen3PilotLegacyModuleProps += cell.props.filter((prop) => prop.kind !== 'column').length;
       const pilotValidationStart = performance.now();
-      const errors = validateBaselineArchitecturePilot(internalWalls, cell.props);
+      const errors = [
+        ...validateBaselineArchitecturePilot(internalWalls, cell.props),
+        ...validateBaselineArchitectureContinuity(cell.address.worldSeed, cell.address.cellX, cell.address.cellZ, internalWalls, cell.props)
+      ];
       gen3PilotValidationMs += performance.now() - pilotValidationStart;
       gen3PilotValidationErrors += errors.length;
+      gen3ContinuityErrors += errors.filter((error) => error.includes('continuity') || error.includes('lattice') || error.includes('cadence')).length;
+      gen3PilotCellsById.set(cell.id, { cellX: cell.address.cellX, cellZ: cell.address.cellZ, walls: internalWalls });
       if (gen3PilotValidationSamples.length < 10) for (const error of errors) {
         if (gen3PilotValidationSamples.length >= 10) break;
         gen3PilotValidationSamples.push(`${cell.address.worldSeed}@${cell.id}: ${error}`);
@@ -54,6 +60,18 @@ for (let x = -50; x < 50; x += 1) {
 
 const elapsedWithPilotValidation = performance.now() - start;
 const elapsed = Math.max(0.001, elapsedWithPilotValidation - gen3PilotValidationMs);
+for (const cell of gen3PilotCellsById.values()) {
+  for (const [dx, dz, direction] of [[1, 0, 'east'], [0, 1, 'south']]) {
+    const neighbor = gen3PilotCellsById.get(`${cell.cellX + dx}:${cell.cellZ + dz}`);
+    if (!neighbor) continue;
+    const seam = measureBaselineArchitectureSeam(cell, neighbor, direction);
+    if (seam.expectedLines === 0) continue;
+    gen3ContinuityEligibleSeams += 1;
+    gen3ContinuityExpectedLines += seam.expectedLines;
+    gen3ContinuityMatchingLines += seam.matchingLines;
+  }
+}
+gen3ContinuityErrors += gen3ContinuityExpectedLines - gen3ContinuityMatchingLines;
 const connectorErrors = validateCellConnectivity('benchmark-001', 28, DEFAULT_TUNING.extraOpeningChance);
 const baselineLightTotal = baselineLightStates.on + baselineLightStates.off + baselineLightStates.flicker;
 const signatureCountsByZone = Object.fromEntries([...signaturesByZone.entries()].map(([zone, signatures]) => [zone, signatures.size]));
@@ -89,7 +107,13 @@ console.log(JSON.stringify({
     validationErrors: gen3PilotValidationErrors,
     validationSamples: gen3PilotValidationSamples,
     validationMs: Number(gen3PilotValidationMs.toFixed(2)),
-    validationMicrosecondsPerPilot: Number((gen3PilotValidationMs * 1000 / Math.max(1, gen3PilotCells)).toFixed(2))
+    validationMicrosecondsPerPilot: Number((gen3PilotValidationMs * 1000 / Math.max(1, gen3PilotCells)).toFixed(2)),
+    continuity: {
+      eligibleSeams: gen3ContinuityEligibleSeams,
+      expectedLines: gen3ContinuityExpectedLines,
+      matchingLines: gen3ContinuityMatchingLines,
+      errors: gen3ContinuityErrors
+    }
   },
   elapsedMs: Number(elapsed.toFixed(2)), microsecondsPerCell: Number((elapsed * 1000 / cells).toFixed(2)), cellsPerSecond: Number((cells / (elapsed / 1000)).toFixed(2)), heapMb: Number((process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)),
   fields: {
@@ -111,7 +135,9 @@ if (
   || fieldBoundaryMaxDelta >= 0.001
   || narrowFieldRanges.length
   || gen3PilotCells < 400
-  || gen3PilotSignatures.size < 20
-  || gen3PilotValidationErrors
-  || gen3PilotLegacyModuleProps
-) process.exit(1);
+    || gen3PilotSignatures.size < 20
+    || gen3PilotValidationErrors
+    || gen3PilotLegacyModuleProps
+    || gen3ContinuityEligibleSeams < 20
+    || gen3ContinuityErrors
+  ) process.exit(1);
