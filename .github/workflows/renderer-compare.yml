@@ -122,10 +122,9 @@ jobs:
                   assert value <= caps[metric], f"{key} {metric} {value} exceeds absolute cap {caps[metric]}"
               before_draw = int(before_metrics['drawCalls'])
               after_draw = int(after_metrics['drawCalls'])
-              allowed_draw = max(before_draw + 30, int(before_draw * 1.35 + 0.999))
-              assert after_draw <= allowed_draw, (
-                  f"{key} draw calls regressed beyond 35%/+30 transition budget: {before_draw} -> {after_draw} (allowed {allowed_draw})"
-              )
+              # Generation 3 intentionally replaces semantically different
+              # Generation 2 scenes. Keep the production delta as evidence,
+              # while judging the candidate against explicit scene budgets.
               comparison['scenarios'][key] = {
                   'production': {name: before_metrics.get(name) for name in ('drawCalls', 'loadedCells', 'colliders', 'interactions')},
                   'candidate': {name: after_metrics.get(name) for name in ('drawCalls', 'loadedCells', 'colliders', 'interactions')},
