@@ -1,11 +1,11 @@
 # Project Status
 
 **Last verified runtime:** 2026-08-11 (Asia/Kolkata)  
-**Production release commit:** `00ad6dc0a268c99ed31fa654a815babe6421f2c4` from PR #39  
-**Production:** https://project-noclip.vercel.app — Generation 3 cutover accepted in production; `v0.3.0-dev.2` deployment retry triggered from current `main`  
-**Visible deployed version:** `v0.3.0-dev.1` until the new production deployment is visibly verified  
+**Production product commit:** `5aadaf1700252a290c41d588c8f0d5944418f39e` from PR #40  
+**Production:** https://project-noclip.vercel.app — Vercel production deployment from current `main` succeeded  
+**Deployed version:** `v0.3.0-dev.2`  
+**Last independently browser-verified production version:** `v0.3.0-dev.1`  
 **Repository version:** `v0.3.0-dev.2`  
-**Current main:** PR #40 merged; perceptual-substrate correction is verified and awaiting production acceptance  
 **Save schema:** `v2`  
 **New-journey generation:** `gen3-v1`  
 **Current architecture direction:** Generation 3 — GitHub Issue #31  
@@ -13,15 +13,15 @@
 
 ## Health
 
-**Healthy, deployment pending.** Generation 3 is the accepted new-journey architecture in production. Existing pre-versioned journeys remain on frozen `gen2`; new journeys persist `generationVersion: gen3-v1`. Cells are streaming/cache units only and ordinary Level 0 architecture, Region geography, lighting and current semantic world layers are generated from deterministic world-space laws rather than Gen2 district/room-template selection.
+**Healthy; `v0.3.0-dev.2` is deployed.** Vercel reports successful production deployment for the current `main`. The repository's independent canonical production browser/touch smoke was not re-run from this connector session because connector-authored push events do not execute the push-triggered Actions workflow here; the last independently browser-verified canonical production release remains `v0.3.0-dev.1`.
+
+Generation 3 is the active new-journey architecture. Existing pre-versioned journeys remain on frozen `gen2`; new journeys persist `generationVersion: gen3-v1`. Cells are streaming/cache units only and ordinary Level 0 architecture, Region geography, lighting and current semantic world layers are generated from deterministic world-space laws rather than Gen2 district/room-template selection.
 
 Playable Geometry remains **Euclidean**. Save schema `v2`, timeline gates, stable identities, Manila/exit semantics and frozen Gen2 compatibility remain preserved.
 
-The accepted `v0.3.0-dev.1` cutover passed typecheck, 47/47 tests, the 10,000-Cell benchmark, production build, desktop/touch functional journeys, renderer-budget checks and production profiling. The cutover benchmark recorded over **3,100 Cells/s**, **0 forbidden ordinary motifs**, **0 placement errors**, Pillar Field wall density of **0.027 walls/Cell**, Blackout with **0 local fixtures**, **215 non-overlapping hole patches**, and geography boundary continuity delta of **6e-9**.
+The merged `v0.3.0-dev.2` perceptual-substrate correction from [PR #40](https://github.com/xash-mind/Project-Noclip/pull/40) passed its complete pre-production acceptance set: **48/48 tests**, **0 forbidden ordinary motifs**, **0 placement errors**, clean-head mobile/desktop/world-cohesion Chromium journeys, exact save/reload with schema `v2` + `gen3-v1`, production build, and renderer regression against accepted `v0.3.0-dev.1` production. At the fixed default-spawn comparison, draw calls improved **82 → 52** while colliders rose **95 → 163**, still far below the explicit budget.
 
-The merged `v0.3.0-dev.2` perceptual-substrate correction from [PR #40](https://github.com/xash-mind/Project-Noclip/pull/40) is fully verified before production acceptance: **48/48 tests**, **0 forbidden ordinary motifs**, **0 placement errors**, clean-head mobile/desktop/world-cohesion Chromium journeys passed, save/reload preserved schema `v2` + `gen3-v1` with exact position, and renderer regression passed against accepted `v0.3.0-dev.1` production. At default spawn, draw calls improved **82 → 52** while colliders rose **95 → 163**, still far below the explicit budget.
-
-## Generation 3 accepted state
+## Generation 3 accepted architecture
 
 The current new-journey pipeline is:
 
@@ -37,7 +37,7 @@ seed
   -> runtime mutations + save deltas
 ```
 
-Accepted via [PR #39](https://github.com/xash-mind/Project-Noclip/pull/39):
+The full Generation 3 cutover landed through [PR #39](https://github.com/xash-mind/Project-Noclip/pull/39), and PR #40 now refines that same architecture rather than reintroducing Generation 2 rooms:
 
 - ordinary Level 0 no longer generates Gen2 alcove/divider/freestanding-arch grammar;
 - Pillar Fields use kilometre-capable Region geography and a persistent wallpaper-clad pillar lattice with strongly suppressed wall density;
@@ -50,15 +50,15 @@ Accepted via [PR #39](https://github.com/xash-mind/Project-Noclip/pull/39):
 - new journeys reserve a deterministic first-walk lane;
 - World Lab uses the canonical `WORLD.md` categories and locators rather than Gen2 district/room controls.
 
-## Merged perceptual-substrate correction
+## `v0.3.0-dev.2` perceptual-substrate correction
 
-[PR #40](https://github.com/xash-mind/Project-Noclip/pull/40) is merged into `main` as the `v0.3.0-dev.2` candidate and is awaiting only live production acceptance:
+[PR #40](https://github.com/xash-mind/Project-Noclip/pull/40) is merged and deployed:
 
 - ordinary Level 0 architecture is denser by default without returning to room templates;
 - `axisFlow` acts as a deterministic directional bias rather than forcing one cardinal direction across a local Field area;
 - Gen3 wallpaper/carpet/ceiling finish identity no longer leaks streaming Cell boundaries;
 - clipped continuous wall pieces end on complete wallpaper repeats instead of arbitrary partial-pattern phase changes;
-- ordinary Level 0 fog/clear colour now conceal the unloaded streaming edge coherently;
+- ordinary Level 0 fog/clear colour conceal the unloaded streaming edge coherently;
 - regression gates cover stream/fog coverage, orientation balance and Gen3 finish continuity.
 
 ## Canonical world facts
@@ -77,7 +77,7 @@ Accepted via [PR #39](https://github.com/xash-mind/Project-Noclip/pull/39):
 
 ## Current ready work
 
-No unmerged Generation 3 implementation candidate is currently in flight. The immediate release action is to verify `v0.3.0-dev.2` on canonical production after the fresh Vercel deployment trigger. Once accepted, the next world-generation work should build on the corrected density/orientation/material/streaming substrate rather than reopen Generation 2 room-template logic.
+No unmerged Generation 3 implementation candidate is currently in flight. The current production contains the corrected density/orientation/material/streaming substrate from PR #40. The next coherent world-generation bundle should build on that foundation and remain reference-driven. A canonical production browser/touch smoke may be rerun when an Actions-capable execution path is available, but it is not a product-code blocker.
 
 ## Separate deferred work
 
@@ -90,11 +90,11 @@ No unmerged Generation 3 implementation candidate is currently in flight. The im
 
 ## Decisions needed from Sash
 
-**None for the current release acceptance.** Escalate before choosing player-facing Non-Euclidean behaviours, paid infrastructure, destructive data changes or other product-direction decisions.
+**None for the current deployed foundation.** Escalate before choosing player-facing Non-Euclidean behaviours, paid infrastructure, destructive data changes or other product-direction decisions.
 
 ## Version policy
 
-Project Noclip remains opted into the manual-project version indicator policy. Canonical root `VERSION` is **`0.3.0-dev.2`**. Accepted production still visibly reports **`v0.3.0-dev.1`** until the new deployment is independently verified; only then should this status record `v0.3.0-dev.2` as accepted production.
+Project Noclip remains opted into the manual-project version indicator policy. Canonical root `VERSION` and current deployed build are **`0.3.0-dev.2`**. Keep deployment state and independent browser-verification state distinct: `v0.3.0-dev.2` is deployed successfully; `v0.3.0-dev.1` is the last release independently re-run through the canonical production browser/touch smoke.
 
 ## Important links
 
@@ -103,5 +103,7 @@ Project Noclip remains opted into the manual-project version indicator policy. C
 - Generation 3 architecture: https://github.com/xash-mind/Project-Noclip/issues/31
 - Generation 3 cutover: https://github.com/xash-mind/Project-Noclip/pull/39
 - Perceptual-substrate correction: https://github.com/xash-mind/Project-Noclip/pull/40
+- PR #40 clean-head CI: https://github.com/xash-mind/Project-Noclip/actions/runs/31493658597
+- PR #40 renderer regression: https://github.com/xash-mind/Project-Noclip/actions/runs/31493658583
 - World vocabulary/catalog: `WORLD.md`
 - Shared operations: https://github.com/xash-mind/project-operations
