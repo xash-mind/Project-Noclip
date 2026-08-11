@@ -2,7 +2,7 @@
 
 This directory is the raw visual/audio evidence ledger for **Level 0**.
 
-Normal implementation/continue runs should **not** read this directory by default. A manual **Reference update** run takes one supplied reference URL, inspects it, appends the evidence to `REFERENCES.md`, reconciles it against existing evidence for the same affected target, and promotes only justified durable conclusions into the normal Project Noclip orientation surfaces.
+Normal implementation/continue runs should **not** read this directory by default. A manual **Reference update** run may receive one or any number of reference groups, inspect all supplied media, append the resulting provenance entries to `REFERENCES.md`, reconcile them against existing evidence for the same affected targets, and promote only justified durable conclusions into the normal Project Noclip orientation surfaces.
 
 This keeps raw evidence rich without making every ordinary agent reread dozens of image analyses.
 
@@ -13,27 +13,30 @@ This keeps raw evidence rich without making every ordinary agent reread dozens o
 
 The user-facing **Reference update** prompt lives in the Project Noclip prompt page in Notion, not in this repository. There is intentionally no second per-image prompt/template file here.
 
-## One-reference workflow
+## Batch reference workflow
 
 1. Run the Notion **Reference update** prompt.
-2. Fill only:
-   - URL
-   - Applies to
-   - Context
-   - Source tier
-3. The agent inspects the supplied media itself. If it cannot access or inspect it, it must not pretend otherwise.
-4. The agent reads only the existing reference entries and canonical facts relevant to the same affected target unless broader comparison is genuinely required.
-5. It appends one structured evidence entry to `REFERENCES.md`.
-6. It promotes supported durable conclusions into `WORLD.md` first, plus a relevant Issue/ADR or other normal orientation surface only when appropriate.
-7. If the new evidence exposes a mismatch in the accepted runtime, the agent creates or updates a concrete GitHub issue rather than silently treating the implementation as correct.
-8. Ordinary `Continue` runs inherit the promoted rules through `WORLD.md` and the other docs/issues they already traverse. They do not need to revisit the raw ledger unless a specific fidelity question requires source evidence.
+2. Add as many `REFERENCE` blocks as useful in one run.
+3. Each block may contain:
+   - one or many URLs;
+   - one or many `Applies to` targets;
+   - any number of context notes;
+   - its own Source tier.
+4. Keep multiple URLs in one block when they are alternate views/crops/media of the same source claim and share the same metadata. Split them into separate blocks when provenance, target, context or source tier differs materially.
+5. The agent inspects every supplied media URL itself. If it cannot access or inspect one, it must not pretend otherwise.
+6. The agent reads only existing reference entries and canonical facts relevant to the affected targets unless broader comparison is genuinely required.
+7. It creates separate provenance entries for materially distinct sources; a single entry may retain several URLs when they genuinely form one reference group.
+8. It cross-correlates related references in the same batch before promoting conclusions.
+9. It promotes supported durable conclusions into `WORLD.md` first, plus a relevant Issue/ADR or other normal orientation surface only when appropriate.
+10. If new evidence exposes a mismatch in the accepted runtime, the agent creates or updates a concrete GitHub issue rather than silently treating the implementation as correct.
+11. Ordinary `Continue` runs inherit the promoted rules through `WORLD.md` and the other docs/issues they already traverse. They do not need to revisit the raw ledger unless a specific fidelity question requires source evidence.
 
 ## Processing states
 
-Each appended reference is finalized in the same Reference update run as one of:
+Each appended reference entry is finalized in the same Reference update run as one of:
 
 - `PROMOTED` — the evidence was reviewed and any justified durable conclusions were propagated to the appropriate canonical/orientation surfaces.
-- `EVIDENCE-ONLY` — useful evidence was recorded, but it did not independently justify a new canonical rule. A later reference for the same target may make the combined evidence strong enough to promote.
+- `EVIDENCE-ONLY` — useful evidence was recorded, but it did not independently justify a new canonical rule. Later evidence for the same target may make the combined evidence strong enough to promote.
 - `BLOCKED` — source conflict, inadequate provenance/access, or a human canon/design decision prevents safe promotion.
 
 `PROMOTED` does **not** mean every observation becomes canon. It means the Reference update pass reviewed the entry and promoted only conclusions justified by the evidence hierarchy.
@@ -48,7 +51,9 @@ Each appended reference is finalized in the same Reference update run as one of:
 
 ## Efficiency rule
 
-A Reference update should inspect the new URL plus existing references/canonical facts for the **same affected target**. It should not resynthesize unrelated Level 0 evidence. Normal Continue runs should use promoted knowledge from `WORLD.md`, relevant issues/ADRs, `PROJECT.md`, `STATUS.md`, and `AGENTS.md` as applicable, and consult raw references only when source-level fidelity evidence is specifically needed.
+A Reference update should inspect the supplied batch plus existing references/canonical facts for the **affected targets only**. It should not resynthesize unrelated Level 0 evidence. Related references in the same batch should be evaluated together so corroboration or contradictions are resolved once rather than in repeated runs.
+
+Normal Continue runs should use promoted knowledge from `WORLD.md`, relevant issues/ADRs, `PROJECT.md`, `STATUS.md`, and `AGENTS.md` as applicable, and consult raw references only when source-level fidelity evidence is specifically needed.
 
 ## Fidelity rule
 
