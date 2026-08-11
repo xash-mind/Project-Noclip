@@ -1,0 +1,43 @@
+name: Apply Gen3 substrate correction
+
+on:
+  push:
+    branches:
+      - agent/gen3-substrate-density-continuity
+    paths:
+      - tools/apply-gen3-substrate.py
+      - .github/workflows/apply-gen3-substrate.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/gen3-substrate-density-continuity
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+      - name: Apply bounded substrate correction
+        run: python tools/apply-gen3-substrate.py
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify complete repository gate
+        run: npm run check
+      - name: Check patch hygiene
+        run: git diff --check
+      - name: Commit verified product changes
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add VERSION src/world/gen3.ts src/world/types.ts src/app/ProjectNoclipGame.ts src/renderer/cellBuilder.ts src/renderer/WorldRenderer.ts tests/generation-3.test.mjs
+          git commit -m "Tighten Generation 3 perceptual substrate"
+          git push origin HEAD:agent/gen3-substrate-density-continuity
