@@ -5,6 +5,18 @@ export const DOOR_WIDTH = 3.2;
 
 export type Direction = 'north' | 'east' | 'south' | 'west';
 export type StabilityClass = 'disorienting' | 'semi-stable' | 'stable' | 'rendezvous' | 'terminal';
+export type GenerationVersion = 'gen2' | 'gen3-v1';
+export type GeometryKind = 'euclidean' | 'non-euclidean';
+export type RegionId = 'ordinary-level-0' | 'arch-rooms' | 'pillar-field';
+export type MaterialId =
+  | 'level-0-wallpaper'
+  | 'level-0-carpet'
+  | 'level-0-ceiling'
+  | 'fluorescent-panel'
+  | 'arch-pale-wallpaper';
+export type ConditionId = 'damp-carpet' | 'deep-wet-carpet' | 'shallow-dry-carpet' | 'blackout';
+export type CarverId = 'floor-hole-cluster';
+export type StructureId = 'manila-room' | 'exit-structure';
 export type ZoneId = 'baseline' | 'arch' | 'pillar' | 'blackout' | 'holes' | 'manila' | 'exit-threshold';
 export type RoomArchetype =
   | 'open-office'
@@ -65,6 +77,7 @@ export type RoomComponentId =
 export interface WorldAddress {
   worldSeed: string;
   levelId: 'level-0';
+  generationVersion: GenerationVersion;
   cellX: number;
   cellZ: number;
   zoneId: ZoneId;
@@ -96,6 +109,7 @@ export interface WallSpec {
   orientation: 'x' | 'z';
   drawable: boolean;
   materialVariant?: number;
+  materialId?: MaterialId;
 }
 
 export interface PropSpec {
@@ -106,6 +120,7 @@ export interface PropSpec {
   rotationY?: number;
   solid?: boolean;
   materialVariant?: number;
+  materialId?: MaterialId;
 }
 
 export interface FloorPatchSpec {
@@ -153,9 +168,26 @@ export interface ExitDescriptor {
   enabled: boolean;
 }
 
+export interface WorldSemanticDescriptor {
+  generationVersion: GenerationVersion;
+  levelId: 'level-0';
+  regionId: RegionId;
+  geometry: GeometryKind;
+  materialIds: MaterialId[];
+  conditionIds: ConditionId[];
+  carverIds: CarverId[];
+  structureIds: StructureId[];
+  featureIds: string[];
+  transitionIds: string[];
+  regionStrength: number;
+  blackoutStrength: number;
+  blackoutEscapeCue: number;
+}
+
 export interface CellDescriptor {
   id: string;
   address: WorldAddress;
+  world: WorldSemanticDescriptor;
   stability: StabilityClass;
   openings: Openings;
   variant: number;
@@ -183,6 +215,12 @@ export interface WorldTuning {
   lootChance: number;
   shiftChance: number;
   roomVariation: number;
+  regionOverride?: RegionId;
+  conditionOverride?: 'clear' | 'blackout';
+  carverOverride?: 'none' | CarverId;
+  structureOverride?: 'none' | 'manila-room';
+  labAudioMonitor: boolean;
+  /** Legacy save/diagnostic compatibility only. New World Lab controls use canonical categories. */
   zoneOverride?: ZoneId;
   worldDayOverride?: number;
   exposureOverride?: number;
@@ -195,10 +233,11 @@ export const DEFAULT_TUNING: WorldTuning = {
   lootChance: 0.085,
   shiftChance: 0.18,
   roomVariation: 1,
+  labAudioMonitor: true,
   gateBypass: false
 };
 
 export function cellId(x: number, z: number): string { return `${x}:${z}`; }
 export function addressId(address: WorldAddress): string {
-  return `level-0:${address.cellX}:${address.cellZ}:${address.zoneId}:${address.districtId}:s${address.shiftEpoch}`;
+  return `level-0:${address.generationVersion}:${address.cellX}:${address.cellZ}:${address.zoneId}:${address.districtId}:s${address.shiftEpoch}`;
 }

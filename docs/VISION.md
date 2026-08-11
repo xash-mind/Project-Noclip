@@ -24,6 +24,6 @@ Cell-by-cell random variation and recognizable room-module selection can create 
 
 A `Cell` is only a streaming/computation unit. Player-visible architecture should be capable of crossing cell boundaries without exposing the grid.
 
-The current accepted runtime still uses Gen-2 `ZoneId`, room-archetype, spatial-profile and component vocabulary. Those remain supported until verified migration slices replace them; they must not be silently treated as already-converted Gen-3 systems.
+Generation 3 is the new-journey model. Every new journey carries `generationVersion: gen3-v1`; existing and pre-versioned saves remain on a frozen Gen2 compatibility path so architecture is never silently regenerated beneath a player. Legacy `ZoneId`, district, archetype, profile, and component vocabulary must not steer new-world content.
 
-Use `WORLD.md` for the canonical human-facing vocabulary/current content catalog and GitHub Issue #31 for the Generation 3 migration direction.
+Use `WORLD.md` for the canonical human-facing vocabulary/current content catalog, GitHub Issue #31 for Generation 3 architecture, and `STATUS.md` for the exact accepted production state.

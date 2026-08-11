@@ -1,5 +1,14 @@
+/**
+ * FROZEN GENERATION 2 geography plus renderer theme compatibility.
+ *
+ * Generation 3 Region classification is owned by gen3.ts. ZONE_PROFILES remain
+ * a temporary renderer adapter and must not regain ownership of geography.
+ */
 import { floorDiv, intInRange, unitFloat, weightedChoice } from './hash.js';
+import { isManilaRoomAvailable, manilaRoomCell } from './structures.js';
 import type { StabilityClass, WorldTuning, ZoneId } from './types.js';
+
+export { MANILA_MAX_MANHATTAN_DISTANCE, MANILA_MIN_MANHATTAN_DISTANCE, manilaRoomCell } from './structures.js';
 
 export interface ZoneProfile {
   id: ZoneId;
@@ -16,18 +25,15 @@ export interface ZoneProfile {
 }
 
 export const ZONE_PROFILES: Record<ZoneId, ZoneProfile> = {
-  baseline: { id: 'baseline', label: 'Baseline Lobby', stability: 'disorienting', minimumWorldDay: 0, minimumExposure: 0, wallTint: [0.56, 0.49, 0.25], floorTint: [0.58, 0.5, 0.3], ceilingTint: [0.62, 0.6, 0.45], trimTint: [0.29, 0.25, 0.13], fogDensity: 0.015, lightMultiplier: 1 },
-  arch: { id: 'arch', label: 'Arch Rooms', stability: 'semi-stable', minimumWorldDay: 3, minimumExposure: 0.6, wallTint: [0.63, 0.57, 0.35], floorTint: [0.62, 0.53, 0.33], ceilingTint: [0.7, 0.67, 0.52], trimTint: [0.36, 0.31, 0.18], fogDensity: 0.01, lightMultiplier: 1.08 },
-  pillar: { id: 'pillar', label: 'Pillar Field', stability: 'disorienting', minimumWorldDay: 3, minimumExposure: 0.6, wallTint: [0.5, 0.46, 0.27], floorTint: [0.5, 0.44, 0.29], ceilingTint: [0.58, 0.56, 0.43], trimTint: [0.25, 0.23, 0.14], fogDensity: 0.024, lightMultiplier: 0.9 },
+  baseline: { id: 'baseline', label: 'Ordinary Level 0', stability: 'disorienting', minimumWorldDay: 0, minimumExposure: 0, wallTint: [0.9, 0.84, 0.52], floorTint: [0.68, 0.59, 0.36], ceilingTint: [0.88, 0.86, 0.69], trimTint: [0.38, 0.31, 0.15], fogDensity: 0.012, lightMultiplier: 1.08 },
+  arch: { id: 'arch', label: 'Arch Rooms', stability: 'stable', minimumWorldDay: 3, minimumExposure: 0.6, wallTint: [0.94, 0.9, 0.68], floorTint: [0.66, 0.57, 0.36], ceilingTint: [0.92, 0.9, 0.76], trimTint: [0.42, 0.35, 0.18], fogDensity: 0.009, lightMultiplier: 1.1 },
+  pillar: { id: 'pillar', label: 'Pillar Field', stability: 'disorienting', minimumWorldDay: 3, minimumExposure: 0.6, wallTint: [0.88, 0.82, 0.5], floorTint: [0.65, 0.57, 0.37], ceilingTint: [0.86, 0.84, 0.68], trimTint: [0.36, 0.3, 0.15], fogDensity: 0.018, lightMultiplier: 1.02 },
   blackout: { id: 'blackout', label: 'Blackout Zone', stability: 'disorienting', minimumWorldDay: 7, minimumExposure: 1.6, wallTint: [0.19, 0.17, 0.115], floorTint: [0.055, 0.06, 0.045], ceilingTint: [0.12, 0.12, 0.09], trimTint: [0.08, 0.08, 0.06], fogDensity: 0.04, lightMultiplier: 0.06 },
   holes: { id: 'holes', label: 'Hole Section', stability: 'terminal', minimumWorldDay: 10, minimumExposure: 2.2, wallTint: [0.42, 0.37, 0.2], floorTint: [0.48, 0.41, 0.25], ceilingTint: [0.48, 0.46, 0.34], trimTint: [0.2, 0.18, 0.1], fogDensity: 0.02, lightMultiplier: 0.72 },
   // Retained as a render/theme profile and World Lab compatibility value. Ordinary generation never emits a Manila zone.
   manila: { id: 'manila', label: 'Manila Room', stability: 'rendezvous', minimumWorldDay: 1, minimumExposure: 0.25, wallTint: [0.68, 0.6, 0.42], floorTint: [0.65, 0.56, 0.42], ceilingTint: [0.73, 0.7, 0.61], trimTint: [0.37, 0.27, 0.17], fogDensity: 0.003, lightMultiplier: 1.22 },
   'exit-threshold': { id: 'exit-threshold', label: 'Exit Threshold', stability: 'semi-stable', minimumWorldDay: 3, minimumExposure: 0.8, wallTint: [0.48, 0.43, 0.24], floorTint: [0.46, 0.4, 0.25], ceilingTint: [0.54, 0.52, 0.41], trimTint: [0.25, 0.22, 0.12], fogDensity: 0.014, lightMultiplier: 0.84 }
 };
-
-export const MANILA_MIN_MANHATTAN_DISTANCE = 42;
-export const MANILA_MAX_MANHATTAN_DISTANCE = 72;
 
 export function isZoneUnlocked(zoneId: ZoneId, worldDay: number, exposure: number, bypass: boolean): boolean {
   const profile = ZONE_PROFILES[zoneId];
@@ -38,18 +44,9 @@ export function districtId(cellX: number, cellZ: number): string {
   return `${floorDiv(cellX, 5)}:${floorDiv(cellZ, 5)}`;
 }
 
-export function manilaRoomCell(seed: string): { cellX: number; cellZ: number } {
-  const distance = intInRange(`${seed}:manila:distance`, MANILA_MIN_MANHATTAN_DISTANCE, MANILA_MAX_MANHATTAN_DISTANCE + 1);
-  const xMagnitude = intInRange(`${seed}:manila:x-magnitude`, 7, distance - 6);
-  const zMagnitude = distance - xMagnitude;
-  const xSign = unitFloat(`${seed}:manila:x-sign`) < 0.5 ? -1 : 1;
-  const zSign = unitFloat(`${seed}:manila:z-sign`) < 0.5 ? -1 : 1;
-  return { cellX: xSign * xMagnitude, cellZ: zSign * zMagnitude };
-}
-
 export function isManilaRoomCell(seed: string, cellX: number, cellZ: number, worldDay: number, exposure: number, tuning: WorldTuning): boolean {
   if (tuning.zoneOverride === 'manila') return true;
-  if (!isZoneUnlocked('manila', worldDay, exposure, tuning.gateBypass)) return false;
+  if (!isManilaRoomAvailable(worldDay, exposure, tuning.gateBypass)) return false;
   const target = manilaRoomCell(seed);
   return cellX === target.cellX && cellZ === target.cellZ;
 }

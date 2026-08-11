@@ -12,11 +12,12 @@ const {
   lightStateForInstability,
   lightStateThresholds,
   sampleLightField,
+  selectSpatialFixtureLights,
   validateLightClearance
 } = await import('../.test-dist/src/world/lighting.js');
 const { DEFAULT_TUNING, WALL_HEIGHT } = await import('../.test-dist/src/world/types.js');
 
-function generated(x, z, shiftEpoch = 0) { return generateCell({ seed: 'light-field-test', x, z, worldDay: 40, exposure: 10, shiftEpoch, tuning: DEFAULT_TUNING }); }
+function generated(x, z, shiftEpoch = 0) { return generateCell({ seed: 'light-field-test', x, z, worldDay: 40, exposure: 10, shiftEpoch, generationVersion: 'gen3-v1', tuning: { ...DEFAULT_TUNING, regionOverride: 'ordinary-level-0', conditionOverride: 'clear', carverOverride: 'none', structureOverride: 'none' } }); }
 function group(overrides = {}) { return { id: 'group-test', fixtures: [{ x: 0, y: WALL_HEIGHT - 0.08, z: 0 }], rotationY: 0, state: 'on', intensity: 1, temperature: 0.94, flickerRate: 4, phase: 0.25, ...overrides }; }
 
 test('generated light groups are deterministic derived state and shift without changing cell addresses', () => {
@@ -56,6 +57,23 @@ test('clustered field includes neighboring active groups, excludes off/far group
 test('fixture generation rejects only conflicting ceiling-reaching geometry', () => {
   const props = [{ id: 'column-conflict', kind: 'column', position: { x: -3.4, y: WALL_HEIGHT / 2, z: -2.4 }, scale: { x: 0.8, y: WALL_HEIGHT, z: 0.8 }, solid: true }];
   const groups = generateLightGroups({ seed: 'clearance', x: 0, z: 0, shiftEpoch: 0, zoneId: 'baseline', roomArchetype: 'open-office', ceilingPattern: 0, walls: [], props }); assert.equal(groups.length, 2); assert.equal(groups.flatMap((entry) => entry.fixtures).length, 3); assert.deepEqual(validateLightClearance(groups, [], props), []);
+});
+
+test('renderer fixture selection uses actual ceiling positions across Cell boundaries', () => {
+  const sources = [
+    { cellX: 0, cellZ: 0, group: group({ id: 'west', fixtures: [{ x: 6.2, y: WALL_HEIGHT - 0.08, z: 0 }] }) },
+    { cellX: 1, cellZ: 0, group: group({ id: 'east', fixtures: [{ x: -6.2, y: WALL_HEIGHT - 0.08, z: 0 }] }) }
+  ];
+  const selected = selectSpatialFixtureLights(sources, 7, 0, 0, false, 4);
+  assert.deepEqual(selected.map((entry) => entry.id), ['east:0', 'west:0']);
+  assert.deepEqual(selected.map((entry) => entry.worldX), [7.8, 6.2]);
+  assert.ok(selected.every((entry) => entry.intensity > 0));
+});
+
+test('Blackout generation has exactly zero local fixture work', () => {
+  const blackout = generateCell({ seed: 'blackout-zero', x: 0, z: 0, worldDay: 40, exposure: 10, shiftEpoch: 0, generationVersion: 'gen3-v1', tuning: { ...DEFAULT_TUNING, conditionOverride: 'blackout', structureOverride: 'none' } });
+  assert.deepEqual(blackout.lightGroups, []);
+  assert.equal(blackout.world.blackoutStrength, 1);
 });
 
 test('deterministic generation sweep keeps fixture work bounded and placement valid', () => {

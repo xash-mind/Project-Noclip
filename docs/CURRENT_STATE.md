@@ -1,5 +1,7 @@
 # Project Noclip — Current State
 
+> **Historical snapshot only.** This Iteration 2 document records the former Generation 2 implementation. It is superseded for orientation and work selection by `STATUS.md`, `PROJECT.md`, `WORLD.md`, and Generation 3 Issue #31. Do not use its district/archetype metrics as current acceptance criteria.
+
 **Updated:** 2026-08-03 — Iteration 2 implementation candidate
 **Repository:** `xash-mind/Project-Noclip`
 **Production target:** https://project-noclip.vercel.app

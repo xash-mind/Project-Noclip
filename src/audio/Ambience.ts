@@ -25,13 +25,17 @@ export interface AmbienceDebugState {
   humWaveform: OscillatorType;
   masterScale: number;
   normalHumGain: number;
+  humLayers: number;
+  blackoutStrength: number;
+  blackoutEscapeCue: number;
 }
 
 export const AMBIENCE_TUNING = {
-  masterScale: 0.22,
-  normalHumGain: 0.014,
-  failedHumGain: 0.0055,
-  blackoutHumGain: 0.0008,
+  masterScale: 0.24,
+  normalHumGain: 0.042,
+  failedHumGain: 0.018,
+  blackoutHumGain: 0,
+  externalEscapeHumGain: 0.034,
   muteTimeConstant: 0.025,
   resumeTimeConstant: 0.16,
   zoneTimeConstant: 0.4,
@@ -52,14 +56,16 @@ export function readJourneyAudioLifecycle(): JourneyAudioLifecycleSnapshot {
   const touchCapable = navigator.maxTouchPoints > 0
     && (window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(hover: none)').matches);
   const pauseOpen = pause?.classList.contains('visible') ?? false;
-  const paused = pauseOpen || (touchCapable
+  const labVisible = lab?.classList.contains('visible') ?? false;
+  const labMonitoring = labVisible && lab?.dataset?.audioMonitor === 'true';
+  const paused = pauseOpen || (!labMonitoring && (touchCapable
     ? window.innerWidth <= window.innerHeight
-    : document.pointerLockElement !== canvas);
+    : document.pointerLockElement !== canvas));
 
   return {
     started: Boolean(title?.hidden && hud && !hud.hidden),
     paused,
-    labOpen: lab?.classList.contains('visible') ?? false,
+    labOpen: labVisible && !labMonitoring,
     noteOpen: note?.classList.contains('visible') ?? false,
     focused: document.hasFocus() && !document.hidden
   };
@@ -69,6 +75,8 @@ export class ProceduralAmbience {
   private context?: AudioContext;
   private master?: GainNode;
   private hum?: OscillatorNode;
+  private humOscillators: OscillatorNode[] = [];
+  private humLayerGains: GainNode[] = [];
   private humGain?: GainNode;
   private lifecycleObserver?: MutationObserver;
   private lifecycleInstalled = false;
@@ -87,6 +95,8 @@ export class ProceduralAmbience {
   private stepStarts = 0;
   private impactStarts = 0;
   private flickerStarts = 0;
+  private blackoutStrength = 0;
+  private blackoutEscapeCue = 0;
 
   async start(volume: number): Promise<void> {
     this.baseVolume = Math.max(0, Math.min(1, volume));
@@ -114,13 +124,26 @@ export class ProceduralAmbience {
       this.master.gain.value = 0;
       this.master.connect(this.context.destination);
 
-      this.hum = this.context.createOscillator();
-      this.hum.type = AMBIENCE_TUNING.humWaveform;
-      this.hum.frequency.value = 59.7;
       this.humGain = this.context.createGain();
       this.humGain.gain.value = this.targetHumGain;
-      this.hum.connect(this.humGain).connect(this.master);
-      this.hum.start();
+      this.humGain.connect(this.master);
+      const layers: Array<{ frequency: number; waveform: OscillatorType; level: number }> = [
+        { frequency: 59.7, waveform: AMBIENCE_TUNING.humWaveform, level: 0.48 },
+        { frequency: 119.4, waveform: 'sine', level: 0.34 },
+        { frequency: 238.8, waveform: 'triangle', level: 0.18 }
+      ];
+      for (const layer of layers) {
+        const oscillator = this.context.createOscillator();
+        const layerGain = this.context.createGain();
+        oscillator.type = layer.waveform;
+        oscillator.frequency.value = layer.frequency;
+        layerGain.gain.value = layer.level;
+        oscillator.connect(layerGain).connect(this.humGain);
+        oscillator.start();
+        this.humOscillators.push(oscillator);
+        this.humLayerGains.push(layerGain);
+      }
+      this.hum = this.humOscillators[0];
       this.graphStarts += 1;
       this.unavailable = false;
       this.applyMasterGain();
@@ -129,6 +152,8 @@ export class ProceduralAmbience {
       this.context = undefined;
       this.master = undefined;
       this.hum = undefined;
+      this.humOscillators = [];
+      this.humLayerGains = [];
       this.humGain = undefined;
       this.unavailable = true;
     }
@@ -162,16 +187,23 @@ export class ProceduralAmbience {
     this.publishDebugState();
   }
 
+  setEnvironment(blackoutStrength: number, blackoutEscapeCue: number): void {
+    this.blackoutStrength = Math.max(0, Math.min(1, blackoutStrength));
+    this.blackoutEscapeCue = Math.max(0, Math.min(1, blackoutEscapeCue));
+    this.updateHumTarget();
+    this.publishDebugState();
+  }
+
   setLightField(field: LightFieldSample): void {
     this.lightEnergy = Math.max(0, Math.min(1, field.energy));
     this.activeLightGroups = field.activeGroups;
     this.flickerGroups = field.flickerGroups;
-    this.targetHumGain = Math.pow(this.lightEnergy, 0.72) * AMBIENCE_TUNING.normalHumGain;
+    this.updateHumTarget();
 
-    if (this.context && this.humGain) {
+    if (this.context) {
       const now = this.context.currentTime;
-      this.humGain.gain.setTargetAtTime(this.targetHumGain, now, AMBIENCE_TUNING.zoneTimeConstant);
-      if (this.hum) this.hum.frequency.setTargetAtTime(59.7 + (field.temperature - 0.94) * 3, now, 0.8);
+      const drift = (field.temperature - 0.94) * 3;
+      this.humOscillators.forEach((oscillator, index) => oscillator.frequency.setTargetAtTime((59.7 + drift) * (index + 1), now, 0.8));
     }
 
     const pulse = Math.max(0, Math.min(1, field.flickerPulse));
@@ -238,8 +270,20 @@ export class ProceduralAmbience {
       actualHumGain: this.humGain?.gain.value ?? this.targetHumGain,
       humWaveform: AMBIENCE_TUNING.humWaveform,
       masterScale: AMBIENCE_TUNING.masterScale,
-      normalHumGain: AMBIENCE_TUNING.normalHumGain
+      normalHumGain: AMBIENCE_TUNING.normalHumGain,
+      humLayers: this.humOscillators.length,
+      blackoutStrength: this.blackoutStrength,
+      blackoutEscapeCue: this.blackoutEscapeCue
     };
+  }
+
+  private updateHumTarget(): void {
+    this.targetHumGain = this.blackoutStrength > 0.52
+      ? Math.pow(this.blackoutEscapeCue, 1.35) * AMBIENCE_TUNING.externalEscapeHumGain
+      : Math.pow(this.lightEnergy, 0.58) * AMBIENCE_TUNING.normalHumGain;
+    if (this.humGain && this.context) {
+      this.humGain.gain.setTargetAtTime(this.targetHumGain, this.context.currentTime, AMBIENCE_TUNING.zoneTimeConstant);
+    }
   }
 
   private flickerSnap(intensity: number): void {

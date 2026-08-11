@@ -1,38 +1,60 @@
-# Project Noclip — Level 0 Specification
+# Level 0 Generation 3 specification
 
-**Version:** 0.2
+`WORLD.md` is canonical for names and content. This document is the compact implementation contract.
 
-## Spatial hierarchy
+## Pipeline
 
-World seed → 5×5 district → zone profile → room archetype → deterministic layout/props/notes/loot → persistent deltas.
+```text
+seed + generationVersion
+  → kilometre-scale Region/Condition Fields
+  → world-space Euclidean architecture
+  → Materials and Conditions
+  → Carvers
+  → Structures
+  → Features, Items, and Transitions
+  → persistent deltas
+```
 
-Implemented room archetypes include open offices, split suites, narrow halls, alcove rings, service corners, wide lobbies, arch galleries/crossings, pillar grids/aisles, maintenance bays, flooded corridors, hole galleries/broken floors, Manila Room and transition foyers.
+Cells are 14 m streaming/cache units only. No Region, wall, room, light, or content cadence may reset at Cell boundaries.
 
-## Timeline gates
+## Generation versions
 
-- Baseline: Day 0 / Exposure 0.
-- Manila Room: Day 1 / Exposure 0.25.
-- Arch and Pillar districts: Day 3 / Exposure 0.6.
-- Exit thresholds and Level 1: Day 3 / Exposure 0.8.
-- Blackout: Day 7 / Exposure 1.6.
-- Level 483: Day 7 / Exposure 1.8.
-- Holes and Level 27: Day 10 / Exposure 2.2.
-- Level 13/14: Day 14 / Exposure 3.
+- `gen3-v1`: every new journey.
+- `gen2`: frozen compatibility for existing/unversioned saves.
+- Never silently regenerate an existing save into another version.
 
-World Lab can bypass gates locally for QA.
+## Geography and timeline gates
 
-## Manila Room
+- Ordinary Level 0: always available.
+- Pillar Field and Arch Rooms: World Day 3 / Exposure 0.6.
+- Blackout Condition: World Day 7 / Exposure 1.6.
+- Floor-hole Carver: World Day 10 / Exposure 2.2.
+- Manila Room Structure: World Day 1 / Exposure 0.25.
+- Developer bypass may expose gated content locally without changing the canonical gates.
 
-Fixed test address: cell `8:-6`. It is a compact internal 6.3m square room with one central table, one book, dry carpet and stable/rendezvous time behavior. The ledger demonstrates the document interface. No fabricated players are shown.
+## Fidelity rules
 
-## Interaction systems
+- Ordinary: continuous segmented partitions; no alcoves, divider modules, or Arch motifs; sparse rectangular wallpaper-clad pillars; extremely rare independent hole Carvers.
+- Pillar Field: persistent 7.2 m world-space pillar lattice, wallpaper finish, shallow carpet, and strong wall suppression. Benchmark P50 crossing must remain at least 8 minutes and P90 at least 20 minutes.
+- Arch Rooms: stable pale continuous divider walls with lower panels, repeated arch-shaped openings, and headers. Never freestanding arch props.
+- Blackout: ordinary Geometry plus zero local fixture emission and zero local hum; continuous external glimmer/buzz toward a lit boundary.
+- Holes: default non-overlapping lattice/near-lattice square voids with bypass lanes; no raised frame, rail, shallow plate, or visible destination.
+- Manila: one deterministic Structure or one isolated World Lab test, never a Region fill.
+- Exit architecture: Transition/Structure overlay, never Threshold geography.
+- Red Rooms: blocked on an approved deterministic Non-Euclidean loop design.
 
-- Glow sticks crack and drop as actual green omni lights, decaying over ten minutes.
-- Markers draw connected bounded lines on the raycast wall face and persist by surface/shift epoch.
-- Hardcoded notes open a safe text-only reading overlay.
-- Locked exits state their World Day and Exposure requirement.
-- Collision supports stable wall sliding without iteration-order snapping.
+## Required gates
 
-## Remaining
-
-Destination capsules, editable player notes, string geometry, pryable surfaces, renderer batching, topology map and production multiplayer remain deferred.
+- determinism and independent seed domains;
+- stable semantic IDs and generation-version addresses;
+- old-save loading on frozen Gen2;
+- no visible Cell cadence;
+- Region crossing-time P50/P90;
+- ordinary forbidden-motif checks;
+- Pillar wall-density and lattice checks;
+- hole non-overlap/lattice/bypass checks;
+- Blackout local fixture/hum exactly zero;
+- actual fixture positions and light continuity across Cell boundaries;
+- bounded spatial-light work and restrained fluorescent bloom;
+- audible layered fluorescent spectrum/gain checks;
+- benchmark, production build, and representative browser traversal.

@@ -1,12 +1,9 @@
 import { ITEM_DEFINITIONS, type ItemDefinitionId } from '../items/definitions.js';
-import { PROP_KINDS, type PropKind } from '../world/types.js';
+import type { PropKind } from '../world/types.js';
 
 export const OBJECT_CATALOG_CATEGORIES = [
   { id: 'items', label: 'Items' },
-  { id: 'furniture', label: 'Furniture' },
-  { id: 'storage', label: 'Storage' },
-  { id: 'architecture', label: 'Architecture' },
-  { id: 'environment', label: 'Environment' }
+  { id: 'features', label: 'Features' }
 ] as const;
 
 export type ObjectCatalogCategoryId = typeof OBJECT_CATALOG_CATEGORIES[number]['id'];
@@ -22,20 +19,9 @@ export interface ObjectCatalogEntry {
 }
 
 const PROP_CATALOG: ReadonlyArray<Omit<ObjectCatalogEntry, 'id' | 'kind'>> = [
-  { label: 'Table', categoryId: 'furniture', propKind: 'table', searchTerms: ['desk', 'surface'] },
-  { label: 'Chair', categoryId: 'furniture', propKind: 'chair', searchTerms: ['seat'] },
-  { label: 'Bench', categoryId: 'furniture', propKind: 'bench', searchTerms: ['seat'] },
-  { label: 'Cabinet', categoryId: 'storage', propKind: 'cabinet', searchTerms: ['locker', 'cupboard'] },
-  { label: 'Cardboard Box', categoryId: 'storage', propKind: 'box', searchTerms: ['crate', 'container'] },
-  { label: 'Divider', categoryId: 'architecture', propKind: 'divider', searchTerms: ['partition', 'wall'] },
-  { label: 'Pipe', categoryId: 'architecture', propKind: 'pipe', searchTerms: ['utility'] },
-  { label: 'Column', categoryId: 'architecture', propKind: 'column', searchTerms: ['pillar'] },
-  { label: 'Wall Panel', categoryId: 'architecture', propKind: 'wall-panel', searchTerms: ['arch', 'panel'] },
-  { label: 'Ceiling Gap', categoryId: 'architecture', propKind: 'ceiling-gap', searchTerms: ['void', 'tile'] },
-  { label: 'Sign', categoryId: 'architecture', propKind: 'sign', searchTerms: ['placard', 'label'] },
-  { label: 'Book', categoryId: 'environment', propKind: 'book', searchTerms: ['ledger', 'document'] },
-  { label: 'Stain', categoryId: 'environment', propKind: 'stain', searchTerms: ['mark', 'damp'] },
-  { label: 'Carpet Patch', categoryId: 'environment', propKind: 'carpet-patch', searchTerms: ['floor', 'carpet'] }
+  { label: 'Table Feature', categoryId: 'features', propKind: 'table', searchTerms: ['desk', 'surface', 'sparse furniture'] },
+  { label: 'Chair Feature', categoryId: 'features', propKind: 'chair', searchTerms: ['seat', 'sparse furniture'] },
+  { label: 'Cabinet Feature', categoryId: 'features', propKind: 'cabinet', searchTerms: ['locker', 'cupboard', 'sparse furniture'] }
 ];
 
 const itemEntries: ObjectCatalogEntry[] = Object.values(ITEM_DEFINITIONS).map((definition) => ({
@@ -75,9 +61,7 @@ export function validateObjectCatalog(): string[] {
   for (const definition of Object.values(ITEM_DEFINITIONS)) {
     if (!OBJECT_CATALOG.some((entry) => entry.itemDefinitionId === definition.id)) errors.push(`Missing item ${definition.id}`);
   }
-  for (const propKind of PROP_KINDS) {
-    if (!OBJECT_CATALOG.some((entry) => entry.propKind === propKind)) errors.push(`Missing prop ${propKind}`);
-  }
+  for (const propKind of ['table', 'chair', 'cabinet'] as const) if (!OBJECT_CATALOG.some((entry) => entry.propKind === propKind)) errors.push(`Missing implemented Feature ${propKind}`);
   return errors;
 }
 

@@ -24,8 +24,8 @@ Do not reread unrelated historical snapshots, all docs, or unrelated shared gove
 - Current product: Level 0 exploration vertical slice
 - Canonical world simulation and persistence logic should remain renderer-independent where practical.
 - The environment, not routine combat, is the primary antagonist.
-- Preserve deterministic district planning, stable IDs, persistence compatibility, timeline gates, ordinary player isolation, and the Manila Room rendezvous direction.
-- Generation 3 target direction is field-driven continuous world generation: world geography/spatial laws first, ordinary content second. Treat GitHub Issue #31 and `WORLD.md` as the current architecture/vocabulary references when relevant.
+- Preserve deterministic Region/Condition Fields, stable IDs, generation-version save compatibility, timeline gates, ordinary player isolation, and the Manila Room rendezvous direction.
+- Generation 3 is the new-journey architecture: world geography/spatial laws first, ordinary content second. Treat GitHub Issue #31 and `WORLD.md` as the current architecture/vocabulary references when relevant; do not use legacy prompts/specs to steer new generation.
 - A `Cell` is a streaming/computation unit, never a synonym for a room.
 
 ## Vocabulary discipline
@@ -40,7 +40,7 @@ Prefer the simple design vocabulary in `WORLD.md`:
 - `Rare` is a Structure property, not a separate Structure category.
 - Pure spatial impossibility belongs under Non-Euclidean Geometry, not a duplicate Anomaly classification.
 
-Treat `Field`, `Cell`, `District`, seed domains, room archetypes, spatial profiles, components and props as engine/legacy vocabulary unless implementation detail is specifically needed.
+Treat `Field`, `Cell`, seed domains, cache radius, and generation version as engine vocabulary. Treat `District`, `ZoneId`, room archetypes, spatial profiles, components, and generic props as Gen2 compatibility vocabulary unless old-save implementation detail is specifically needed.
 
 ## Explicit non-goals for the current phase
 
@@ -85,6 +85,8 @@ When accepted work adds, removes, renames, reclassifies, or materially changes a
 - preserve explicit status (`Implemented`, `Registered`, `Legacy`, `Planned`, or `None implemented`);
 - never claim a registered exit destination is a playable Level;
 - never silently relabel legacy `ZoneId`/archetype/component implementation as completed Gen-3 Regions/Variants/Fields;
+- never route a new journey through Gen2 districts, Zones, archetypes, or component composition;
+- preserve `generationVersion`; pre-versioned saves resolve to frozen `gen2`, while new journeys use `gen3-v1`;
 - keep useful empty categories visible when their absence matters;
 - mirror material catalog changes to the mapped Project Noclip Notion page during the normal final Notion sync.
 

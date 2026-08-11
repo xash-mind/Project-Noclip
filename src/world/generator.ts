@@ -4,12 +4,18 @@ import { exitsForCell } from './exits.js';
 import { intInRange, stableId, unitFloat, weightedChoice } from './hash.js';
 import { boundaryWallParts, chooseArchetype, layoutFor } from './layouts.js';
 import { generateLightGroups, validateLightClearance } from './lighting.js';
+import { generateGen3Layout, sampleGen3Environment } from './gen3.js';
 import { makeNote } from './notes.js';
+import { generateManilaRoom, isManilaRoomAvailable, manilaRoomCell } from './structures.js';
 import { chooseZone, districtId, isManilaRoomCell, ZONE_PROFILES } from './zones.js';
 import {
+  CELL_SIZE,
   cellId,
   type CellDescriptor,
   type Direction,
+  type ExitDescriptor,
+  type FloorPatchSpec,
+  type GenerationVersion,
   type LootNode,
   type NoteSpec,
   type Openings,
@@ -85,6 +91,31 @@ function propBounds(prop: PropSpec): PlacementBounds {
 function boundsOverlap(left: PlacementBounds, right: PlacementBounds, clearance = 0): boolean {
   return left.minX < right.maxX + clearance && left.maxX > right.minX - clearance && left.minZ < right.maxZ + clearance && left.maxZ > right.minZ - clearance;
 }
+function filterGen3Props(walls: readonly WallSpec[], patches: readonly FloorPatchSpec[], props: readonly PropSpec[]): PropSpec[] {
+  const occupied = walls.map(wallBounds);
+  const holes: PlacementBounds[] = patches
+    .filter((patch) => patch.kind === 'hole')
+    .map((patch) => ({
+      id: patch.id,
+      minX: patch.position.x - patch.scale.x / 2,
+      maxX: patch.position.x + patch.scale.x / 2,
+      minZ: patch.position.z - patch.scale.z / 2,
+      maxZ: patch.position.z + patch.scale.z / 2
+    }));
+  const retained: PropSpec[] = [];
+  for (const prop of props) {
+    if (!prop.solid) {
+      retained.push(prop);
+      continue;
+    }
+    const candidate = propBounds(prop);
+    if (occupied.some((bounds) => boundsOverlap(candidate, bounds, 0.08))) continue;
+    if (holes.some((bounds) => boundsOverlap(candidate, bounds, 0.16))) continue;
+    retained.push(prop);
+    occupied.push(candidate);
+  }
+  return retained;
+}
 function circleOverlapsBounds(x: number, z: number, radius: number, bounds: PlacementBounds): boolean {
   return x + radius > bounds.minX && x - radius < bounds.maxX && z + radius > bounds.minZ && z - radius < bounds.maxZ;
 }
@@ -122,6 +153,18 @@ function reserveOriginArrival(x: number, z: number, walls: readonly WallSpec[], 
     props: props.filter((prop) => !prop.solid || !circleOverlapsBounds(0, 0, PLAYER_ARRIVAL_CLEARANCE, propBounds(prop)))
   };
 }
+
+function reserveTransitions(exits: readonly ExitDescriptor[], walls: readonly WallSpec[], props: readonly PropSpec[]): { walls: WallSpec[]; props: PropSpec[] } {
+  if (exits.length === 0) return { walls: [...walls], props: [...props] };
+  const overlapsTransition = (bounds: PlacementBounds): boolean => exits.some((exit) => {
+    const radius = exit.trigger === 'floor-breach' ? 1.9 : exit.trigger === 'wall-breach' ? 1.55 : 1.7;
+    return circleOverlapsBounds(exit.localPosition.x, exit.localPosition.z, radius, bounds);
+  });
+  return {
+    walls: walls.filter((candidate) => !overlapsTransition(wallBounds(candidate))),
+    props: props.filter((candidate) => !candidate.solid || !overlapsTransition(propBounds(candidate)))
+  };
+}
 function solidBounds(walls: readonly WallSpec[], props: readonly PropSpec[]): PlacementBounds[] { return [...walls.map(wallBounds), ...props.filter((prop) => prop.solid).map(propBounds)]; }
 function lootCandidate(id: string, attempt: number): { x: number; y: number; z: number } {
   const xKey = attempt === 0 ? `${id}:x` : `${id}:placement:${attempt}:x`;
@@ -146,9 +189,43 @@ function lootForCell(seed: string, x: number, z: number, lootChance: number, arc
   return nodes;
 }
 
-export interface GenerateCellOptions { seed: string; x: number; z: number; worldDay: number; exposure: number; shiftEpoch: number; tuning: WorldTuning; }
+function lootForGen3Cell(seed: string, x: number, z: number, lootChance: number, walls: readonly WallSpec[], props: readonly PropSpec[]): LootNode[] {
+  const nodes: LootNode[] = [];
+  const occupied = solidBounds(walls, props);
+  const weights = Object.values(ITEM_DEFINITIONS).map((definition) => ({ value: definition.id, weight: definition.worldWeight }));
+  for (let index = 0; index < 2; index += 1) {
+    const id = stableId('loot', seed, x, z, index);
+    const spawn = unitFloat(`${id}:spawn`) < lootChance * (index === 0 ? 1 : 0.42);
+    const originalPosition = lootCandidate(id, 0);
+    const safePosition = spawn ? findSafeLootPosition(id, occupied) : originalPosition;
+    const node: LootNode = { id, localPosition: safePosition ?? originalPosition };
+    if (spawn && safePosition) {
+      node.spawnedDefinitionId = weightedChoice(`${id}:item`, weights).value as ItemDefinitionId;
+      occupied.push({
+        id,
+        minX: safePosition.x - LOOT_CLEARANCE,
+        maxX: safePosition.x + LOOT_CLEARANCE,
+        minZ: safePosition.z - LOOT_CLEARANCE,
+        maxZ: safePosition.z + LOOT_CLEARANCE
+      });
+    }
+    nodes.push(node);
+  }
+  return nodes;
+}
 
-export function generateCell(options: GenerateCellOptions): CellDescriptor {
+export interface GenerateCellOptions {
+  seed: string;
+  x: number;
+  z: number;
+  worldDay: number;
+  exposure: number;
+  shiftEpoch: number;
+  tuning: WorldTuning;
+  generationVersion?: GenerationVersion;
+}
+
+export function generateLegacyCell(options: GenerateCellOptions): CellDescriptor {
   const { seed, x, z, worldDay, exposure, shiftEpoch, tuning } = options;
   const manilaRoom = isManilaRoomCell(seed, x, z, worldDay, exposure, tuning);
   let exits = manilaRoom ? [] : exitsForCell(seed, x, z, worldDay, exposure, tuning.gateBypass);
@@ -156,7 +233,7 @@ export function generateCell(options: GenerateCellOptions): CellDescriptor {
   if (!manilaRoom && exits.length > 0) zoneId = 'exit-threshold';
   if (manilaRoom) exits = [];
   const profile = ZONE_PROFILES[zoneId]; const dId = districtId(x, z);
-  const address: WorldAddress = { worldSeed: seed, levelId: 'level-0', cellX: x, cellZ: z, zoneId, districtId: dId, shiftEpoch };
+  const address: WorldAddress = { worldSeed: seed, levelId: 'level-0', generationVersion: 'gen2', cellX: x, cellZ: z, zoneId, districtId: dId, shiftEpoch };
   const openings = generateOpenings(seed, x, z, tuning.extraOpeningChance);
   const variant = intInRange(`${seed}:variant:${x}:${z}:${shiftEpoch}`, 0, Math.max(10, Math.round(18 * tuning.roomVariation)));
   const archetype: RoomArchetype = manilaRoom ? 'manila-room' : chooseArchetype(seed, x, z, zoneId, shiftEpoch);
@@ -197,14 +274,155 @@ export function generateCell(options: GenerateCellOptions): CellDescriptor {
   const lightGroups = generateLightGroups({ seed, x, z, shiftEpoch, zoneId: lightingZone, roomArchetype: archetype, ceilingPattern, walls: arrivalSafe.walls, props: arrivalSafe.props });
   const lightTemperature = lightGroups.length > 0 ? lightGroups.reduce((sum, group) => sum + group.temperature, 0) / lightGroups.length : 0.94;
   const effectiveStability = archetype === 'manila-room' ? ZONE_PROFILES.manila.stability : profile.stability;
+  const regionId = zoneId === 'arch' ? 'arch-rooms' : zoneId === 'pillar' ? 'pillar-field' : 'ordinary-level-0';
+  const conditionIds = zoneId === 'arch'
+    ? ['deep-wet-carpet'] as const
+    : zoneId === 'pillar'
+      ? ['shallow-dry-carpet'] as const
+      : zoneId === 'blackout'
+        ? ['damp-carpet', 'blackout'] as const
+        : ['damp-carpet'] as const;
   return {
-    id: cellId(x, z), address, stability: effectiveStability, openings, variant, roomArchetype: archetype, roomLabel,
+    id: cellId(x, z), address,
+    world: {
+      generationVersion: 'gen2', levelId: 'level-0', regionId, geometry: 'euclidean',
+      materialIds: ['level-0-wallpaper', 'level-0-carpet', 'level-0-ceiling', 'fluorescent-panel'],
+      conditionIds: [...conditionIds], carverIds: zoneId === 'holes' ? ['floor-hole-cluster'] : [],
+      structureIds: archetype === 'manila-room' ? ['manila-room'] : exits.length > 0 ? ['exit-structure'] : [],
+      featureIds: [], transitionIds: exits.map((exit) => exit.id), regionStrength: 1,
+      blackoutStrength: zoneId === 'blackout' ? 1 : 0, blackoutEscapeCue: 0
+    },
+    stability: effectiveStability, openings, variant, roomArchetype: archetype, roomLabel,
     spatialProfile, componentIds, compositionSignature,
     walls: arrivalSafe.walls, props: arrivalSafe.props, floorPatches: legacyLayout.patches.filter((patch) => patch.kind === 'hole'), notes: noteSpecs,
     lootNodes: archetype === 'manila-room' ? [] : lootForCell(seed, x, z, tuning.lootChance, archetype, arrivalSafe.walls, arrivalSafe.props), exits, lightGroups,
     lightFailure: lightGroups.length === 0 || lightGroups.every((group) => group.state === 'off'), lightTemperature, ceilingPattern,
     hallucinationAnchor: archetype !== 'manila-room' && profile.stability === 'disorienting' && unitFloat(`${seed}:hallucination:${x}:${z}`) < 0.032
   };
+}
+
+function gen3CompatibilityZone(regionId: CellDescriptor['world']['regionId']): CellDescriptor['address']['zoneId'] {
+  if (regionId === 'arch-rooms') return 'arch';
+  if (regionId === 'pillar-field') return 'pillar';
+  return 'baseline';
+}
+
+function isGen3ManilaCell(options: GenerateCellOptions): boolean {
+  const { seed, x, z, worldDay, exposure, tuning } = options;
+  if (tuning.structureOverride === 'none') return false;
+  if (tuning.structureOverride === 'manila-room') return x === 0 && z === 0;
+  if (!isManilaRoomAvailable(worldDay, exposure, tuning.gateBypass)) return false;
+  const target = manilaRoomCell(seed);
+  return x === target.cellX && z === target.cellZ;
+}
+
+export function generateGen3Cell(options: GenerateCellOptions): CellDescriptor {
+  const { seed, x, z, worldDay, exposure, shiftEpoch, tuning } = options;
+  const worldX = x * CELL_SIZE;
+  const worldZ = z * CELL_SIZE;
+  const environment = sampleGen3Environment(seed, worldX, worldZ, worldDay, exposure, tuning);
+  const manilaRoom = isGen3ManilaCell(options);
+  const exits = manilaRoom ? [] : exitsForCell(seed, x, z, worldDay, exposure, tuning.gateBypass);
+  const zoneId = gen3CompatibilityZone(environment.regionId);
+  const address: WorldAddress = {
+    worldSeed: seed,
+    levelId: 'level-0',
+    generationVersion: 'gen3-v1',
+    cellX: x,
+    cellZ: z,
+    zoneId,
+    districtId: `gen3:${Math.floor(x / 64)}:${Math.floor(z / 64)}`,
+    shiftEpoch
+  };
+  const openings: Openings = { north: true, east: true, south: true, west: true };
+  const variant = intInRange(`${seed}:gen3-variant:${x}:${z}`, 0, 32);
+  const generated = generateGen3Layout({ seed, cellX: x, cellZ: z, worldDay, exposure, tuning, environment });
+
+  let archetype: RoomArchetype = environment.regionId === 'arch-rooms'
+    ? 'arch-gallery'
+    : environment.regionId === 'pillar-field'
+      ? 'pillar-grid'
+      : 'open-office';
+  let roomLabel = generated.label;
+  let walls = generated.walls;
+  let props = filterGen3Props(generated.walls, generated.patches, generated.props);
+  let featureIds = generated.featureIds.filter((id) => props.some((prop) => prop.id === id));
+  let carverIds = generated.carverIds;
+  let patches = generated.patches;
+  let notes = maybeNotes(seed, x, z, archetype);
+  let componentIds: CellDescriptor['componentIds'] = [];
+  let compositionSignature = generated.compositionSignature;
+  let spatialProfile: CellDescriptor['spatialProfile'] = environment.regionId === 'pillar-field' ? 'pillar-expanse' : 'standard';
+  const structureIds: CellDescriptor['world']['structureIds'] = [];
+
+  if (manilaRoom) {
+    archetype = 'manila-room';
+    const structure = generateManilaRoom(seed, x, z, shiftEpoch);
+    walls = structure.walls;
+    props = structure.props;
+    patches = structure.patches;
+    notes = structure.notes;
+    featureIds = [];
+    carverIds = [];
+    componentIds = [];
+    compositionSignature = structure.compositionSignature;
+    spatialProfile = 'standard';
+    roomLabel = structure.label;
+    structureIds.push('manila-room');
+  } else if (exits.length > 0) {
+    // Transitions remain overlays on the surrounding Region geometry. The
+    // renderer owns their local door/breach visual; no "Threshold" geography
+    // or legacy transition-foyer room replaces the generated world.
+    archetype = 'open-office';
+    componentIds = [];
+    roomLabel = 'Transition structure';
+    compositionSignature = `${generated.compositionSignature}:transition:${exits.map((exit) => exit.trigger).sort().join('+')}`;
+    structureIds.push('exit-structure');
+    const transitionSafe = reserveTransitions(exits, walls, props);
+    walls = transitionSafe.walls;
+    props = transitionSafe.props;
+  }
+
+  // Generation 3 Features already own their rarity and independent seed domain.
+  // Do not pass them through Generation 2's room-scenery lottery a second time.
+  const arrivalSafe = reserveOriginArrival(x, z, walls, props);
+  featureIds = featureIds.filter((id) => arrivalSafe.props.some((prop) => prop.id === id));
+  const ceilingPattern = intInRange(`${seed}:gen3-ceiling:${x}:${z}`, 0, 4);
+  const lightingZone = manilaRoom ? 'manila' : zoneId;
+  const lightGroups = generateLightGroups({
+    seed, x, z, shiftEpoch, zoneId: lightingZone, roomArchetype: archetype, ceilingPattern,
+    walls: arrivalSafe.walls, props: arrivalSafe.props, blackoutStrength: environment.blackoutStrength
+  });
+  const lightTemperature = lightGroups.length > 0
+    ? lightGroups.reduce((sum, group) => sum + group.temperature, 0) / lightGroups.length
+    : 0.94;
+  const stability = manilaRoom
+    ? ZONE_PROFILES.manila.stability
+    : environment.regionId === 'arch-rooms'
+      ? 'stable'
+      : 'disorienting';
+  return {
+    id: cellId(x, z), address,
+    world: {
+      generationVersion: 'gen3-v1', levelId: 'level-0', regionId: environment.regionId, geometry: 'euclidean',
+      materialIds: generated.materialIds, conditionIds: generated.conditionIds, carverIds,
+      structureIds, featureIds, transitionIds: exits.map((exit) => exit.id),
+      regionStrength: environment.regionStrength, blackoutStrength: environment.blackoutStrength,
+      blackoutEscapeCue: environment.blackoutEscapeCue
+    },
+    stability, openings, variant, roomArchetype: archetype, roomLabel, spatialProfile, componentIds, compositionSignature,
+    walls: arrivalSafe.walls, props: arrivalSafe.props, floorPatches: patches.filter((patch) => patch.kind === 'hole'), notes,
+    lootNodes: manilaRoom ? [] : lootForGen3Cell(seed, x, z, tuning.lootChance, arrivalSafe.walls, arrivalSafe.props),
+    exits, lightGroups, lightFailure: lightGroups.length === 0 || lightGroups.every((group) => group.state === 'off'),
+    lightTemperature, ceilingPattern,
+    hallucinationAnchor: !manilaRoom && stability === 'disorienting' && unitFloat(`${seed}:gen3-hallucination:${x}:${z}`) < 0.024
+  };
+}
+
+export function generateCell(options: GenerateCellOptions): CellDescriptor {
+  return (options.generationVersion ?? 'gen3-v1') === 'gen2'
+    ? generateLegacyCell(options)
+    : generateGen3Cell(options);
 }
 
 export function validateSceneryPlacement(cell: CellDescriptor): string[] {

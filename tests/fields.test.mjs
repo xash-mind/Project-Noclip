@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { WORLD_FIELD_NAMES, formatFieldDiagnostics, sampleWorldFieldChannels, sampleWorldFields } from '../.test-dist/src/world/fields.js';
+import { GEOGRAPHY_FIELD_NAMES, WORLD_FIELD_NAMES, formatFieldDiagnostics, formatGeographyDiagnostics, sampleWorldFieldChannels, sampleWorldFields, sampleWorldGeography } from '../.test-dist/src/world/fields.js';
 
 const valuesOnly = (sample) => WORLD_FIELD_NAMES.map((name) => sample[name]);
 
@@ -56,4 +56,18 @@ test('field diagnostics expose current Euclidean Geometry and every canonical fi
   for (const marker of ['open', 'partition', 'flow', 'scale', 'columns', 'ceiling', 'regularity', 'connect', 'damp', 'decay', 'stability', 'abnormal', 'void', 'clutter', 'electric']) {
     assert.ok(lines.some((line) => line.includes(marker)), `missing ${marker}`);
   }
+});
+
+test('kilometre-scale Region affinity Fields are deterministic, continuous, and separately seeded', () => {
+  const first = sampleWorldGeography('geography-a', 4321.5, -876.25);
+  assert.deepEqual(first, sampleWorldGeography('geography-a', 4321.5, -876.25));
+  assert.notDeepEqual(first, sampleWorldGeography('geography-b', 4321.5, -876.25));
+  const west = sampleWorldGeography('geography-a', 6.999, 42);
+  const east = sampleWorldGeography('geography-a', 7.001, 42);
+  for (const name of GEOGRAPHY_FIELD_NAMES) {
+    assert.ok(first[name] >= 0 && first[name] <= 1);
+    assert.ok(Math.abs(west[name] - east[name]) < 0.0001, `${name} snapped at a Cell boundary`);
+  }
+  const diagnostics = formatGeographyDiagnostics(first).join('\n');
+  for (const marker of ['pillar', 'arch', 'blackout', 'holes']) assert.ok(diagnostics.includes(marker));
 });

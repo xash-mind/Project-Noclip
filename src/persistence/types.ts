@@ -1,5 +1,6 @@
 import type { ItemInstance } from '../items/types.js';
 import type { ExposureState } from '../simulation/timeline.js';
+import type { GenerationVersion } from '../world/types.js';
 
 export interface SurfaceMark {
   id: string;
@@ -35,6 +36,7 @@ export interface CharacterSettings {
 interface SaveCommon {
   characterId: string;
   seed: string;
+  generationVersion: GenerationVersion;
   createdAt: number;
   starterRolled: true;
   position: { x: number; y: number; z: number; yaw: number; pitch: number };
@@ -58,6 +60,7 @@ export interface SaveDataV2 extends SaveCommon {
   version: 2;
   readNoteIds: string[];
   enteredZoneIds: string[];
+  enteredRegionIds: string[];
 }
 export type SaveData = SaveDataV2;
 
@@ -81,6 +84,7 @@ export function migrateSave(input: unknown): SaveData | undefined {
   return {
     ...(candidate as SaveDataV1),
     version: 2,
+    generationVersion: candidate.generationVersion === 'gen3-v1' ? 'gen3-v1' : 'gen2',
     inventory: candidate.inventory.filter((item): item is ItemInstance => Boolean(item && typeof item === 'object' && typeof (item as ItemInstance).instanceId === 'string')),
     droppedItems: candidate.droppedItems.filter((drop): drop is DroppedItemState => Boolean(drop && typeof drop === 'object' && (drop as DroppedItemState).item)),
     pickedLootNodeIds: Array.isArray(candidate.pickedLootNodeIds) ? candidate.pickedLootNodeIds.filter((id): id is string => typeof id === 'string') : [],
@@ -90,6 +94,7 @@ export function migrateSave(input: unknown): SaveData | undefined {
     discoveredExits: Array.isArray(candidate.discoveredExits) ? candidate.discoveredExits : [],
     readNoteIds: Array.isArray(candidate.readNoteIds) ? candidate.readNoteIds.filter((id): id is string => typeof id === 'string') : [],
     enteredZoneIds: Array.isArray(candidate.enteredZoneIds) ? candidate.enteredZoneIds.filter((id): id is string => typeof id === 'string') : [],
+    enteredRegionIds: Array.isArray(candidate.enteredRegionIds) ? candidate.enteredRegionIds.filter((id): id is string => typeof id === 'string') : [],
     hydration: typeof candidate.hydration === 'number' ? Math.max(0, Math.min(1, candidate.hydration)) : 0.76,
     settings,
     savedAt: typeof candidate.savedAt === 'number' ? candidate.savedAt : Date.now()

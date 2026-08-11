@@ -37,6 +37,16 @@ export interface LightFieldSample {
   temperature: number;
 }
 
+export interface SpatialFixtureLight {
+  id: string;
+  worldX: number;
+  worldY: number;
+  worldZ: number;
+  intensity: number;
+  temperature: number;
+  distance: number;
+}
+
 function wallBounds(wall: WallSpec): Bounds {
   return {
     minX: wall.cx - wall.sx / 2 - FIXTURE_CLEARANCE,
@@ -146,8 +156,11 @@ export function generateLightGroups(options: {
   ceilingPattern: number;
   walls: readonly WallSpec[];
   props: readonly PropSpec[];
+  blackoutStrength?: number;
 }): LightGroupSpec[] {
-  const { seed, x, z, shiftEpoch, zoneId, roomArchetype, ceilingPattern, walls, props } = options;
+  const { seed, x, z, shiftEpoch, zoneId, roomArchetype, ceilingPattern, walls, props, blackoutStrength = 0 } = options;
+  // A blackout is the absence of local fluorescent emission, not merely a high failure chance.
+  if (blackoutStrength > 0.52 || zoneId === 'blackout') return [];
   const rotationY: 0 | 90 = ceilingPattern % 2 === 0 ? 0 : 90;
   const groups: LightGroupSpec[] = [];
   const instability = lightInstability(zoneId, shiftEpoch);
@@ -235,6 +248,41 @@ export function sampleLightField(
     flickerPulse: Math.max(0, Math.min(1, flickerPulse)),
     temperature: rawEnergy > 0.0001 ? weightedTemperature / rawEnergy : 0.94
   };
+}
+
+/**
+ * Select a bounded set of real fixture positions for renderer lights. Unlike the
+ * retired player-following omni, these sources illuminate continuously across
+ * streaming Cell boundaries from their actual ceiling locations.
+ */
+export function selectSpatialFixtureLights(
+  sources: readonly LightFieldSource[],
+  playerX: number,
+  playerZ: number,
+  elapsedSeconds: number,
+  reducedFlicker: boolean,
+  limit = 4
+): SpatialFixtureLight[] {
+  const candidates: SpatialFixtureLight[] = [];
+  for (const source of sources) {
+    const pulse = lightFlickerValue(source.group, elapsedSeconds, reducedFlicker);
+    if (pulse <= 0.05) continue;
+    for (let index = 0; index < source.group.fixtures.length; index += 1) {
+      const fixture = source.group.fixtures[index]!;
+      const worldX = source.cellX * CELL_SIZE + fixture.x;
+      const worldZ = source.cellZ * CELL_SIZE + fixture.z;
+      const distance = Math.hypot(worldX - playerX, worldZ - playerZ);
+      if (distance > 30) continue;
+      const attenuation = Math.max(0, 1 - distance / 30);
+      candidates.push({
+        id: `${source.group.id}:${index}`,
+        worldX, worldY: fixture.y - 0.18, worldZ, distance,
+        intensity: source.group.intensity * pulse * (0.42 + attenuation * 0.78),
+        temperature: source.group.temperature
+      });
+    }
+  }
+  return candidates.sort((left, right) => left.distance - right.distance || left.id.localeCompare(right.id)).slice(0, Math.max(0, limit));
 }
 
 export function validateLightClearance(groups: readonly LightGroupSpec[], walls: readonly WallSpec[], props: readonly PropSpec[]): string[] {

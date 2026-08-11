@@ -1,3 +1,10 @@
+/**
+ * FROZEN GENERATION 2 COMPATIBILITY ONLY.
+ *
+ * New journeys use the world-space Generation 3 solver in gen3.ts. Do not add
+ * new world vocabulary or content here; this module exists solely so recorded
+ * gen2 saves keep their accepted deterministic geometry.
+ */
 import { sampleWorldFieldChannels, sampleWorldFields, type WorldFieldSample } from './fields.js';
 import { unitFloat } from './hash.js';
 import {
