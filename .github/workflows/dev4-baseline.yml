@@ -1,0 +1,22 @@
+name: Dev4 baseline metrics
+on:
+  workflow_dispatch:
+  push:
+    branches: [agent/dev4-world-coherence]
+    paths:
+      - 'scripts/coherence-metrics*.mjs'
+      - '.github/workflows/dev4-baseline.yml'
+permissions:
+  contents: read
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm test
+      - name: Measure unchanged dev3 topology
+        run: node scripts/coherence-metrics.mjs
