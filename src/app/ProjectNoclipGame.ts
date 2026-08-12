@@ -54,6 +54,7 @@ export class ProjectNoclipGame {
   private camera?: pc.Entity;
   private cameraFrame?: CameraFrame;
   private fixtureLights: pc.Entity[] = [];
+  private fixtureLightSourceIds: string[] = [];
   private blackoutGuideLight?: pc.Entity;
   private flashlight?: pc.Entity;
   private renderer?: WorldRenderer;
@@ -128,7 +129,7 @@ export class ProjectNoclipGame {
 
   private async launch(save: SaveData): Promise<void> {
     this.save = save; this.yaw = save.position.yaw; this.pitch = save.position.pitch; this.tuning = { ...DEFAULT_TUNING };
-    this.lightField = { ...EMPTY_LIGHT_FIELD }; this.journeyElapsed = 0; this.lightFieldAccumulator = 0; this.regionExtent = undefined; this.regionExtentKey = '';
+    this.lightField = { ...EMPTY_LIGHT_FIELD }; this.journeyElapsed = 0; this.lightFieldAccumulator = 0; this.regionExtent = undefined; this.regionExtentKey = ''; this.fixtureLightSourceIds = [];
     this.markerMode = false; this.ui.setMarkerMode(false); this.setupEngine();
     if (!this.app || !this.camera) throw new Error('Engine did not initialize');
     this.renderer = new WorldRenderer(this.app, save);
@@ -488,7 +489,8 @@ export class ProjectNoclipGame {
     const blackoutEscapeCue = sampled?.blackoutEscapeCue ?? this.currentCell.world.blackoutEscapeCue;
     this.ambience.setEnvironment(blackoutStrength, blackoutEscapeCue);
 
-    const spatial = this.renderer.spatialFixtureLights(position.x, position.z, this.journeyElapsed, this.save.settings.reducedFlicker, this.fixtureLights.length);
+    const spatial = this.renderer.spatialFixtureLights(position.x, position.z, this.journeyElapsed, this.save.settings.reducedFlicker, this.fixtureLights.length, this.fixtureLightSourceIds);
+    this.fixtureLightSourceIds = spatial.map((source) => source.id);
     this.fixtureLights.forEach((entity, index) => {
       const source = spatial[index];
       if (!source || !entity.light) { entity.enabled = false; return; }

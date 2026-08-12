@@ -1,5 +1,6 @@
 import { sampleWorldFieldChannels, sampleWorldFields, sampleWorldGeography, type WorldFieldSample, type WorldGeographySample } from './fields.js';
 import { stableId, unitFloat } from './hash.js';
+import { generateCoherentGen3Architecture, sampleGen3RegionInfluence } from './gen3Architecture.js';
 import {
   CELL_SIZE,
   DOOR_WIDTH,
@@ -637,28 +638,16 @@ export function generateGen3Layout(options: {
   const conditionIds: ConditionId[] = [];
   const materialIds: MaterialId[] = ['level-0-wallpaper', 'level-0-carpet', 'level-0-ceiling', 'fluorescent-panel'];
 
-  if (environment.regionId === 'arch-rooms') {
-    addArchArchitecture(seed, cellX, cellZ, environment, walls);
-    materialIds.push('arch-pale-wallpaper');
-    conditionIds.push('deep-wet-carpet');
-  } else {
-    addOrdinaryArchitecture(seed, cellX, cellZ, environment, walls);
-    if (environment.regionId === 'pillar-field') {
-      addPillars(seed, cellX, cellZ, environment, props);
-      conditionIds.push('shallow-dry-carpet');
-    } else {
-      addOccasionalOrdinaryPillar(seed, cellX, cellZ, environment, props);
-      conditionIds.push('damp-carpet');
-    }
-  }
+  const architecture = generateCoherentGen3Architecture({ seed, cellX, cellZ, worldDay, exposure, tuning });
+walls.push(...architecture.walls);
+props.push(...architecture.props);
+const centerInfluence = sampleGen3RegionInfluence(seed, cellX * CELL_SIZE, cellZ * CELL_SIZE, worldDay, exposure, tuning);
+if (walls.some((candidate) => candidate.materialId === 'arch-pale-wallpaper')) materialIds.push('arch-pale-wallpaper');
+if (centerInfluence.arch > 0.46 && centerInfluence.arch >= centerInfluence.pillar) conditionIds.push('deep-wet-carpet');
+else if (centerInfluence.pillar > 0.38) conditionIds.push('shallow-dry-carpet');
+else conditionIds.push('damp-carpet');
 
-  if (environment.blackoutStrength > 0.52) conditionIds.push('blackout');
-  // Natural pits are Carvers over ordinary Level 0, not a Region or an
-  // architectural vocabulary shared by Pillar Fields and Arch Rooms. The
-  // explicit Lab override may still isolate the Carver for inspection.
-  const cluster = environment.regionId === 'ordinary-level-0' || tuning.carverOverride === 'floor-hole-cluster'
-    ? holeClusterForCell(seed, cellX, cellZ, worldDay, exposure, tuning)
-    : undefined;
+  const cluster = holeClusterForCell(seed, cellX, cellZ, worldDay, exposure, tuning);
   if (cluster) {
     addHoleCluster(seed, cellX, cellZ, cluster, patches);
     if (patches.length > 0) carverIds.push('floor-hole-cluster');
@@ -676,7 +665,9 @@ export function generateGen3Layout(options: {
     `w${walls.length}`,
     `p${props.length}`,
     `c${carverIds.length}`,
-    `b${Math.round(environment.blackoutStrength * 4)}`
+    `b${Math.round(environment.blackoutStrength * 4)}`,
+    `a${architecture.archDividerIds.length}`,
+    `pi${architecture.pillarCount}`
   ].join(':');
   return { walls, props, patches, featureIds, carverIds, conditionIds, materialIds: [...new Set(materialIds)], label, compositionSignature };
 }

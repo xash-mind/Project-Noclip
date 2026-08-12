@@ -8,7 +8,7 @@ import { ZONE_PROFILES, type ZoneProfile } from '../world/zones.js';
 import type { ObjectCatalogEntry } from './objectCatalog.js';
 import { color, type CellVisual, type ExitVisual, type InteractionVisual, type NoteVisual, type SeatVisual, type TextureKind, type WorldCollider, type WorldItemVisual } from './support.js';
 
-export type MaterialFactory = (key: string, diffuse: [number, number, number], textureKind?: TextureKind, variant?: number, tiling?: [number, number], emissive?: [number, number, number], emissiveIntensity?: number) => pc.StandardMaterial;
+export type MaterialFactory = (key: string, diffuse: [number, number, number], textureKind?: TextureKind, variant?: number, tiling?: [number, number], emissive?: [number, number, number], emissiveIntensity?: number, uvOffset?: [number, number]) => pc.StandardMaterial;
 export type BoxFactory = (name: string, parent: pc.Entity, position: [number, number, number], scale: [number, number, number], material: pc.StandardMaterial, rotationY?: number) => pc.Entity;
 
 const CATALOG_PROP_SCALE: Record<PropSpec['kind'], [number, number, number]> = {
@@ -43,12 +43,14 @@ export class RendererCellBuilder {
     root.setPosition(descriptor.address.cellX * CELL_SIZE, 0, descriptor.address.cellZ * CELL_SIZE);
     this.app.root.addChild(root);
     const legacyExitFoyer = descriptor.world.generationVersion === 'gen2' && descriptor.world.structureIds.includes('exit-structure');
-    const profile = descriptor.world.structureIds.includes('manila-room')
-      ? ZONE_PROFILES.manila
-      : legacyExitFoyer
-        ? ZONE_PROFILES['exit-threshold']
-        : ZONE_PROFILES[descriptor.address.zoneId];
     const gen3 = descriptor.world.generationVersion === 'gen3-v1';
+const profile = descriptor.world.structureIds.includes('manila-room')
+  ? ZONE_PROFILES.manila
+  : legacyExitFoyer
+    ? ZONE_PROFILES['exit-threshold']
+    : gen3
+      ? ZONE_PROFILES.baseline
+      : ZONE_PROFILES[descriptor.address.zoneId];
     const floorMat = this.getMaterial(`floor:${profile.id}`, profile.floorTint, 'carpet', gen3 ? 0 : descriptor.variant % 3, [5, 5]);
     const ceilingMat = this.getMaterial(`ceiling:${profile.id}`, profile.ceilingTint, 'ceiling', gen3 ? 0 : descriptor.ceilingPattern, [4, 4]);
     const trimMat = this.getMaterial(`trim:${profile.id}`, profile.trimTint, 'wood', gen3 ? 0 : descriptor.variant % 2, [2, 2]);
@@ -61,20 +63,25 @@ export class RendererCellBuilder {
     const colliders: WorldCollider[] = [];
     for (const wallSpec of descriptor.walls) {
       const wallLength = Math.max(wallSpec.sx, wallSpec.sz);
-      const wallRepeats = gen3 ? Math.max(1, Math.round(wallLength / 2.6)) : Math.max(1, wallLength / 2.6);
+const wallRepeats = Math.max(1, wallLength / 2.6);
+const longAxisIsX = wallSpec.orientation === 'z';
+const worldStart = longAxisIsX
+  ? descriptor.address.cellX * CELL_SIZE + wallSpec.cx - wallSpec.sx / 2
+  : descriptor.address.cellZ * CELL_SIZE + wallSpec.cz - wallSpec.sz / 2;
+const phase = ((worldStart / 2.6) % 1 + 1) % 1;
       const wallMat = legacyExitFoyer
         ? concrete
         : this.getMaterial(
           `wall:${wallSpec.materialId ?? profile.id}`,
           wallSpec.materialId === 'arch-pale-wallpaper' ? ZONE_PROFILES.arch.wallTint : profile.wallTint,
-          'wall', wallSpec.materialVariant ?? descriptor.variant % 4, [wallRepeats, 1]
+          'wall', wallSpec.materialVariant ?? descriptor.variant % 4, [wallRepeats, 1], undefined, 1, gen3 ? [phase, 0] : [0, 0]
         );
       this.box(wallSpec.id, root, [wallSpec.cx, wallSpec.cy, wallSpec.cz], [wallSpec.sx, wallSpec.sy, wallSpec.sz], wallMat);
       const collider = this.toWorldCollider(descriptor, wallSpec);
       colliders.push(collider); this.walls.set(collider.id, collider);
       if (wallSpec.cy - wallSpec.sy / 2 < 0.04) {
         const horizontal = wallSpec.orientation === 'z';
-        this.box(`${wallSpec.id}:skirting`, root, [wallSpec.cx, 0.12, wallSpec.cz], [horizontal ? wallSpec.sx : wallSpec.sx + 0.035, 0.23, horizontal ? wallSpec.sz + 0.035 : wallSpec.sz], trimMat);
+        this.box(`${wallSpec.id}:skirting`, root, [wallSpec.cx, 0.11, wallSpec.cz], [horizontal ? wallSpec.sx : wallSpec.sx + 0.012, 0.22, horizontal ? wallSpec.sz + 0.012 : wallSpec.sz], trimMat);
       }
     }
 
@@ -88,7 +95,7 @@ export class RendererCellBuilder {
   private addLighting(descriptor: CellDescriptor, root: pc.Entity, fixtureMat: pc.StandardMaterial): void {
     const positions = descriptor.roomArchetype.includes('corridor') || descriptor.roomArchetype === 'narrow-hall'
       ? [[0, -3.8], [0, 0], [0, 3.8]]
-      : descriptor.address.zoneId === 'pillar'
+      : descriptor.world.generationVersion === 'gen2' && descriptor.address.zoneId === 'pillar'
         ? [[-4.3, -4.3], [0, -4.3], [4.3, -4.3], [-4.3, 4.3], [0, 4.3], [4.3, 4.3]]
         : [[-3.4, -2.4], [3.4, 2.4], [-3.4, 2.4], [3.4, -2.4]];
     positions.forEach(([x, z], index) => this.box(`fixture:${index}`, root, [x!, WALL_HEIGHT - 0.08, z!], [2.2, 0.08, 0.38], fixtureMat, descriptor.ceilingPattern % 2 ? 90 : 0));
@@ -132,7 +139,7 @@ export class RendererCellBuilder {
   }
 
   private addProp(descriptor: CellDescriptor, root: pc.Entity, prop: PropSpec, colliders: WorldCollider[]): void {
-    this.addPropGeometry(root, prop, ZONE_PROFILES[descriptor.address.zoneId]);
+    this.addPropGeometry(root, prop, descriptor.world.generationVersion === 'gen3-v1' ? ZONE_PROFILES.baseline : ZONE_PROFILES[descriptor.address.zoneId]);
     if (prop.solid) {
       const rotated = Math.abs((prop.rotationY ?? 0) % 180) > 45;
       const spec: WallSpec = {
