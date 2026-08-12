@@ -22,7 +22,7 @@ function yawTo(cx,cz,tx,tz){return Math.atan2(-(tx-cx),-(tz-cz))*180/Math.PI;}
 function cameraFor(tx,tz,obs,distance=1.55,pitch=8){
   const dirs=[[0,1],[1,0],[0,-1],[-1,0],[.707,.707],[-.707,.707],[.707,-.707],[-.707,-.707]];
   for(const [dx,dz] of dirs){const x=tx+dx*distance,z=tz+dz*distance;if(free(x,z,obs))return{x,y:EYE_HEIGHT,z,yaw:yawTo(x,z,tx,tz),pitch};}
-  return{x:tx+distance,y:EYE_HEIGHT,z:tz+distance,yaw:yawTo(tx+distance,z+distance,tx,tz),pitch};
+  return{x:tx+distance,y:EYE_HEIGHT,z:tz+distance,yaw:yawTo(tx+distance,tz+distance,tx,tz),pitch};
 }
 function isBoundary(value){return Math.abs((value-CELL_SIZE/2)/CELL_SIZE-Math.round((value-CELL_SIZE/2)/CELL_SIZE))<.0002;}
 function seamTarget(cells, material){
