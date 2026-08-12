@@ -1,0 +1,31 @@
+name: Apply dev4 QA patch
+on:
+  push:
+    branches:
+      - agent/dev4-world-coherence
+    paths:
+      - .github/workflows/dev4-apply-qa-patch.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/dev4-world-coherence
+          fetch-depth: 0
+      - name: Apply staged patch
+        run: python scripts/dev4-patch-qa.py
+      - name: Commit patched acceptance harnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f scripts/dev4-patch-qa.py
+          rm -f .github/workflows/dev4-fix-qa.yml
+          rm -f .github/workflows/dev4-apply-qa-patch.yml
+          git config user.name xash-mind
+          git config user.email sashreeksagar5@gmail.com
+          git add -A
+          git commit -m "test: harden dev4 browser acceptance gates"
+          git push origin HEAD:agent/dev4-world-coherence
