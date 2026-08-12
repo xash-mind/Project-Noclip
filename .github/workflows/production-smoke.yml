@@ -25,7 +25,6 @@ on:
       - scripts/preview.mjs
       - scripts/browser-smoke.py
       - scripts/mobile-smoke.py
-      - scripts/mobile-smoke-ci.py
       - scripts/version-smoke.py
       - .github/workflows/production-smoke.yml
 
@@ -140,18 +139,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for mobile_attempt in 1 2 3; do
-            if NOCLIP_BASE_URL="${NOCLIP_TARGET_URL}" NOCLIP_MOBILE_ARTIFACTS="artifacts/production-mobile-smoke" python scripts/mobile-smoke-ci.py; then
-              break
-            fi
-            if [ "$mobile_attempt" -eq 3 ]; then
-              echo "Landscape touch production smoke failed on all three independent browser sessions" >&2
-              exit 1
-            fi
-            echo "Landscape touch production smoke hit a transient Selenium failure on attempt ${mobile_attempt}; retrying with a fresh browser session" >&2
-            rm -rf artifacts/production-mobile-smoke
-            sleep 1
-          done
+          NOCLIP_BASE_URL="${NOCLIP_TARGET_URL}" \
+          NOCLIP_MOBILE_ARTIFACTS="artifacts/production-mobile-smoke" \
+          python scripts/mobile-smoke.py
       - name: Publish production release evidence
         if: success()
         shell: bash
