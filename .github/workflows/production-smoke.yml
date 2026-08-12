@@ -25,6 +25,7 @@ on:
       - scripts/preview.mjs
       - scripts/browser-smoke.py
       - scripts/mobile-smoke.py
+      - scripts/mobile-smoke-ci.py
       - scripts/version-smoke.py
       - .github/workflows/production-smoke.yml
 
@@ -140,7 +141,7 @@ jobs:
         run: |
           set -euo pipefail
           for mobile_attempt in 1 2 3; do
-            if NOCLIP_BASE_URL="${NOCLIP_TARGET_URL}" NOCLIP_MOBILE_ARTIFACTS="artifacts/production-mobile-smoke" python scripts/mobile-smoke.py; then
+            if NOCLIP_BASE_URL="${NOCLIP_TARGET_URL}" NOCLIP_MOBILE_ARTIFACTS="artifacts/production-mobile-smoke" python scripts/mobile-smoke-ci.py; then
               break
             fi
             if [ "$mobile_attempt" -eq 3 ]; then
