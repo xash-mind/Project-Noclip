@@ -58,6 +58,28 @@ const X_PRIME = 0x9e3779b1;
 const Z_PRIME = 0x85ebca77;
 const FIELD_PRIME = 0xc2b2ae3d;
 const OCTAVE_PRIME = 0x27d4eb2f;
+const WORLD_FIELD_INDEX = Object.fromEntries(WORLD_FIELD_NAMES.map((name, index) => [name, index])) as Record<WorldFieldName, number>;
+
+let lastLocalSeed: string | undefined;
+let lastLocalSeedHash = 0;
+let lastGeographySeed: string | undefined;
+let lastGeographySeedHash = 0;
+
+function localSeedHash(seed: string): number {
+  if (seed !== lastLocalSeed) {
+    lastLocalSeed = seed;
+    lastLocalSeedHash = hashString(`${seed}:gen3-fields`);
+  }
+  return lastLocalSeedHash;
+}
+
+function geographySeedHash(seed: string): number {
+  if (seed !== lastGeographySeed) {
+    lastGeographySeed = seed;
+    lastGeographySeedHash = hashString(`${seed}:gen3-geography`);
+  }
+  return lastGeographySeedHash;
+}
 
 function mix32(value: number): number {
   let mixed = value >>> 0;
@@ -130,7 +152,7 @@ function sampleScalarField(seedHash: number, fieldIndex: number, worldX: number,
  * domains remain independent while diagnostics can still inspect the full set.
  */
 export function sampleWorldFields(seed: string, worldX: number, worldZ: number): WorldFieldSample {
-  const seedHash = hashString(`${seed}:gen3-fields`);
+  const seedHash = localSeedHash(seed);
   const values = {} as Record<WorldFieldName, number>;
   for (let fieldIndex = 0; fieldIndex < WORLD_FIELD_NAMES.length; fieldIndex += 1) {
     const name = WORLD_FIELD_NAMES[fieldIndex]!;
@@ -152,10 +174,10 @@ export function sampleWorldFieldChannels<const Names extends readonly WorldField
   worldZ: number,
   names: Names
 ): Record<Names[number], number> {
-  const seedHash = hashString(`${seed}:gen3-fields`);
+  const seedHash = localSeedHash(seed);
   const values: Partial<Record<WorldFieldName, number>> = {};
   for (const name of names) {
-    const fieldIndex = WORLD_FIELD_NAMES.indexOf(name);
+    const fieldIndex = WORLD_FIELD_INDEX[name];
     values[name] = sampleScalarField(seedHash, fieldIndex, worldX, worldZ, LOCAL_OCTAVES);
   }
   return values as Record<Names[number], number>;
@@ -171,7 +193,7 @@ export interface WorldGeographySample extends Record<GeographyFieldName, number>
  * or partitions cannot accidentally move a whole Region.
  */
 export function sampleWorldGeography(seed: string, worldX: number, worldZ: number): WorldGeographySample {
-  const seedHash = hashString(`${seed}:gen3-geography`);
+  const seedHash = geographySeedHash(seed);
   const values = {} as Record<GeographyFieldName, number>;
   for (let fieldIndex = 0; fieldIndex < GEOGRAPHY_FIELD_NAMES.length; fieldIndex += 1) {
     const name = GEOGRAPHY_FIELD_NAMES[fieldIndex]!;
