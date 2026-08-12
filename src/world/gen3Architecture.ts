@@ -179,12 +179,13 @@ function passageForSegment(
 }
 
 function baseKeepChance(fields: Fields, axis: 'x' | 'z', influence: Gen3RegionInfluence): number {
-  const roomMerge = fields.openness * 0.16 + fields.roomScale * 0.12;
-  const pressure = fields.partitionPressure * 0.2;
-  const flow = (fields.axisFlow - 0.5) * (axis === 'z' ? 0.1 : -0.1);
+  const ordinaryMerge = fields.openness * 0.08 + fields.roomScale * 0.06;
+  const rareLargeSpace = strength(fields.openness, 0.78, 0.94) * strength(fields.roomScale, 0.72, 0.92) * 0.32;
+  const pressure = fields.partitionPressure * 0.16;
+  const flow = (fields.axisFlow - 0.5) * (axis === 'z' ? 0.08 : -0.08);
   const pillarSuppression = influence.pillar * 0.12 + influence.deepPillar * 0.5;
   const archOrder = influence.arch * fields.regularity * 0.05;
-  return clamp01(0.72 + pressure - roomMerge + flow + archOrder - pillarSuppression);
+  return clamp01(0.76 + pressure - ordinaryMerge - rareLargeSpace + flow + archOrder - pillarSuppression);
 }
 
 function segmentKept(
@@ -198,8 +199,9 @@ function segmentKept(
   const base = baseKeepChance(fields, axis, influence);
   const previous = unitFloat(`${seed}:gen3-v4:wall:${axis}:${lineIndex}:${alongIndex - 1}`) < base;
   const next = unitFloat(`${seed}:gen3-v4:wall:${axis}:${lineIndex}:${alongIndex + 1}`) < base;
-  const neighborSupport = (Number(previous) + Number(next)) / 2;
-  const coherent = clamp01(base + (neighborSupport - 0.5) * fields.regularity * 0.16);
+  const neighborCount = Number(previous) + Number(next);
+  const runBreaker = neighborCount === 0 ? 0.14 : neighborCount === 2 ? -0.06 : 0;
+  const coherent = clamp01(base + runBreaker * (0.7 + fields.regularity * 0.3));
   return unitFloat(`${seed}:gen3-v4:wall:${axis}:${lineIndex}:${alongIndex}`) < coherent;
 }
 
