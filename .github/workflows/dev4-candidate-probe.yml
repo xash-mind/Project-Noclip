@@ -1,0 +1,27 @@
+name: Probe dev4 coherence candidate
+on:
+  push:
+    branches: [agent/dev4-world-coherence]
+    paths: ['.github/workflows/dev4-candidate-probe.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm run typecheck
+      - name: Compile test build
+        run: npx tsc -p tsconfig.test.json
+      - name: Measure dev4 navigation
+        run: node scripts/coherence-metrics.mjs
+      - name: Run current tests for incompatibility inventory
+        continue-on-error: true
+        run: npm test
+      - name: Run current benchmark for budget inventory
+        continue-on-error: true
+        run: npm run benchmark
