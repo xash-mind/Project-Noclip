@@ -1,0 +1,35 @@
+name: Calibrate dev4 hosted touch input
+on:
+  push:
+    branches: [agent/dev4-world-coherence]
+    paths: ['.github/workflows/dev4-mobile-dpr-fix.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/dev4-world-coherence
+          fetch-depth: 0
+      - shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/mobile-smoke.py')
+          t=p.read_text(encoding='utf-8')
+          old='''    x = float(point["x"]); y = float(point["y"])\n    touch_event(driver, "touchStart", [point])\n    # A real finger crosses intermediate positions; doing the same prevents\n    # hosted Chrome from coalescing one large synthetic jump before the\n    # PointerEvent capture path sees it. Total displacement is unchanged.\n    time.sleep(0.06)\n    for index in range(1, steps + 1):\n        touch_event(driver, "touchMove", [{**point, "x": x + dx * index / steps, "y": y + dy * index / steps}])\n'''
+          new='''    x = float(point["x"]); y = float(point["y"])\n    input_scale = float(driver.execute_script("return window.devicePixelRatio || 1"))\n    input_dx, input_dy = dx * input_scale, dy * input_scale\n    touch_event(driver, "touchStart", [point])\n    # The hosted CDP mobile emulator consumes touch displacement in its input\n    # pixel space while PointerEvent client coordinates are CSS pixels. Scale\n    # only this injected Look drag by DPR so the asserted gesture remains the\n    # requested 84 CSS pixels at deviceScaleFactor 2.\n    time.sleep(0.06)\n    for index in range(1, steps + 1):\n        touch_event(driver, "touchMove", [{**point, "x": x + input_dx * index / steps, "y": y + input_dy * index / steps}])\n'''
+          # Scope to touch_drag by replacing the unique new comment block.
+          start=t.index('def touch_drag(')
+          prefix=t[:start]; tail=t[start:]
+          if old not in tail: raise SystemExit('touch_drag calibration anchor missing')
+          p.write_text(prefix+tail.replace(old,new,1),encoding='utf-8')
+          PY
+          git config user.name xash-mind
+          git config user.email sashreeksagar5@gmail.com
+          git add scripts/mobile-smoke.py
+          git commit -m "test: calibrate hosted mobile look coordinates"
+          git push origin HEAD:agent/dev4-world-coherence
