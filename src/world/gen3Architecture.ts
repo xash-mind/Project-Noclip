@@ -50,6 +50,7 @@ interface Fields {
 
 interface RoomNode { x: number; z: number; }
 interface Passage { center: number; width: number; }
+interface ReservedPassage { axis: 'x' | 'z'; fixed: number; center: number; width: number; }
 interface ArchDividerSpec {
   id: string;
   axis: 'x' | 'z';
@@ -374,12 +375,12 @@ function addArchDivider(
 function candidateRanges(seed: string, cellX: number, cellZ: number): { minX: number; maxX: number; minZ: number; maxZ: number } {
   const centerX = cellX * CELL_SIZE;
   const centerZ = cellZ * CELL_SIZE;
-  const padding = SUBSTRATE_GRID * 1.5;
+  const padding = LINE_JITTER + WALL_THICKNESS;
   return {
-    minX: Math.floor((centerX - CELL_SIZE / 2 - padding) / SUBSTRATE_GRID),
-    maxX: Math.ceil((centerX + CELL_SIZE / 2 + padding) / SUBSTRATE_GRID),
-    minZ: Math.floor((centerZ - CELL_SIZE / 2 - padding) / SUBSTRATE_GRID),
-    maxZ: Math.ceil((centerZ + CELL_SIZE / 2 + padding) / SUBSTRATE_GRID)
+    minX: Math.floor((centerX - CELL_SIZE / 2 - padding) / SUBSTRATE_GRID) - 1,
+    maxX: Math.ceil((centerX + CELL_SIZE / 2 + padding) / SUBSTRATE_GRID) + 1,
+    minZ: Math.floor((centerZ - CELL_SIZE / 2 - padding) / SUBSTRATE_GRID) - 1,
+    maxZ: Math.ceil((centerZ + CELL_SIZE / 2 + padding) / SUBSTRATE_GRID) + 1
   };
 }
 
@@ -391,7 +392,8 @@ function addSubstrate(
   exposure: number,
   tuning: WorldTuning,
   output: WallSpec[],
-  archGroups: Map<string, ArchDividerSpec>
+  archGroups: Map<string, ArchDividerSpec>,
+  reservedPassages: Map<string, ReservedPassage>
 ): void {
   const ranges = candidateRanges(seed, cellX, cellZ);
   const dividerCache = new Map<string, ArchDividerSpec | null>();
@@ -410,6 +412,10 @@ function addSubstrate(
     }
     if (!segmentKept(seed, boundaryAxis, lineIndex, alongIndex, fields, influence)) return;
     const passage = passageForSegment(seed, boundaryAxis, lineIndex, alongIndex, fields, midpoint.span);
+    if (passage) {
+      const passageId = `${boundaryAxis}:${lineIndex}:${alongIndex}`;
+      reservedPassages.set(passageId, { axis: boundaryAxis, fixed: midpoint.span.fixed, center: passage.center, width: passage.width });
+    }
     const cuts = passage ? [[passage.center - passage.width / 2, passage.center + passage.width / 2] as [number, number]] : [];
     const material = chooseWallMaterial(seed, boundaryAxis, lineIndex, alongIndex, influence);
     for (const [start, end] of subtractIntervals(midpoint.span.start, midpoint.span.end, cuts)) {
@@ -437,26 +443,11 @@ function pillarIntersectsWall(localX: number, localZ: number, size: number, wall
   });
 }
 
-function nearReservedPassage(seed: string, worldX: number, worldZ: number): boolean {
-  const approximateX = Math.round(worldX / SUBSTRATE_GRID);
-  const approximateZ = Math.round(worldZ / SUBSTRATE_GRID);
-  for (let lineX = approximateX - 1; lineX <= approximateX + 1; lineX += 1) {
-    for (let alongZ = approximateZ - 1; alongZ <= approximateZ + 1; alongZ += 1) {
-      const midpoint = segmentMidpoint(seed, 'x', lineX, alongZ);
-      const fields = sampleArchitectureFields(seed, midpoint.x, midpoint.z);
-      const passage = passageForSegment(seed, 'x', lineX, alongZ, fields, midpoint.span);
-      if (!passage) continue;
-      if (Math.abs(worldX - midpoint.span.fixed) < 1.25 && Math.abs(worldZ - passage.center) < passage.width / 2 + 1.0) return true;
-    }
-  }
-  for (let lineZ = approximateZ - 1; lineZ <= approximateZ + 1; lineZ += 1) {
-    for (let alongX = approximateX - 1; alongX <= approximateX + 1; alongX += 1) {
-      const midpoint = segmentMidpoint(seed, 'z', lineZ, alongX);
-      const fields = sampleArchitectureFields(seed, midpoint.x, midpoint.z);
-      const passage = passageForSegment(seed, 'z', lineZ, alongX, fields, midpoint.span);
-      if (!passage) continue;
-      if (Math.abs(worldZ - midpoint.span.fixed) < 1.25 && Math.abs(worldX - passage.center) < passage.width / 2 + 1.0) return true;
-    }
+function nearReservedPassage(worldX: number, worldZ: number, passages: Iterable<ReservedPassage>): boolean {
+  for (const passage of passages) {
+    if (passage.axis === 'x') {
+      if (Math.abs(worldX - passage.fixed) < 1.25 && Math.abs(worldZ - passage.center) < passage.width / 2 + 1.0) return true;
+    } else if (Math.abs(worldZ - passage.fixed) < 1.25 && Math.abs(worldX - passage.center) < passage.width / 2 + 1.0) return true;
   }
   return false;
 }
@@ -469,6 +460,7 @@ function addPillars(
   exposure: number,
   tuning: WorldTuning,
   walls: readonly WallSpec[],
+  reservedPassages: Iterable<ReservedPassage>,
   output: PropSpec[]
 ): { count: number; deepSamples: number } {
   const half = CELL_SIZE / 2;
@@ -495,7 +487,7 @@ function addPillars(
       const size = (1.55 + unitFloat(`${seed}:gen3-pillar:${key}:size`) * 0.75) * PILLAR_WIDTH_SCALE;
       const localX = worldX - centerX;
       const localZ = worldZ - centerZ;
-      if (nearReservedPassage(seed, worldX, worldZ) || pillarIntersectsWall(localX, localZ, size, walls)) continue;
+      if (nearReservedPassage(worldX, worldZ, reservedPassages) || pillarIntersectsWall(localX, localZ, size, walls)) continue;
       output.push({
         id: stableId('gen3-pillar', seed, key),
         kind: 'column',
@@ -522,9 +514,10 @@ export function generateCoherentGen3Architecture(options: {
   const walls: WallSpec[] = [];
   const props: PropSpec[] = [];
   const archGroups = new Map<string, ArchDividerSpec>();
-  addSubstrate(seed, cellX, cellZ, worldDay, exposure, tuning, walls, archGroups);
+  const reservedPassages = new Map<string, ReservedPassage>();
+  addSubstrate(seed, cellX, cellZ, worldDay, exposure, tuning, walls, archGroups, reservedPassages);
   for (const spec of archGroups.values()) addArchDivider(walls, seed, cellX, cellZ, spec);
-  const pillar = addPillars(seed, cellX, cellZ, worldDay, exposure, tuning, walls, props);
+  const pillar = addPillars(seed, cellX, cellZ, worldDay, exposure, tuning, walls, reservedPassages.values(), props);
   return {
     walls,
     props,
