@@ -347,10 +347,15 @@ function addArchDivider(
     for (const [a, b] of subtractIntervals(start, end, cuts)) pushClippedWall(output, seed, cellX, cellZ, `${spec.id}:${pieceId}`, axis, spec.fixed, a, b, y, height, material);
   };
 
-  add('lower', spec.start, spec.end, 0.5, 1.0);
-  add('header', spec.start, spec.end, 2.98, 0.44);
-
   const asymmetry = spec.irregular ? (unitFloat(`${seed}:gen3-v4:arch-divider:${spec.id}:asymmetry`) - 0.5) * 0.14 : 0;
+  const terminationSide = Math.min(0.54, spec.bayWidth * 0.16);
+  const leftTermination = terminationSide * (1 + asymmetry);
+  const rightTermination = terminationSide * (1 - asymmetry);
+  add('lower', spec.start + leftTermination, spec.end - rightTermination, 0.5, 1.0);
+  add('header', spec.start + leftTermination, spec.end - rightTermination, 2.98, 0.44);
+  add('left-termination', spec.start, spec.start + leftTermination, WALL_HEIGHT / 2, WALL_HEIGHT);
+  add('right-termination', spec.end - rightTermination, spec.end, WALL_HEIGHT / 2, WALL_HEIGHT);
+
   for (let bayIndex = 0; bayIndex < spec.bayCount; bayIndex += 1) {
     const bayStart = spec.start + bayIndex * spec.bayWidth;
     const bayEnd = bayStart + spec.bayWidth;
@@ -361,13 +366,11 @@ function addArchDivider(
     const rightSide = side * (1 - asymmetry);
     const leftShoulder = shoulder * (1 + asymmetry);
     const rightShoulder = shoulder * (1 - asymmetry);
-    if (bayIndex === 0) add(`bay:${bayIndex}:left-termination`, bayStart, bayStart + leftSide, WALL_HEIGHT / 2, WALL_HEIGHT);
-    else {
+    if (bayIndex > 0) {
       add(`bay:${bayIndex}:left-a`, bayStart, bayStart + leftSide, 2.08, 1.16);
       add(`bay:${bayIndex}:left-b`, bayStart + leftSide, bayStart + leftSide + leftShoulder, 2.48, 0.38);
     }
-    if (bayIndex === spec.bayCount - 1) add(`bay:${bayIndex}:right-termination`, bayEnd - rightSide, bayEnd, WALL_HEIGHT / 2, WALL_HEIGHT);
-    else {
+    if (bayIndex < spec.bayCount - 1) {
       add(`bay:${bayIndex}:right-a`, bayEnd - rightSide, bayEnd, 2.08, 1.16);
       add(`bay:${bayIndex}:right-b`, bayEnd - rightSide - rightShoulder, bayEnd - rightSide, 2.48, 0.38);
     }
