@@ -42,7 +42,7 @@ jobs:
           done
           NOCLIP_VERSION_ARTIFACTS="artifacts/browser-smoke" python scripts/version-smoke.py
           for mobile_attempt in 1 2 3; do
-            if NOCLIP_MOBILE_ARTIFACTS="artifacts/mobile-smoke" python scripts/mobile-smoke.py; then
+            if NOCLIP_MOBILE_ARTIFACTS="artifacts/mobile-smoke" python scripts/mobile-smoke-ci.py; then
               break
             fi
             if [ "$mobile_attempt" -eq 3 ]; then
