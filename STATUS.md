@@ -1,12 +1,10 @@
 # Project Status
 
-**Last verified runtime:** 2026-08-11 (Asia/Kolkata)  
+**Last verified runtime:** 2026-08-12 (Asia/Kolkata)  
 **Canonical production:** https://project-noclip.vercel.app  
-**Production deployment commit:** `9e73ef54975269461a5de0e282facfc2a0c27a3b`  
+**Production release commit:** `9e73ef54975269461a5de0e282facfc2a0c27a3b`  
+**Visible deployed version:** `v0.3.0-dev.2`  
 **Product change source:** PR #40 / merge commit `5aadaf1700252a290c41d588c8f0d5944418f39e`  
-**Production target version:** `v0.3.0-dev.2`  
-**Last independently observed production version before retry:** `v0.3.0-dev.1`  
-**Independent visible/browser confirmation of retry:** pending  
 **Save schema:** `v2`  
 **New-journey generation:** `gen3-v1`  
 **Current architecture direction:** Generation 3 — GitHub Issue #31  
@@ -14,13 +12,11 @@
 
 ## Health
 
-**Product-tracked `v0.3.0-dev.2` production deployment succeeded in Vercel.** The first PR #40 merge deployment was rejected by the account's `api-deployments-free-per-day` limit, which is why canonical production remained on `v0.3.0-dev.1` when Sash checked it.
+**Canonical production is visibly running `v0.3.0-dev.2`.** The product-tracked retry commit `9e73ef54975269461a5de0e282facfc2a0c27a3b` completed successfully in Vercel after the earlier rolling deployment quota rejection, and the 2026-08-12 player feedback explicitly compares the live experience against dev.2. That observation closes the prior “visible confirmation pending” gap and restores dev.2 as the accepted renderer-comparison baseline.
 
-A deliberate release retry then changed only the formatting of the already-canonical `VERSION` file (`0.3.0-dev.2` remains semantically unchanged). Commit `9e73ef54975269461a5de0e282facfc2a0c27a3b` touched a production-tracked path, entered Vercel as **pending**, and then completed **successfully** at deployment `EmKRdFxkRixJhECP7zTALjHZYviq`.
+The dev.2 product change came from PR #40 / merge commit `5aadaf1700252a290c41d588c8f0d5944418f39e`. Its clean-head verification passed typecheck, **48/48 tests**, the 10,000-Cell benchmark, production build, desktop/landscape-touch/world-cohesion Chromium journeys, save/reload, and renderer regression against dev.1.
 
-This is materially different from the earlier docs-only green statuses: `vercel.json` explicitly ignores docs-only changes via `ignoreCommand`, so those statuses were not evidence that production moved. The release retry changed `VERSION`, which is included in the product deployment path set and imported into the app by `src/version.ts`.
-
-The connected Vercel OAuth surface still cannot fetch this project's canonical public `/VERSION`, so provider deployment success and independent visible/browser confirmation remain separate. Do not mark the release fully accepted until canonical production visibly reports `v0.3.0-dev.2` and the production browser/touch smoke passes.
+The renderer-regression workflow consumes the exact `Production release commit` and `Visible deployed version` keys above. Keep those machine-readable fields stable when editing this document.
 
 ## Generation 3 accepted architecture
 
@@ -42,7 +38,7 @@ Existing pre-versioned journeys remain on frozen `gen2`; new journeys persist `g
 
 ## `v0.3.0-dev.2` release — PR #40
 
-PR #40 corrects the first post-cutover perceptual problems:
+PR #40 corrected the first post-cutover perceptual problems:
 
 - denser ordinary Level 0 architecture without returning to room templates;
 - `axisFlow` as a deterministic directional bias rather than a hard cardinal command;
@@ -77,9 +73,9 @@ Verification before release:
 
 ## Current ready work
 
-**Verify the canonical production surface now reports `v0.3.0-dev.2`, then run the repository's production desktop/touch smoke.** No additional deployment or product-code change is needed unless that verification fails.
+**PR #41 is the `v0.3.0-dev.3` density/topology candidate.** It must pass the full deterministic test suite, 10,000-Cell benchmark, production build, browser-cohesion journeys, renderer comparison, and preview playability before merge. The requested scope is tighter ordinary room topology, Arch-room enclosure walls, a less open Pillar reading, and fixture lighting that does not artificially brighten with player proximity.
 
-Do not create further no-op/status release triggers.
+Do not create no-op/status release triggers. Keep changes on the candidate branch until verification is green.
 
 ## Separate deferred work
 
@@ -92,11 +88,11 @@ Do not create further no-op/status release triggers.
 
 ## Decisions needed from Sash
 
-**None for the release itself.** Escalate only if the canonical site still fails to move to dev.2 after the successful product-tracked deployment.
+**None for the current dev.3 candidate.** Escalate only if verification exposes a real product-direction tradeoff rather than an implementation defect.
 
 ## Version policy
 
-Project Noclip remains opted into the manual-project version indicator policy. Root `VERSION` is `0.3.0-dev.2`. Record dev.2 as fully accepted production only after visible/browser verification of the successful release retry.
+Project Noclip remains opted into the manual-project version indicator policy. Accepted canonical production is `v0.3.0-dev.2`; PR #41 carries root candidate `VERSION` `0.3.0-dev.3`. Do not label dev.3 accepted production until the merged deployment is visibly verified.
 
 ## Important links
 
@@ -105,7 +101,7 @@ Project Noclip remains opted into the manual-project version indicator policy. R
 - Generation 3 architecture: https://github.com/xash-mind/Project-Noclip/issues/31
 - Generation 3 cutover: https://github.com/xash-mind/Project-Noclip/pull/39
 - Perceptual-substrate release: https://github.com/xash-mind/Project-Noclip/pull/40
-- Ready PR #40 preview: https://project-noclip-git-agent-gen3-substrate-densi-7f6ccd-xash-mind0.vercel.app
+- Dev.3 density/topology candidate: https://github.com/xash-mind/Project-Noclip/pull/41
 - PR #40 clean-head CI: https://github.com/xash-mind/Project-Noclip/actions/runs/31493658597
 - PR #40 renderer regression: https://github.com/xash-mind/Project-Noclip/actions/runs/31493658583
 - World vocabulary/catalog: `WORLD.md`

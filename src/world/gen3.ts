@@ -15,7 +15,7 @@ import {
   type WorldTuning
 } from './types.js';
 
-const ARCHITECTURE_GRID = 12.5;
+const ARCHITECTURE_GRID = 12.59;
 const ARCH_ROOM_GRID = 14;
 const ARCH_WALL_GRID = 52;
 const PILLAR_SPACING = 7.2;

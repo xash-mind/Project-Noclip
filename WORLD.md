@@ -72,7 +72,7 @@ Durable laws:
 - Region affinity Fields use kilometre-scale wavelengths; local architecture Fields use smaller scales.
 - Region selection, Blackout pressure, architecture, Carvers, Structures, Features, Items, and Transitions use independent deterministic seed domains.
 - Streaming Cell edges do not place walls or reset architecture cadence.
-- Ordinary architecture is solved in world space from continuous partitions and sightline pressure, not recognizable room templates.
+- Ordinary architecture is solved in world space from interlocking continuous partitions, varied run scale, and sightline/connectivity pressure, not recognizable room templates. Openings and partition intersections must be capable of shaping traversal rather than leaving every wall globally bypassable through nearby empty floor.
 - Stable semantic IDs and world addresses include the generation version.
 - Geometry stays Euclidean unless an explicitly scoped, tested design changes it.
 - Generation 3 does not apply legacy unload-count shifting. Any future topology change must be deliberate, deterministic, observable, and save-safe.
@@ -105,9 +105,9 @@ Registered Transition destinations are not playable Levels: Level 1, Level 2, Le
 
 | Region | ID | Status | Generation rule |
 |---|---|---|---|
-| **Ordinary Level 0** | `ordinary-level-0` | **Implemented** | Dominant continuous segmented Level 0 architecture. No alcoves, dividers, or Arch motifs. Sparse wallpaper-clad rectangular pillars may occur. |
-| **Pillar Field** | `pillar-field` | **Implemented** | Kilometre-capable wallpaper-clad pillar lattice with strong wall suppression. Region cores target long traversals; benchmark gates require at least 8-minute P50 and 20-minute P90 crossings. |
-| **Arch Rooms** | `arch-rooms` | **Implemented** | Stable pale rooms divided by continuous lower panels, repeated arch-shaped openings, and continuous headers. Freestanding arches are forbidden. |
+| **Ordinary Level 0** | `ordinary-level-0` | **Implemented** | Dominant continuous segmented Level 0 architecture built from interlocking world-space partitions with varied run lengths and deterministic openings. The partition network should read as changing rooms/corridors rather than scattered walls in one open hall. No alcoves, dividers, or Arch motifs. Sparse wallpaper-clad rectangular pillars may occur. |
+| **Pillar Field** | `pillar-field` | **Implemented** | Kilometre-capable wallpaper-clad pillar lattice with broad piers and strong wall suppression. The world lattice remains persistent while pier width keeps the open gaps from reading excessively loose. Region cores target long traversals; benchmark gates require at least 8-minute P50 and 20-minute P90 crossings. |
+| **Arch Rooms** | `arch-rooms` | **Implemented** | Stable pale room networks with full-height surrounding walls plus continuous lower-panel dividers, repeated arch-shaped openings, and continuous headers. Signature Arch dividers belong inside rooms; they must not stand alone across otherwise empty halls. Freestanding arches are forbidden. |
 
 ## Variants
 
@@ -183,9 +183,9 @@ Enabled foundations exist for Level 1, Level 2, Level 27, Level 483, Level 13, a
 
 Promoted Tier-A reference conclusions:
 
-- **Ordinary Level 0:** pale sickly-yellow patterned wallpaper, tight-knit brownish-beige carpet that reads yellow under fluorescent light, persistently damp floor, suspended ceiling tiles, repeated rectangular panels, and pervasive fluctuating fluorescent buzz.
+- **Ordinary Level 0:** pale sickly-yellow patterned wallpaper, tight-knit brownish-beige carpet that reads yellow under fluorescent light, persistently damp floor, suspended ceiling tiles, repeated rectangular panels, and pervasive fluctuating fluorescent buzz. Architecture should form changing rooms, narrow connectors, interrupted sightlines, and larger spaces without degrading into isolated walls scattered across a globally open floor.
 - **Pillar Fields:** broad rectangular wallpaper-clad floor-to-ceiling piers in a world-space lattice, ordinary suspended ceiling/fixture grammar, occasional vents, shallower carpet, and potentially painfully long open traversal. Walls are rare in the core.
-- **Arch Rooms:** paler continuous dividing walls with solid lower panels, repeated arch-shaped holes/openings, continuous headers, deep wet carpet, and unusually stable Euclidean layout. Names do not justify freestanding arches.
+- **Arch Rooms:** pale full-height room walls surround continuous dividing walls with solid lower panels, repeated arch-shaped holes/openings, continuous headers, deep wet carpet, and unusually stable Euclidean layout. Names do not justify freestanding arches, and the dividers must not be the only architecture present.
 - **Blackouts:** recognizable Level 0 Geometry with no local light and no local buzz. Fixtures disappear into the dark ceiling. External light and buzz provide gradual escape cues; lighting must not snap at Cell boundaries.
 - **Hole clusters:** close grids/groups of discrete square pitch-black floor pits with readable bypass lanes. Only the rim and upper depth are readable; no framed recess, shallow destination plate, or unsupported rail.
 - **Red Rooms:** rare distressing crimson Structure with difficult/impossible escape. Exact deterministic closed-loop Geometry remains a human design decision.
@@ -196,6 +196,7 @@ Still images do not establish audio. Audio rules above come from verified author
 
 - Ceiling fixtures are emissive panels plus bounded spatial lights at their actual world positions, with a restrained HDR bloom pass so panels read as luminous rather than painted white boxes.
 - Neighboring fixture light crosses walls/Cell boundaries continuously; no player-following room light.
+- Renderer fixture source energy must not be multiplied merely because the player approaches. Engine light range/falloff owns the physical distance response; bounded source selection must happen outside the useful fixture-light range so it does not read as lights switching on around the player.
 - Global ambient contribution stays low enough that fixtures shape the room.
 - The fluorescent bed uses audible fundamental/harmonic energy suitable for browser/laptop playback while remaining subtle.
 - World Lab may keep ambience audible for inspection; users can disable its audio monitor.
