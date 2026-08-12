@@ -1,0 +1,142 @@
+name: Optimize dev4 coherence solver
+on:
+  push:
+    branches: [agent/dev4-world-coherence]
+    paths: ['.github/workflows/dev4-optimize-solver.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/dev4-world-coherence
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Reuse solved passage geometry for pillar clearance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/world/gen3Architecture.ts')
+          t=p.read_text(encoding='utf-8')
+
+          t=t.replace("interface Passage { center: number; width: number; }\n", "interface Passage { center: number; width: number; }\ninterface ReservedPassage { axis: 'x' | 'z'; fixed: number; center: number; width: number; }\n",1)
+
+          old="""function addSubstrate(
+            seed: string,
+            cellX: number,
+            cellZ: number,
+            worldDay: number,
+            exposure: number,
+            tuning: WorldTuning,
+            output: WallSpec[],
+            archGroups: Map<string, ArchDividerSpec>
+          ): void {
+            const ranges = candidateRanges(seed, cellX, cellZ);
+          """
+          new="""function addSubstrate(
+            seed: string,
+            cellX: number,
+            cellZ: number,
+            worldDay: number,
+            exposure: number,
+            tuning: WorldTuning,
+            output: WallSpec[],
+            archGroups: Map<string, ArchDividerSpec>,
+            reservedPassages: Map<string, ReservedPassage>
+          ): void {
+            const ranges = candidateRanges(seed, cellX, cellZ);
+          """
+          if old not in t: raise SystemExit('addSubstrate signature anchor')
+          t=t.replace(old,new,1)
+
+          old="""    const passage = passageForSegment(seed, boundaryAxis, lineIndex, alongIndex, fields, midpoint.span);
+              const cuts = passage ? [[passage.center - passage.width / 2, passage.center + passage.width / 2] as [number, number]] : [];
+          """
+          new="""    const passage = passageForSegment(seed, boundaryAxis, lineIndex, alongIndex, fields, midpoint.span);
+              if (passage) {
+                const passageId = `${boundaryAxis}:${lineIndex}:${alongIndex}`;
+                reservedPassages.set(passageId, { axis: boundaryAxis, fixed: midpoint.span.fixed, center: passage.center, width: passage.width });
+              }
+              const cuts = passage ? [[passage.center - passage.width / 2, passage.center + passage.width / 2] as [number, number]] : [];
+          """
+          if old not in t: raise SystemExit('passage collection anchor')
+          t=t.replace(old,new,1)
+
+          start=t.index('function nearReservedPassage(')
+          end=t.index('\nfunction addPillars(',start)
+          replacement="""function nearReservedPassage(worldX: number, worldZ: number, passages: Iterable<ReservedPassage>): boolean {
+            for (const passage of passages) {
+              if (passage.axis === 'x') {
+                if (Math.abs(worldX - passage.fixed) < 1.25 && Math.abs(worldZ - passage.center) < passage.width / 2 + 1.0) return true;
+              } else if (Math.abs(worldZ - passage.fixed) < 1.25 && Math.abs(worldX - passage.center) < passage.width / 2 + 1.0) return true;
+            }
+            return false;
+          }
+          """
+          t=t[:start]+replacement+t[end:]
+
+          old="""  tuning: WorldTuning,
+            walls: readonly WallSpec[],
+            output: PropSpec[]
+          ): { count: number; deepSamples: number } {
+          """
+          new="""  tuning: WorldTuning,
+            walls: readonly WallSpec[],
+            reservedPassages: Iterable<ReservedPassage>,
+            output: PropSpec[]
+          ): { count: number; deepSamples: number } {
+          """
+          if old not in t: raise SystemExit('addPillars signature anchor')
+          t=t.replace(old,new,1)
+          t=t.replace("if (nearReservedPassage(seed, worldX, worldZ) || pillarIntersectsWall(localX, localZ, size, walls)) continue;", "if (nearReservedPassage(worldX, worldZ, reservedPassages) || pillarIntersectsWall(localX, localZ, size, walls)) continue;",1)
+
+          old="""  const archGroups = new Map<string, ArchDividerSpec>();
+            addSubstrate(seed, cellX, cellZ, worldDay, exposure, tuning, walls, archGroups);
+            for (const spec of archGroups.values()) addArchDivider(walls, seed, cellX, cellZ, spec);
+            const pillar = addPillars(seed, cellX, cellZ, worldDay, exposure, tuning, walls, props);
+          """
+          new="""  const archGroups = new Map<string, ArchDividerSpec>();
+            const reservedPassages = new Map<string, ReservedPassage>();
+            addSubstrate(seed, cellX, cellZ, worldDay, exposure, tuning, walls, archGroups, reservedPassages);
+            for (const spec of archGroups.values()) addArchDivider(walls, seed, cellX, cellZ, spec);
+            const pillar = addPillars(seed, cellX, cellZ, worldDay, exposure, tuning, walls, reservedPassages.values(), props);
+          """
+          if old not in t: raise SystemExit('generate architecture anchor')
+          t=t.replace(old,new,1)
+
+          # Candidate discovery needs only one jitter margin, not 1.5 whole substrate cells on both sides.
+          old="""  const padding = SUBSTRATE_GRID * 1.5;
+            return {
+              minX: Math.floor((centerX - CELL_SIZE / 2 - padding) / SUBSTRATE_GRID),
+              maxX: Math.ceil((centerX + CELL_SIZE / 2 + padding) / SUBSTRATE_GRID),
+              minZ: Math.floor((centerZ - CELL_SIZE / 2 - padding) / SUBSTRATE_GRID),
+              maxZ: Math.ceil((centerZ + CELL_SIZE / 2 + padding) / SUBSTRATE_GRID)
+            };
+          """
+          new="""  const padding = LINE_JITTER + WALL_THICKNESS;
+            return {
+              minX: Math.floor((centerX - CELL_SIZE / 2 - padding) / SUBSTRATE_GRID) - 1,
+              maxX: Math.ceil((centerX + CELL_SIZE / 2 + padding) / SUBSTRATE_GRID) + 1,
+              minZ: Math.floor((centerZ - CELL_SIZE / 2 - padding) / SUBSTRATE_GRID) - 1,
+              maxZ: Math.ceil((centerZ + CELL_SIZE / 2 + padding) / SUBSTRATE_GRID) + 1
+            };
+          """
+          if old not in t: raise SystemExit('candidate range anchor')
+          t=t.replace(old,new,1)
+
+          p.write_text(t,encoding='utf-8')
+          Path('.github/workflows/dev4-optimize-solver.yml').unlink()
+          PY
+          npm install --no-audit --no-fund
+          npm run typecheck
+          git config user.name "xash-mind"
+          git config user.email "sashreeksagar5@gmail.com"
+          git add src .github/workflows/dev4-optimize-solver.yml
+          git commit -m "perf: reuse solved passage geometry"
+          git push origin HEAD:agent/dev4-world-coherence
