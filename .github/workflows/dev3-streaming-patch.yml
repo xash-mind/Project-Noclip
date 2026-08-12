@@ -1,0 +1,64 @@
+name: Apply dev3 staged streaming patch
+
+on:
+  push:
+    branches:
+      - agent/dev3-startup-streaming
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/dev3-startup-streaming
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply staged startup streaming
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/app/ProjectNoclipGame.ts')
+          text = path.read_text(encoding='utf-8')
+
+          replacements = [
+              (
+                  "  private regionExtent?: RegionExtentEstimate;\n  private regionExtentKey = '';\n\n  constructor() {",
+                  "  private regionExtent?: RegionExtentEstimate;\n  private regionExtentKey = '';\n  private streamWarmupToken = 0;\n\n  constructor() {",
+              ),
+              (
+                  "    this.updateStreaming(true); this.updateCameraRotation(); this.started = true; this.paused = true;\n    this.ui.showGame(); this.ui.updateInventory(save.inventory, save.selectedItemId); this.ui.setPaused(true);\n    await this.ambience.start(save.settings.masterVolume); this.ambience.setLightField(this.lightField); this.resumeInput();",
+                  "    const startupRadius = Math.min(2, Math.max(1, Math.min(4, Math.round(this.tuning.activeRadius))));\n    this.updateStreaming(true, startupRadius); this.updateCameraRotation(); this.started = true; this.paused = true;\n    this.ui.showGame(); this.ui.updateInventory(save.inventory, save.selectedItemId); this.ui.setPaused(true);\n    // Publish the first useful HUD state before the outer cache ring is submitted to PlayCanvas.\n    this.updateUI(); this.scheduleStreamingWarmup();\n    await this.ambience.start(save.settings.masterVolume); this.ambience.setLightField(this.lightField); this.resumeInput();",
+              ),
+              (
+                  "  private updateStreaming(force = false): void {\n    if (!this.save || !this.renderer) return;\n    const exposure = this.tuning.exposureOverride ?? calculateExposureDay(this.save.exposure); const worldDay = this.tuning.worldDayOverride ?? calculateWorldDay(Date.now()); const desired = new Set<string>(); const radius = Math.max(1, Math.min(4, Math.round(this.tuning.activeRadius)));",
+                  "  private updateStreaming(force = false, radiusOverride?: number): void {\n    if (!this.save || !this.renderer) return;\n    if (radiusOverride === undefined) this.streamWarmupToken += 1;\n    const exposure = this.tuning.exposureOverride ?? calculateExposureDay(this.save.exposure); const worldDay = this.tuning.worldDayOverride ?? calculateWorldDay(Date.now()); const desired = new Set<string>(); const targetRadius = Math.max(1, Math.min(4, Math.round(this.tuning.activeRadius))); const radius = Math.max(1, Math.min(targetRadius, radiusOverride ?? targetRadius));",
+              ),
+              (
+                  "    this.refreshRegionExtent(); this.refreshLightField(); this.notifyRegionEntry();\n  }\n\n  private notifyRegionEntry(): void {",
+                  "    this.refreshRegionExtent(); this.refreshLightField(); this.notifyRegionEntry();\n  }\n\n  private scheduleStreamingWarmup(): void {\n    const targetRadius = Math.max(1, Math.min(4, Math.round(this.tuning.activeRadius)));\n    if (targetRadius <= 2) return;\n    const token = ++this.streamWarmupToken;\n    // Two animation frames guarantee one painted, responsive radius-2 world before\n    // the fog-hidden outer cache ring is built. Movement/tuning changes invalidate\n    // the token and fall back to the normal immediate streaming path.\n    requestAnimationFrame(() => requestAnimationFrame(() => {\n      if (token !== this.streamWarmupToken || !this.started || !this.save || !this.renderer) return;\n      this.updateStreaming(false, targetRadius);\n    }));\n  }\n\n  private notifyRegionEntry(): void {",
+              ),
+          ]
+
+          for old, new in replacements:
+              if old not in text:
+                  raise SystemExit(f'Expected patch anchor missing:\n{old}')
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+          npm install --no-audit --no-fund
+          npm run typecheck
+          git rm .github/workflows/dev3-streaming-patch.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/app/ProjectNoclipGame.ts
+          git commit -m "perf: stage outer cache ring after first gameplay frame"
+          git push origin HEAD:agent/dev3-startup-streaming
