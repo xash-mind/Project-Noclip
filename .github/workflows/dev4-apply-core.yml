@@ -1,0 +1,253 @@
+name: Apply dev4 coherence core
+on:
+  workflow_dispatch:
+  push:
+    branches: [agent/dev4-world-coherence]
+    paths: ['.github/workflows/dev4-apply-core.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/dev4-world-coherence
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply core solver integration and renderer fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'anchor missing in {path}: {old[:120]!r}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # gen3: use one connectivity-first substrate, then continuous Region modifiers.
+          replace('src/world/gen3.ts',
+              "import { stableId, unitFloat } from './hash.js';\n",
+              "import { stableId, unitFloat } from './hash.js';\nimport { generateCoherentGen3Architecture, sampleGen3RegionInfluence } from './gen3Architecture.js';\n")
+          replace('src/world/gen3.ts',
+          """  if (environment.regionId === 'arch-rooms') {
+              addArchArchitecture(seed, cellX, cellZ, environment, walls);
+              materialIds.push('arch-pale-wallpaper');
+              conditionIds.push('deep-wet-carpet');
+            } else {
+              addOrdinaryArchitecture(seed, cellX, cellZ, environment, walls);
+              if (environment.regionId === 'pillar-field') {
+                addPillars(seed, cellX, cellZ, environment, props);
+                conditionIds.push('shallow-dry-carpet');
+              } else {
+                addOccasionalOrdinaryPillar(seed, cellX, cellZ, environment, props);
+                conditionIds.push('damp-carpet');
+              }
+            }
+          """,
+          """  const architecture = generateCoherentGen3Architecture({ seed, cellX, cellZ, worldDay, exposure, tuning });
+            walls.push(...architecture.walls);
+            props.push(...architecture.props);
+            const centerInfluence = sampleGen3RegionInfluence(seed, cellX * CELL_SIZE, cellZ * CELL_SIZE, worldDay, exposure, tuning);
+            if (walls.some((candidate) => candidate.materialId === 'arch-pale-wallpaper')) materialIds.push('arch-pale-wallpaper');
+            if (centerInfluence.arch > 0.46 && centerInfluence.arch >= centerInfluence.pillar) conditionIds.push('deep-wet-carpet');
+            else if (centerInfluence.pillar > 0.38) conditionIds.push('shallow-dry-carpet');
+            else conditionIds.push('damp-carpet');
+          """)
+          replace('src/world/gen3.ts',
+          """  const cluster = environment.regionId === 'ordinary-level-0' || tuning.carverOverride === 'floor-hole-cluster'
+              ? holeClusterForCell(seed, cellX, cellZ, worldDay, exposure, tuning)
+              : undefined;
+          """,
+          """  const cluster = holeClusterForCell(seed, cellX, cellZ, worldDay, exposure, tuning);
+          """)
+          replace('src/world/gen3.ts',
+              "    `b${Math.round(environment.blackoutStrength * 4)}`\n",
+              "    `b${Math.round(environment.blackoutStrength * 4)}`,\n    `a${architecture.archDividerIds.length}`,\n    `pi${architecture.pillarCount}`\n")
+
+          # generator: Region labels stay descriptive; architecture/lighting/stability are no longer Cell-zone replacements.
+          replace('src/world/generator.ts',
+              "import { generateGen3Layout, sampleGen3Environment } from './gen3.js';\n",
+              "import { generateGen3Layout, sampleGen3Environment } from './gen3.js';\nimport { sampleGen3RegionInfluence } from './gen3Architecture.js';\n")
+          replace('src/world/generator.ts',
+              "  let spatialProfile: CellDescriptor['spatialProfile'] = environment.regionId === 'pillar-field' ? 'pillar-expanse' : 'standard';\n",
+              "  const centerInfluence = sampleGen3RegionInfluence(seed, worldX, worldZ, worldDay, exposure, tuning);\n  let spatialProfile: CellDescriptor['spatialProfile'] = centerInfluence.deepPillar > 0.72 ? 'pillar-expanse' : 'standard';\n")
+          replace('src/world/generator.ts',
+              "  const lightingZone = manilaRoom ? 'manila' : zoneId;\n",
+              "  const lightingZone = manilaRoom ? 'manila' : 'baseline';\n")
+          replace('src/world/generator.ts',
+          """  const stability = manilaRoom
+              ? ZONE_PROFILES.manila.stability
+              : environment.regionId === 'arch-rooms'
+                ? 'stable'
+                : 'disorienting';
+          """,
+          """  const intentionalIrregularity = !manilaRoom
+            && environment.fields.abnormality > 0.84
+            && environment.fields.stability < 0.3
+            && unitFloat(`${seed}:gen3-v4:intentional-irregularity:${x}:${z}`) < 0.12;
+          const stability = manilaRoom
+            ? ZONE_PROFILES.manila.stability
+            : intentionalIrregularity
+              ? 'disorienting'
+              : centerInfluence.arch > 0.68
+                ? 'stable'
+                : 'semi-stable';
+          """)
+          replace('src/world/generator.ts',
+              "    hallucinationAnchor: !manilaRoom && stability === 'disorienting' && unitFloat(`${seed}:gen3-hallucination:${x}:${z}`) < 0.024\n",
+              "    hallucinationAnchor: !manilaRoom && intentionalIrregularity && unitFloat(`${seed}:gen3-v4:hallucination:${x}:${z}`) < 0.14\n")
+
+          # renderer material API: stable world-space UV phase and exact solved skirting spans.
+          replace('src/renderer/support.ts',
+              "export function makeMaterial(diffuse: [number, number, number], texture?: pc.Texture, tiling: [number, number] = [1, 1], emissive?: [number, number, number], emissiveIntensity = 1): pc.StandardMaterial {\n",
+              "export function makeMaterial(diffuse: [number, number, number], texture?: pc.Texture, tiling: [number, number] = [1, 1], emissive?: [number, number, number], emissiveIntensity = 1, uvOffset: [number, number] = [0, 0]): pc.StandardMaterial {\n")
+          replace('src/renderer/support.ts',
+              "  if (texture) { result.diffuseMap = texture; result.diffuseMapTiling = new pc.Vec2(tiling[0], tiling[1]); }\n",
+              "  if (texture) { result.diffuseMap = texture; result.diffuseMapTiling = new pc.Vec2(tiling[0], tiling[1]); result.diffuseMapOffset = new pc.Vec2(uvOffset[0], uvOffset[1]); }\n")
+
+          replace('src/renderer/cellBuilder.ts',
+              "export type MaterialFactory = (key: string, diffuse: [number, number, number], textureKind?: TextureKind, variant?: number, tiling?: [number, number], emissive?: [number, number, number], emissiveIntensity?: number) => pc.StandardMaterial;\n",
+              "export type MaterialFactory = (key: string, diffuse: [number, number, number], textureKind?: TextureKind, variant?: number, tiling?: [number, number], emissive?: [number, number, number], emissiveIntensity?: number, uvOffset?: [number, number]) => pc.StandardMaterial;\n")
+          replace('src/renderer/cellBuilder.ts',
+          """    const profile = descriptor.world.structureIds.includes('manila-room')
+              ? ZONE_PROFILES.manila
+              : legacyExitFoyer
+                ? ZONE_PROFILES['exit-threshold']
+                : ZONE_PROFILES[descriptor.address.zoneId];
+            const gen3 = descriptor.world.generationVersion === 'gen3-v1';
+          """,
+          """    const gen3 = descriptor.world.generationVersion === 'gen3-v1';
+            const profile = descriptor.world.structureIds.includes('manila-room')
+              ? ZONE_PROFILES.manila
+              : legacyExitFoyer
+                ? ZONE_PROFILES['exit-threshold']
+                : gen3
+                  ? ZONE_PROFILES.baseline
+                  : ZONE_PROFILES[descriptor.address.zoneId];
+          """)
+          replace('src/renderer/cellBuilder.ts',
+          """      const wallLength = Math.max(wallSpec.sx, wallSpec.sz);
+              const wallRepeats = gen3 ? Math.max(1, Math.round(wallLength / 2.6)) : Math.max(1, wallLength / 2.6);
+              const wallMat = legacyExitFoyer
+          """,
+          """      const wallLength = Math.max(wallSpec.sx, wallSpec.sz);
+              const wallRepeats = Math.max(1, wallLength / 2.6);
+              const longAxisIsX = wallSpec.orientation === 'z';
+              const worldStart = longAxisIsX
+                ? descriptor.address.cellX * CELL_SIZE + wallSpec.cx - wallSpec.sx / 2
+                : descriptor.address.cellZ * CELL_SIZE + wallSpec.cz - wallSpec.sz / 2;
+              const phase = ((worldStart / 2.6) % 1 + 1) % 1;
+              const wallMat = legacyExitFoyer
+          """)
+          replace('src/renderer/cellBuilder.ts',
+          """          'wall', wallSpec.materialVariant ?? descriptor.variant % 4, [wallRepeats, 1]
+                );
+          """,
+          """          'wall', wallSpec.materialVariant ?? descriptor.variant % 4, [wallRepeats, 1], undefined, 1, gen3 ? [phase, 0] : [0, 0]
+                );
+          """)
+          replace('src/renderer/cellBuilder.ts',
+              "        this.box(`${wallSpec.id}:skirting`, root, [wallSpec.cx, 0.12, wallSpec.cz], [horizontal ? wallSpec.sx : wallSpec.sx + 0.035, 0.23, horizontal ? wallSpec.sz + 0.035 : wallSpec.sz], trimMat);\n",
+              "        this.box(`${wallSpec.id}:skirting`, root, [wallSpec.cx, 0.115, wallSpec.cz], [horizontal ? wallSpec.sx : wallSpec.sx + 0.012, 0.22, horizontal ? wallSpec.sz + 0.012 : wallSpec.sz], trimMat);\n")
+          replace('src/renderer/cellBuilder.ts',
+              "      : descriptor.address.zoneId === 'pillar'\n",
+              "      : descriptor.world.generationVersion === 'gen2' && descriptor.address.zoneId === 'pillar'\n")
+          replace('src/renderer/cellBuilder.ts',
+              "    this.addPropGeometry(root, prop, ZONE_PROFILES[descriptor.address.zoneId]);\n",
+              "    this.addPropGeometry(root, prop, descriptor.world.generationVersion === 'gen3-v1' ? ZONE_PROFILES.baseline : ZONE_PROFILES[descriptor.address.zoneId]);\n")
+
+          replace('src/renderer/WorldRenderer.ts',
+              "  private getMaterial(key: string, diffuse: [number, number, number], textureKind?: TextureKind, variant = 0, tiling: [number, number] = [1, 1], emissive?: [number, number, number], emissiveIntensity = 1): pc.StandardMaterial {\n    const fullKey = `${key}:${variant}:${tiling.join(',')}:${emissiveIntensity}`;\n",
+              "  private getMaterial(key: string, diffuse: [number, number, number], textureKind?: TextureKind, variant = 0, tiling: [number, number] = [1, 1], emissive?: [number, number, number], emissiveIntensity = 1, uvOffset: [number, number] = [0, 0]): pc.StandardMaterial {\n    const fullKey = `${key}:${variant}:${tiling.join(',')}:${emissiveIntensity}:${uvOffset.join(',')}`;\n")
+          replace('src/renderer/WorldRenderer.ts',
+              "    const created = makeMaterial(diffuse, textureKind ? this.texture(textureKind, variant) : undefined, tiling, emissive, emissiveIntensity);\n",
+              "    const created = makeMaterial(diffuse, textureKind ? this.texture(textureKind, variant) : undefined, tiling, emissive, emissiveIntensity, uvOffset);\n")
+          replace('src/renderer/WorldRenderer.ts',
+              "    const profile = ZONE_PROFILES[descriptor.address.zoneId];\n    for (const group of descriptor.lightGroups) {\n",
+              "    const profile = descriptor.world.generationVersion === 'gen3-v1' ? ZONE_PROFILES.baseline : ZONE_PROFILES[descriptor.address.zoneId];\n    for (const group of descriptor.lightGroups) {\n")
+          replace('src/renderer/WorldRenderer.ts',
+              "  spatialFixtureLights(playerX: number, playerZ: number, elapsedSeconds: number, reducedFlicker: boolean, limit = 4): SpatialFixtureLight[] {\n    return selectSpatialFixtureLights(this.lightSources(), playerX, playerZ, elapsedSeconds, reducedFlicker, limit);\n  }\n",
+              "  spatialFixtureLights(playerX: number, playerZ: number, elapsedSeconds: number, reducedFlicker: boolean, limit = 4, previousIds: readonly string[] = []): SpatialFixtureLight[] {\n    return selectSpatialFixtureLights(this.lightSources(), playerX, playerZ, elapsedSeconds, reducedFlicker, limit, previousIds);\n  }\n")
+
+          # Lighting: normal-first failure budget + stable hysteretic fixture ownership.
+          replace('src/world/lighting.ts', "export const BASELINE_OFF_CHANCE = 0.002;\nexport const BASELINE_FLICKER_CHANCE = 0.018;\n",
+              "export const BASELINE_OFF_CHANCE = 0.0005;\nexport const BASELINE_FLICKER_CHANCE = 0.006;\nconst FIXTURE_LIGHT_ACQUIRE_RADIUS = 21.5;\nconst FIXTURE_LIGHT_RELEASE_RADIUS = 27.5;\n")
+          old_start = "export function selectSpatialFixtureLights(\n"
+          p = Path('src/world/lighting.ts')
+          text = p.read_text(encoding='utf-8')
+          start = text.index(old_start)
+          end = text.index("\nexport function validateLightClearance", start)
+          new_fn = '''export function selectSpatialFixtureLights(
+            sources: readonly LightFieldSource[],
+            playerX: number,
+            playerZ: number,
+            elapsedSeconds: number,
+            reducedFlicker: boolean,
+            limit = 4,
+            previousIds: readonly string[] = []
+          ): SpatialFixtureLight[] {
+            const candidates = new Map<string, SpatialFixtureLight>();
+            for (const source of sources) {
+              if (source.group.state === 'off') continue;
+              const pulse = lightFlickerValue(source.group, elapsedSeconds, reducedFlicker);
+              for (let index = 0; index < source.group.fixtures.length; index += 1) {
+                const fixture = source.group.fixtures[index]!;
+                const worldX = source.cellX * CELL_SIZE + fixture.x;
+                const worldZ = source.cellZ * CELL_SIZE + fixture.z;
+                const distance = Math.hypot(worldX - playerX, worldZ - playerZ);
+                if (distance > FIXTURE_LIGHT_RELEASE_RADIUS) continue;
+                const id = `${source.group.id}:${index}`;
+                candidates.set(id, {
+                  id,
+                  worldX, worldY: fixture.y - 0.18, worldZ, distance,
+                  intensity: source.group.intensity * pulse * 0.82,
+                  temperature: source.group.temperature
+                });
+              }
+            }
+            const selected: SpatialFixtureLight[] = [];
+            const selectedIds = new Set<string>();
+            for (const id of previousIds) {
+              const candidate = candidates.get(id);
+              if (!candidate || selected.length >= Math.max(0, limit)) continue;
+              selected.push(candidate); selectedIds.add(id);
+            }
+            const available = [...candidates.values()]
+              .filter((candidate) => candidate.distance <= FIXTURE_LIGHT_ACQUIRE_RADIUS && !selectedIds.has(candidate.id))
+              .sort((left, right) => left.distance - right.distance || left.id.localeCompare(right.id));
+            for (const candidate of available) {
+              if (selected.length >= Math.max(0, limit)) break;
+              selected.push(candidate); selectedIds.add(candidate.id);
+            }
+            return selected;
+          }
+          '''
+          p.write_text(text[:start] + new_fn + text[end:], encoding='utf-8')
+
+          # Game retains fixture IDs between light-field ticks so nearest-order swaps cannot steal slots.
+          replace('src/app/ProjectNoclipGame.ts',
+              "  private fixtureLights: pc.Entity[] = [];\n",
+              "  private fixtureLights: pc.Entity[] = [];\n  private fixtureLightSourceIds: string[] = [];\n")
+          replace('src/app/ProjectNoclipGame.ts',
+              "    this.lightField = { ...EMPTY_LIGHT_FIELD }; this.journeyElapsed = 0; this.lightFieldAccumulator = 0; this.regionExtent = undefined; this.regionExtentKey = '';\n",
+              "    this.lightField = { ...EMPTY_LIGHT_FIELD }; this.journeyElapsed = 0; this.lightFieldAccumulator = 0; this.regionExtent = undefined; this.regionExtentKey = ''; this.fixtureLightSourceIds = [];\n")
+          replace('src/app/ProjectNoclipGame.ts',
+              "    const spatial = this.renderer.spatialFixtureLights(position.x, position.z, this.journeyElapsed, this.save.settings.reducedFlicker, this.fixtureLights.length);\n",
+              "    const spatial = this.renderer.spatialFixtureLights(position.x, position.z, this.journeyElapsed, this.save.settings.reducedFlicker, this.fixtureLights.length, this.fixtureLightSourceIds);\n    this.fixtureLightSourceIds = spatial.map((source) => source.id);\n")
+
+          Path('.github/workflows/dev4-apply-core.yml').unlink()
+          PY
+          npm install --no-audit --no-fund
+          npm run typecheck
+          git config user.name "xash-mind"
+          git config user.email "sashreeksagar5@gmail.com"
+          git add src .github/workflows/dev4-apply-core.yml
+          git commit -m "feat: rebuild Gen3 around world coherence"
+          git push origin HEAD:agent/dev4-world-coherence
