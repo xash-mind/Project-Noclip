@@ -86,11 +86,11 @@ function regionInfluenceFromLocal(
   const geography = sampleWorldGeography(seed, worldX, worldZ);
   const pillar = unlocked(worldDay, exposure, 3, 0.6, tuning) ? strength(geography.pillarAffinity, 0.54, 0.8) : 0;
   const arch = unlocked(worldDay, exposure, 3, 0.6, tuning) ? strength(geography.archAffinity, 0.56, 0.8) : 0;
-  const deepPillar = pillar
-    * strength(pillar, 0.82, 0.98)
-    * strength(local.openness, 0.66, 0.9)
-    * strength(local.regularity, 0.68, 0.9)
-    * strength(local.columnPressure, 0.62, 0.88);
+  // Deep Pillar territory is a rare continuous extreme inside an otherwise mixed
+  // Pillar Region. A smooth combined potential creates coherent, genuinely large
+  // deep cores while keeping them a small minority of total Pillar traversal.
+  const deepPotential = local.openness * 0.45 + local.regularity * 0.35 + local.columnPressure * 0.2;
+  const deepPillar = strength(pillar, 0.62, 0.9) * strength(deepPotential, 0.52, 0.72);
   return { pillar, arch, deepPillar: clamp01(deepPillar) };
 }
 
@@ -183,7 +183,7 @@ function baseKeepChance(fields: Fields, axis: 'x' | 'z', influence: Gen3RegionIn
   const rareLargeSpace = strength(fields.openness, 0.78, 0.94) * strength(fields.roomScale, 0.72, 0.92) * 0.32;
   const pressure = fields.partitionPressure * 0.16;
   const flow = (fields.axisFlow - 0.5) * (axis === 'z' ? 0.08 : -0.08);
-  const pillarSuppression = influence.pillar * 0.12 + influence.deepPillar * 0.5;
+  const pillarSuppression = influence.pillar * 0.12 + influence.deepPillar * 0.72;
   const archOrder = influence.arch * fields.regularity * 0.05;
   return clamp01(0.76 + pressure - ordinaryMerge - rareLargeSpace + flow + archOrder - pillarSuppression);
 }
@@ -382,10 +382,10 @@ function candidateRanges(seed: string, cellX: number, cellZ: number): { minX: nu
   const centerZ = cellZ * CELL_SIZE;
   const padding = LINE_JITTER + WALL_THICKNESS;
   return {
-    minX: Math.floor((centerX - CELL_SIZE / 2 - padding) / SUBSTRATE_GRID) - 1,
-    maxX: Math.ceil((centerX + CELL_SIZE / 2 + padding) / SUBSTRATE_GRID) + 1,
-    minZ: Math.floor((centerZ - CELL_SIZE / 2 - padding) / SUBSTRATE_GRID) - 1,
-    maxZ: Math.ceil((centerZ + CELL_SIZE / 2 + padding) / SUBSTRATE_GRID) + 1
+    minX: Math.floor((centerX - CELL_SIZE / 2 - padding) / SUBSTRATE_GRID),
+    maxX: Math.ceil((centerX + CELL_SIZE / 2 + padding) / SUBSTRATE_GRID),
+    minZ: Math.floor((centerZ - CELL_SIZE / 2 - padding) / SUBSTRATE_GRID),
+    maxZ: Math.ceil((centerZ + CELL_SIZE / 2 + padding) / SUBSTRATE_GRID)
   };
 }
 
