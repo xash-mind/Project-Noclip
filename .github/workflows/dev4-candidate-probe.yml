@@ -1,8 +1,5 @@
 name: Probe dev4 coherence candidate
-on:
-  push:
-    branches: [agent/dev4-world-coherence]
-    paths: ['.github/workflows/dev4-candidate-probe.yml']
+on: [push]
 permissions:
   contents: read
 jobs:
