@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
@@ -28,7 +29,7 @@ def wait_for(driver: webdriver.Chrome, predicate: Callable[[webdriver.Chrome], A
 def build_driver() -> webdriver.Chrome:
     options = webdriver.ChromeOptions()
     options.add_argument("--headless=new")
-    options.add_argument("--window-size=1600,1000")
+    options.add_argument("--window-size=1200,720")
     options.add_argument("--use-angle=swiftshader")
     options.add_argument("--enable-webgl")
     options.add_argument("--ignore-gpu-blocklist")
@@ -40,7 +41,7 @@ def build_driver() -> webdriver.Chrome:
         options.binary_location = binary
     driver = webdriver.Chrome(options=options)
     driver.set_page_load_timeout(60)
-    driver.set_script_timeout(25)
+    driver.set_script_timeout(40)
     return driver
 
 
@@ -89,19 +90,20 @@ def toggle_lab(driver: webdriver.Chrome) -> None:
     driver.execute_script("window.dispatchEvent(new KeyboardEvent('keydown',{key:'`',code:'Backquote',bubbles:true}));")
 
 
-def apply_advanced_tuning(driver: webdriver.Chrome) -> None:
+def apply_capture_tuning(driver: webdriver.Chrome, advanced: bool) -> None:
     toggle_lab(driver)
     wait_for(driver, lambda current: 'visible' in current.find_element(By.CSS_SELECTOR, '[data-ui="lab"]').get_attribute('class').split(), message="World Lab open")
     driver.execute_script("""
       const set=(selector,value)=>{const element=document.querySelector(selector);if(!element)return false;if(element.type==='checkbox')element.checked=value;else element.value=value;element.dispatchEvent(new Event('change',{bubbles:true}));return true;};
       return {
-        bypass:set('[data-lab="bypass"]',true),
+        bypass:set('[data-lab="bypass"]',advanced),
+        radius:set('[data-lab="radius"]','1'),
         condition:set('[data-lab="condition"]','clear'),
         carver:set('[data-lab="carver"]','none'),
         structure:set('[data-lab="structure"]','none')
       };
-    """)
-    time.sleep(2.5)
+    """, advanced)
+    time.sleep(1.5)
     toggle_lab(driver)
     wait_for(driver, lambda current: 'visible' not in current.find_element(By.CSS_SELECTOR, '[data-ui="lab"]').get_attribute('class').split(), message="World Lab close")
 
@@ -113,6 +115,36 @@ def scene_only(driver: webdriver.Chrome) -> None:
       style.textContent='[data-ui="hud"] > :not(canvas), .pause-overlay, [data-ui="version-indicator"] { opacity:0 !important; }';
       document.head.appendChild(style);
     """)
+
+
+def capture_canvas(driver: webdriver.Chrome, path: Path) -> None:
+    value = driver.execute_async_script("""
+      const done = arguments[0];
+      const canvas = document.querySelector('#game-canvas');
+      if (!canvas) { done({error:'missing #game-canvas'}); return; }
+      requestAnimationFrame(() => {
+        try {
+          canvas.toBlob((blob) => {
+            if (!blob) { done({error:'canvas.toBlob returned null'}); return; }
+            const reader = new FileReader();
+            reader.onerror = () => done({error:String(reader.error)});
+            reader.onload = () => done(String(reader.result));
+            reader.readAsDataURL(blob);
+          }, 'image/png');
+        } catch (error) { done({error:String(error)}); }
+      });
+    """)
+    if isinstance(value, dict):
+        raise AssertionError(value.get('error', value))
+    if not isinstance(value, str) or ',' not in value:
+        raise AssertionError('WebGL canvas capture did not return a PNG data URL')
+    header, encoded = value.split(',', 1)
+    if 'image/png' not in header:
+        raise AssertionError(f'Unexpected canvas capture header: {header}')
+    data = base64.b64decode(encoded)
+    if len(data) < 10_000:
+        raise AssertionError(f'WebGL canvas capture was unexpectedly small: {len(data)} bytes')
+    path.write_bytes(data)
 
 
 def severe_errors(driver: webdriver.Chrome) -> list[dict[str, Any]]:
@@ -140,31 +172,30 @@ def main() -> None:
             save['savedAt']=int(time.time()*1000)
             write_save(driver,save)
             launch_saved(driver)
-            if target['kind']=='advanced':
-                apply_advanced_tuning(driver)
-            time.sleep(3)
+            apply_capture_tuning(driver, target['kind']=='advanced')
+            time.sleep(1.5)
             scene_only(driver)
             file_name=f"{name}.png"
-            assert driver.save_screenshot(str(ARTIFACT_DIR/file_name))
+            capture_canvas(driver, ARTIFACT_DIR/file_name)
             report['captures'][name]={"file":file_name,"position":save['position'],"target":target.get('lookAt'),"size":driver.get_window_size()}
             errors=severe_errors(driver)
             if errors: report['browserErrors'].extend(errors)
 
         # Movement lighting evidence: keep one browser/renderer session alive while crossing fixture-order boundaries.
         save=dict(base_save); save['position']={"x":0,"y":base_save['position']['y'],"z":0,"yaw":0,"pitch":0}; save['savedAt']=int(time.time()*1000)
-        write_save(driver,save); launch_saved(driver); time.sleep(2)
+        write_save(driver,save); launch_saved(driver); apply_capture_tuning(driver, False); time.sleep(1.5)
         resume=driver.find_element(By.CSS_SELECTOR,'[data-action="resume"]')
         if resume.is_displayed(): resume.click()
         try:
             wait_for(driver, lambda current: current.execute_script("return document.pointerLockElement===document.querySelector('#game-canvas')"), timeout=7, message="pointer lock")
         except AssertionError:
             report['lightingWarning']='Headless Chrome did not grant pointer lock; deterministic movement lighting regression remains authoritative.'
-        scene_only(driver); driver.save_screenshot(str(ARTIFACT_DIR/'lighting-before.png'))
+        scene_only(driver); capture_canvas(driver, ARTIFACT_DIR/'lighting-before.png')
         driver.execute_script("window.dispatchEvent(new KeyboardEvent('keydown',{key:'w',code:'KeyW',bubbles:true}));")
         time.sleep(2.0)
         driver.execute_script("window.dispatchEvent(new KeyboardEvent('keyup',{key:'w',code:'KeyW',bubbles:true}));")
         time.sleep(1.5)
-        driver.save_screenshot(str(ARTIFACT_DIR/'lighting-after.png'))
+        capture_canvas(driver, ARTIFACT_DIR/'lighting-after.png')
         moved=read_save(driver)
         report['lightingMovement']={"before":save['position'],"after":moved.get('position') if moved else None}
         report['browserErrors'].extend(severe_errors(driver))

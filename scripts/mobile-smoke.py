@@ -155,10 +155,14 @@ def touch_sprint_move_until(
         wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="touch-sprint"]').get_attribute("aria-pressed") == "false", timeout=3, message="Sprint released state")
 
 
-def touch_drag(driver: webdriver.Chrome, selector: str, dx: float, dy: float, steps: int = 1) -> None:
+def touch_drag(driver: webdriver.Chrome, selector: str, dx: float, dy: float, steps: int = 6) -> None:
     point = center_point(driver, selector, 2)
     x = float(point["x"]); y = float(point["y"])
     touch_event(driver, "touchStart", [point])
+    # A real finger crosses intermediate positions; doing the same prevents
+    # hosted Chrome from coalescing one large synthetic jump before the
+    # PointerEvent capture path sees it. Total displacement is unchanged.
+    time.sleep(0.06)
     for index in range(1, steps + 1):
         touch_event(driver, "touchMove", [{**point, "x": x + dx * index / steps, "y": y + dy * index / steps}])
         time.sleep(0.04)
