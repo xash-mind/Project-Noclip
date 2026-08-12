@@ -230,7 +230,7 @@ export interface WorldTuning {
 }
 
 export const DEFAULT_TUNING: WorldTuning = {
-  activeRadius: 3,
+  activeRadius: 2,
   extraOpeningChance: 0.16,
   lootChance: 0.085,
   shiftChance: 0.18,
