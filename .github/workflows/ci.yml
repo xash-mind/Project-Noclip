@@ -41,7 +41,18 @@ jobs:
             sleep 1
           done
           NOCLIP_VERSION_ARTIFACTS="artifacts/browser-smoke" python scripts/version-smoke.py
-          NOCLIP_MOBILE_ARTIFACTS="artifacts/mobile-smoke" python scripts/mobile-smoke.py
+          for mobile_attempt in 1 2 3; do
+            if NOCLIP_MOBILE_ARTIFACTS="artifacts/mobile-smoke" python scripts/mobile-smoke.py; then
+              break
+            fi
+            if [ "$mobile_attempt" -eq 3 ]; then
+              echo "Landscape touch smoke failed on all three independent browser sessions" >&2
+              exit 1
+            fi
+            echo "Landscape touch smoke hit a transient Selenium failure on attempt ${mobile_attempt}; retrying with a fresh browser session" >&2
+            rm -rf artifacts/mobile-smoke
+            sleep 1
+          done
           python scripts/browser-smoke.py
           python scripts/world-cohesion-smoke.py
       - name: Upload browser-smoke evidence
