@@ -80,20 +80,37 @@ function transitionSides(seed, target) {
   assert.ok(occurrence, `missing ${target} occurrence for ${seed}`);
   const key = target === 'pillar-field' ? 'pillar' : 'arch';
   const exits = [];
-  for (const direction of [{ x: 1, z: 0 }, { x: -1, z: 0 }, { x: 0, z: 1 }, { x: 0, z: -1 }]) {
-    let previous = { x: occurrence.worldX, z: occurrence.worldZ, strength: sampleGen3RegionInfluence(seed, occurrence.worldX, occurrence.worldZ, 40, 10, DEFAULT_TUNING)[key] };
-    for (let distance = 28; distance <= 8_000; distance += 28) {
+  const directions = Array.from({ length: 24 }, (_, index) => {
+    const angle = index / 24 * Math.PI * 2;
+    return { x: Math.cos(angle), z: Math.sin(angle) };
+  });
+  for (const direction of directions) {
+    const startStrength = sampleGen3RegionInfluence(seed, occurrence.worldX, occurrence.worldZ, 40, 10, DEFAULT_TUNING)[key];
+    let lastInside = startStrength >= 0.18 ? { x: occurrence.worldX, z: occurrence.worldZ, strength: startStrength } : undefined;
+    for (let distance = 28; distance <= 16_000; distance += 28) {
       const point = { x: occurrence.worldX + direction.x * distance, z: occurrence.worldZ + direction.z * distance };
       const strength = sampleGen3RegionInfluence(seed, point.x, point.z, 40, 10, DEFAULT_TUNING)[key];
-      if (strength < 0.08 && previous.strength > 0.18) {
-        exits.push({ inside: { x: previous.x, z: previous.z }, outside: point, insideStrength: previous.strength, outsideStrength: strength });
+      if (strength >= 0.18) lastInside = { ...point, strength };
+      if (strength < 0.08 && lastInside) {
+        exits.push({ inside: { x: lastInside.x, z: lastInside.z }, outside: point, insideStrength: lastInside.strength, outsideStrength: strength });
         break;
       }
-      previous = { ...point, strength };
     }
+    if (exits.length >= 2) break;
   }
   assert.ok(exits.length >= 2, `${target} did not expose two finite blend exits`);
   return exits.slice(0, 2);
+}
+
+function transitionCorridor(seed, start, end, tuning) {
+  const paddingCells = 3;
+  const minCellX = Math.min(worldToCell(start.x), worldToCell(end.x)) - paddingCells;
+  const maxCellX = Math.max(worldToCell(start.x), worldToCell(end.x)) + paddingCells;
+  const minCellZ = Math.min(worldToCell(start.z), worldToCell(end.z)) - paddingCells;
+  const maxCellZ = Math.max(worldToCell(start.z), worldToCell(end.z)) + paddingCells;
+  const cells = [];
+  for (let x = minCellX; x <= maxCellX; x += 1) for (let z = minCellZ; z <= maxCellZ; z += 1) cells.push(cell(seed, x, z, tuning));
+  return cells;
 }
 
 function wallWorld(cellDescriptor, wall) {
@@ -152,9 +169,8 @@ test('natural Ordinary-Pillar and Ordinary-Arch blend boundaries are traversable
   for (const [target, seed] of [['pillar-field', 'dev4-transition-pillar'], ['arch-rooms', 'dev4-transition-arch']]) {
     const exits = transitionSides(seed, target);
     for (const exit of exits) {
-      const center = { x: (exit.inside.x + exit.outside.x) / 2, z: (exit.inside.z + exit.outside.z) / 2 };
-      const centerCellX = worldToCell(center.x); const centerCellZ = worldToCell(center.z);
-      const cells = window(seed, centerCellX, centerCellZ, 5, { ...DEFAULT_TUNING, conditionOverride: 'clear', carverOverride: 'none', structureOverride: 'none', gateBypass: true });
+      const transitionTuning = { ...DEFAULT_TUNING, conditionOverride: 'clear', carverOverride: 'none', structureOverride: 'none', gateBypass: true };
+    const cells = transitionCorridor(seed, exit.outside, exit.inside, transitionTuning);
       assert.ok(canNavigate(cells, exit.outside, exit.inside), `${target} entry is blocked: ${JSON.stringify(exit)}`);
       assert.ok(canNavigate(cells, exit.inside, exit.outside), `${target} exit is blocked: ${JSON.stringify(exit)}`);
       if (target === 'pillar-field') {

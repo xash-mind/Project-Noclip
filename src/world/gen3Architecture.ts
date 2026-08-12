@@ -13,10 +13,10 @@ import {
 
 const SUBSTRATE_GRID = 8.4;
 const LINE_JITTER = 1.4;
-const PILLAR_SPACING = 7.2;
+export const PILLAR_SPACING = 7.2;
 const ARCH_GROUP_SEGMENTS = 4;
 const ARCH_MIN_INFLUENCE = 0.36;
-const ARCH_IRREGULAR_CHANCE = 0.015;
+export const ARCH_IRREGULAR_CHANCE = 0.015;
 const PASSAGE_CLEARANCE = DOOR_WIDTH + 0.34;
 
 export const PILLAR_WIDTH_SCALE = 0.9;
@@ -541,8 +541,9 @@ export function gen3ArchDividerDiagnostic(options: {
   worldDay: number;
   exposure: number;
   tuning: WorldTuning;
-}): { id: string; bayWidth: number; bayCount: number; irregular: boolean; start: number; end: number } | undefined {
+}): { id: string; bayWidth: number; bayCount: number; irregular: boolean; symmetryDelta: number; start: number; end: number } | undefined {
   const spec = archDividerForGroup(options.seed, options.axis, options.lineIndex, options.groupIndex, options.worldDay, options.exposure, options.tuning);
   if (!spec) return undefined;
-  return { id: spec.id, bayWidth: spec.bayWidth, bayCount: spec.bayCount, irregular: spec.irregular, start: spec.start, end: spec.end };
+  const symmetryDelta = spec.irregular ? (unitFloat(`${options.seed}:gen3-v4:arch-divider:${spec.id}:asymmetry`) - 0.5) * 0.14 : 0;
+  return { id: spec.id, bayWidth: spec.bayWidth, bayCount: spec.bayCount, irregular: spec.irregular, symmetryDelta, start: spec.start, end: spec.end };
 }
