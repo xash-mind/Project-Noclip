@@ -253,7 +253,10 @@ export function sampleLightField(
 /**
  * Select a bounded set of real fixture positions for renderer lights. Unlike the
  * retired player-following omni, these sources illuminate continuously across
- * streaming Cell boundaries from their actual ceiling locations.
+ * streaming Cell boundaries from their actual ceiling locations. Source energy
+ * is deliberately independent of player distance; PlayCanvas owns physical
+ * falloff, while the 30 m selection radius only bounds renderer work outside
+ * the 23.5 m fixture-light range.
  */
 export function selectSpatialFixtureLights(
   sources: readonly LightFieldSource[],
@@ -273,11 +276,10 @@ export function selectSpatialFixtureLights(
       const worldZ = source.cellZ * CELL_SIZE + fixture.z;
       const distance = Math.hypot(worldX - playerX, worldZ - playerZ);
       if (distance > 30) continue;
-      const attenuation = Math.max(0, 1 - distance / 30);
       candidates.push({
         id: `${source.group.id}:${index}`,
         worldX, worldY: fixture.y - 0.18, worldZ, distance,
-        intensity: source.group.intensity * pulse * (0.42 + attenuation * 0.78),
+        intensity: source.group.intensity * pulse * 0.82,
         temperature: source.group.temperature
       });
     }
