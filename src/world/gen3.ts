@@ -646,6 +646,7 @@ if (walls.some((candidate) => candidate.materialId === 'arch-pale-wallpaper')) m
 if (centerInfluence.arch > 0.46 && centerInfluence.arch >= centerInfluence.pillar) conditionIds.push('deep-wet-carpet');
 else if (centerInfluence.pillar > 0.38) conditionIds.push('shallow-dry-carpet');
 else conditionIds.push('damp-carpet');
+if (environment.blackoutStrength >= 0.999 && !conditionIds.includes('blackout')) conditionIds.push('blackout');
 
   const cluster = holeClusterForCell(seed, cellX, cellZ, worldDay, exposure, tuning);
   if (cluster) {

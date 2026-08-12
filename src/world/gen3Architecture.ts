@@ -45,6 +45,7 @@ interface Fields {
   roomScale: number;
   regularity: number;
   connectivityPressure: number;
+  columnPressure: number;
 }
 
 interface RoomNode { x: number; z: number; }
@@ -69,6 +70,29 @@ function unlocked(worldDay: number, exposure: number, minimumWorldDay: number, m
   return tuning.gateBypass || (worldDay >= minimumWorldDay && exposure >= minimumExposure);
 }
 
+function regionInfluenceFromLocal(
+  seed: string,
+  worldX: number,
+  worldZ: number,
+  worldDay: number,
+  exposure: number,
+  tuning: WorldTuning,
+  local: Pick<Fields, 'openness' | 'regularity' | 'columnPressure'>
+): Gen3RegionInfluence {
+  if (tuning.regionOverride === 'ordinary-level-0') return { pillar: 0, arch: 0, deepPillar: 0 };
+  if (tuning.regionOverride === 'pillar-field') return { pillar: 0.8, arch: 0, deepPillar: 0 };
+  if (tuning.regionOverride === 'arch-rooms') return { pillar: 0, arch: 0.86, deepPillar: 0 };
+  const geography = sampleWorldGeography(seed, worldX, worldZ);
+  const pillar = unlocked(worldDay, exposure, 3, 0.6, tuning) ? strength(geography.pillarAffinity, 0.54, 0.8) : 0;
+  const arch = unlocked(worldDay, exposure, 3, 0.6, tuning) ? strength(geography.archAffinity, 0.56, 0.8) : 0;
+  const deepPillar = pillar
+    * strength(pillar, 0.82, 0.98)
+    * strength(local.openness, 0.66, 0.9)
+    * strength(local.regularity, 0.68, 0.9)
+    * strength(local.columnPressure, 0.62, 0.88);
+  return { pillar, arch, deepPillar: clamp01(deepPillar) };
+}
+
 export function sampleGen3RegionInfluence(
   seed: string,
   worldX: number,
@@ -80,17 +104,8 @@ export function sampleGen3RegionInfluence(
   if (tuning.regionOverride === 'ordinary-level-0') return { pillar: 0, arch: 0, deepPillar: 0 };
   if (tuning.regionOverride === 'pillar-field') return { pillar: 0.8, arch: 0, deepPillar: 0 };
   if (tuning.regionOverride === 'arch-rooms') return { pillar: 0, arch: 0.86, deepPillar: 0 };
-
-  const geography = sampleWorldGeography(seed, worldX, worldZ);
-  const pillar = unlocked(worldDay, exposure, 3, 0.6, tuning) ? strength(geography.pillarAffinity, 0.54, 0.8) : 0;
-  const arch = unlocked(worldDay, exposure, 3, 0.6, tuning) ? strength(geography.archAffinity, 0.56, 0.8) : 0;
   const local = sampleWorldFieldChannels(seed, worldX, worldZ, ['openness', 'regularity', 'columnPressure']);
-  const deepPillar = pillar
-    * strength(pillar, 0.82, 0.98)
-    * strength(local.openness, 0.66, 0.9)
-    * strength(local.regularity, 0.68, 0.9)
-    * strength(local.columnPressure, 0.62, 0.88);
-  return { pillar, arch, deepPillar: clamp01(deepPillar) };
+  return regionInfluenceFromLocal(seed, worldX, worldZ, worldDay, exposure, tuning, local);
 }
 
 function linePosition(seed: string, axis: 'x' | 'z', index: number): number {
@@ -139,7 +154,7 @@ function segmentMidpoint(seed: string, axis: 'x' | 'z', lineIndex: number, along
 }
 
 function sampleArchitectureFields(seed: string, x: number, z: number): Fields {
-  return sampleWorldFieldChannels(seed, x, z, ['openness', 'partitionPressure', 'axisFlow', 'roomScale', 'regularity', 'connectivityPressure']);
+  return sampleWorldFieldChannels(seed, x, z, ['openness', 'partitionPressure', 'axisFlow', 'roomScale', 'regularity', 'connectivityPressure', 'columnPressure']);
 }
 
 function passageForSegment(
@@ -163,12 +178,12 @@ function passageForSegment(
 }
 
 function baseKeepChance(fields: Fields, axis: 'x' | 'z', influence: Gen3RegionInfluence): number {
-  const roomMerge = fields.openness * 0.24 + fields.roomScale * 0.18;
-  const pressure = fields.partitionPressure * 0.34;
-  const flow = (fields.axisFlow - 0.5) * (axis === 'z' ? 0.16 : -0.16);
-  const pillarSuppression = influence.pillar * 0.14 + influence.deepPillar * 0.5;
-  const archOrder = influence.arch * fields.regularity * 0.06;
-  return clamp01(0.54 + pressure - roomMerge + flow + archOrder - pillarSuppression);
+  const roomMerge = fields.openness * 0.16 + fields.roomScale * 0.12;
+  const pressure = fields.partitionPressure * 0.2;
+  const flow = (fields.axisFlow - 0.5) * (axis === 'z' ? 0.1 : -0.1);
+  const pillarSuppression = influence.pillar * 0.12 + influence.deepPillar * 0.5;
+  const archOrder = influence.arch * fields.regularity * 0.05;
+  return clamp01(0.72 + pressure - roomMerge + flow + archOrder - pillarSuppression);
 }
 
 function segmentKept(
@@ -226,8 +241,8 @@ function pushClippedWall(
   const half = CELL_SIZE / 2;
   const centerX = cellX * CELL_SIZE;
   const centerZ = cellZ * CELL_SIZE;
-  const perpendicularCenter = axis === 'x' ? centerZ : centerX;
-  if (fixed < perpendicularCenter - half - WALL_THICKNESS / 2 || fixed > perpendicularCenter + half + WALL_THICKNESS / 2) return;
+  const perpendicularOwner = Math.floor((fixed + half) / CELL_SIZE);
+  if ((axis === 'x' ? cellZ : cellX) !== perpendicularOwner) return;
   const cellStart = (axis === 'x' ? centerX : centerZ) - half;
   const cellEnd = cellStart + CELL_SIZE;
   const clippedStart = Math.max(start, cellStart);
@@ -331,8 +346,6 @@ function addArchDivider(
 
   add('lower', spec.start, spec.end, 0.5, 1.0);
   add('header', spec.start, spec.end, 2.98, 0.44);
-  add('start-cap', spec.start, Math.min(spec.end, spec.start + 0.34), WALL_HEIGHT / 2, WALL_HEIGHT);
-  add('end-cap', Math.max(spec.start, spec.end - 0.34), spec.end, WALL_HEIGHT / 2, WALL_HEIGHT);
 
   const asymmetry = spec.irregular ? (unitFloat(`${seed}:gen3-v4:arch-divider:${spec.id}:asymmetry`) - 0.5) * 0.14 : 0;
   for (let bayIndex = 0; bayIndex < spec.bayCount; bayIndex += 1) {
@@ -345,11 +358,16 @@ function addArchDivider(
     const rightSide = side * (1 - asymmetry);
     const leftShoulder = shoulder * (1 + asymmetry);
     const rightShoulder = shoulder * (1 - asymmetry);
-    add(`bay:${bayIndex}:left-a`, bayStart, bayStart + leftSide, 2.08, 1.16);
-    add(`bay:${bayIndex}:right-a`, bayEnd - rightSide, bayEnd, 2.08, 1.16);
-    add(`bay:${bayIndex}:left-b`, bayStart + leftSide, bayStart + leftSide + leftShoulder, 2.48, 0.38);
-    add(`bay:${bayIndex}:right-b`, bayEnd - rightSide - rightShoulder, bayEnd - rightSide, 2.48, 0.38);
-    if (bayIndex > 0) add(`bay:${bayIndex}:pier`, bayStart, bayStart + 0.24, 1.84, 1.68);
+    if (bayIndex === 0) add(`bay:${bayIndex}:left-termination`, bayStart, bayStart + leftSide, WALL_HEIGHT / 2, WALL_HEIGHT);
+    else {
+      add(`bay:${bayIndex}:left-a`, bayStart, bayStart + leftSide, 2.08, 1.16);
+      add(`bay:${bayIndex}:left-b`, bayStart + leftSide, bayStart + leftSide + leftShoulder, 2.48, 0.38);
+    }
+    if (bayIndex === spec.bayCount - 1) add(`bay:${bayIndex}:right-termination`, bayEnd - rightSide, bayEnd, WALL_HEIGHT / 2, WALL_HEIGHT);
+    else {
+      add(`bay:${bayIndex}:right-a`, bayEnd - rightSide, bayEnd, 2.08, 1.16);
+      add(`bay:${bayIndex}:right-b`, bayEnd - rightSide - rightShoulder, bayEnd - rightSide, 2.48, 0.38);
+    }
   }
 }
 
@@ -376,12 +394,16 @@ function addSubstrate(
   archGroups: Map<string, ArchDividerSpec>
 ): void {
   const ranges = candidateRanges(seed, cellX, cellZ);
+  const dividerCache = new Map<string, ArchDividerSpec | null>();
   const process = (boundaryAxis: 'x' | 'z', lineIndex: number, alongIndex: number): void => {
     const midpoint = segmentMidpoint(seed, boundaryAxis, lineIndex, alongIndex);
     const fields = sampleArchitectureFields(seed, midpoint.x, midpoint.z);
-    const influence = sampleGen3RegionInfluence(seed, midpoint.x, midpoint.z, worldDay, exposure, tuning);
+    const influence = regionInfluenceFromLocal(seed, midpoint.x, midpoint.z, worldDay, exposure, tuning, fields);
     const runAxis: 'x' | 'z' = boundaryAxis === 'z' ? 'x' : 'z';
-    const divider = archDividerForSegment(seed, runAxis, lineIndex, alongIndex, worldDay, exposure, tuning);
+    const groupIndex = Math.floor(alongIndex / ARCH_GROUP_SEGMENTS);
+    const dividerKey = `${runAxis}:${lineIndex}:${groupIndex}`;
+    if (!dividerCache.has(dividerKey)) dividerCache.set(dividerKey, archDividerForGroup(seed, runAxis, lineIndex, groupIndex, worldDay, exposure, tuning) ?? null);
+    const divider = dividerCache.get(dividerKey) ?? undefined;
     if (divider) {
       archGroups.set(divider.id, divider);
       return;
@@ -418,8 +440,8 @@ function pillarIntersectsWall(localX: number, localZ: number, size: number, wall
 function nearReservedPassage(seed: string, worldX: number, worldZ: number): boolean {
   const approximateX = Math.round(worldX / SUBSTRATE_GRID);
   const approximateZ = Math.round(worldZ / SUBSTRATE_GRID);
-  for (let lineX = approximateX - 2; lineX <= approximateX + 2; lineX += 1) {
-    for (let alongZ = approximateZ - 2; alongZ <= approximateZ + 2; alongZ += 1) {
+  for (let lineX = approximateX - 1; lineX <= approximateX + 1; lineX += 1) {
+    for (let alongZ = approximateZ - 1; alongZ <= approximateZ + 1; alongZ += 1) {
       const midpoint = segmentMidpoint(seed, 'x', lineX, alongZ);
       const fields = sampleArchitectureFields(seed, midpoint.x, midpoint.z);
       const passage = passageForSegment(seed, 'x', lineX, alongZ, fields, midpoint.span);
@@ -427,8 +449,8 @@ function nearReservedPassage(seed: string, worldX: number, worldZ: number): bool
       if (Math.abs(worldX - midpoint.span.fixed) < 1.25 && Math.abs(worldZ - passage.center) < passage.width / 2 + 1.0) return true;
     }
   }
-  for (let lineZ = approximateZ - 2; lineZ <= approximateZ + 2; lineZ += 1) {
-    for (let alongX = approximateX - 2; alongX <= approximateX + 2; alongX += 1) {
+  for (let lineZ = approximateZ - 1; lineZ <= approximateZ + 1; lineZ += 1) {
+    for (let alongX = approximateX - 1; alongX <= approximateX + 1; alongX += 1) {
       const midpoint = segmentMidpoint(seed, 'z', lineZ, alongX);
       const fields = sampleArchitectureFields(seed, midpoint.x, midpoint.z);
       const passage = passageForSegment(seed, 'z', lineZ, alongX, fields, midpoint.span);
@@ -461,13 +483,14 @@ function addPillars(
       const worldZ = gridZ * PILLAR_SPACING + offsetZ;
       if (worldX < centerX - half + 0.75 || worldX > centerX + half - 0.75 || worldZ < centerZ - half + 0.75 || worldZ > centerZ + half - 0.75) continue;
       const influence = sampleGen3RegionInfluence(seed, worldX, worldZ, worldDay, exposure, tuning);
-      if (influence.pillar < 0.08) continue;
-      if (influence.deepPillar > 0.55) deepSamples += 1;
       const key = `${gridX}:${gridZ}`;
+      const ordinaryRare = influence.pillar < 0.08;
+      if (ordinaryRare && unitFloat(`${seed}:gen3-v4:ordinary-pillar:${key}`) > 0.018) continue;
+      if (influence.deepPillar > 0.55) deepSamples += 1;
       const rowBias = unitFloat(`${seed}:gen3-v4:pillar-row:${gridZ}`);
       const columnBias = unitFloat(`${seed}:gen3-v4:pillar-column:${gridX}`);
       const grouping = Math.max(rowBias, columnBias) * 0.18;
-      const keepChance = clamp01(0.04 + influence.pillar * 0.62 + influence.deepPillar * 0.3 + grouping);
+      const keepChance = ordinaryRare ? 0.8 : clamp01(0.04 + influence.pillar * 0.62 + influence.deepPillar * 0.3 + grouping);
       if (unitFloat(`${seed}:gen3-v4:pillar:${key}:keep`) > keepChance) continue;
       const size = (1.55 + unitFloat(`${seed}:gen3-pillar:${key}:size`) * 0.75) * PILLAR_WIDTH_SCALE;
       const localX = worldX - centerX;
