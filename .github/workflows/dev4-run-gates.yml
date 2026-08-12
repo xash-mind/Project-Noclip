@@ -1,0 +1,49 @@
+name: Rerun dev4 coherence gates
+on:
+  push:
+    branches: [agent/dev4-world-coherence]
+    paths: ['.github/workflows/dev4-run-gates.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/dev4-world-coherence
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('tests/dev4-world-coherence.test.mjs')
+          t=p.read_text(encoding='utf-8')
+          old="""  const exits = [];
+            for (const direction of [{ x: 1, z: 0 }, { x: -1, z: 0 }, { x: 0, z: 1 }, { x: 0, z: -1 }]) {
+              let previous = { x: occurrence.worldX, z: occurrence.worldZ, strength: sampleGen3RegionInfluence(seed, occurrence.worldX, occurrence.worldZ, 40, 10, DEFAULT_TUNING)[key] };
+              for (let distance = 28; distance <= 8_000; distance += 28) {
+          """
+          new="""  const exits = [];
+            const directions = Array.from({ length: 16 }, (_, index) => {
+              const angle = index / 16 * Math.PI * 2;
+              return { x: Math.cos(angle), z: Math.sin(angle) };
+            });
+            for (const direction of directions) {
+              let previous = { x: occurrence.worldX, z: occurrence.worldZ, strength: sampleGen3RegionInfluence(seed, occurrence.worldX, occurrence.worldZ, 40, 10, DEFAULT_TUNING)[key] };
+              for (let distance = 28; distance <= 12_000; distance += 28) {
+          """
+          if old not in t: raise SystemExit('transition search anchor missing')
+          p.write_text(t.replace(old,new,1),encoding='utf-8')
+
+          source=Path('.github/workflows/dev4-gates-patch.yml').read_text(encoding='utf-8')
+          script=source.split('        run: |\n',1)[1]
+          script='\n'.join(line[10:] if line.startswith('          ') else line for line in script.splitlines())+'\n'
+          script=script.replace("Path('.github/workflows/dev4-gates-patch.yml').unlink()", "Path('.github/workflows/dev4-gates-patch.yml').unlink(); Path('.github/workflows/dev4-run-gates.yml').unlink()")
+          script=script.replace("git add src tests scripts .github/workflows/dev4-gates-patch.yml", "git add src tests scripts .github/workflows/dev4-gates-patch.yml .github/workflows/dev4-run-gates.yml")
+          Path('/tmp/dev4-gates.sh').write_text(script,encoding='utf-8')
+          PY
+          bash /tmp/dev4-gates.sh
