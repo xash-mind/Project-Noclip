@@ -94,6 +94,7 @@ def apply_capture_tuning(driver: webdriver.Chrome, advanced: bool) -> None:
     toggle_lab(driver)
     wait_for(driver, lambda current: 'visible' in current.find_element(By.CSS_SELECTOR, '[data-ui="lab"]').get_attribute('class').split(), message="World Lab open")
     driver.execute_script("""
+      const advanced = Boolean(arguments[0]);
       const set=(selector,value)=>{const element=document.querySelector(selector);if(!element)return false;if(element.type==='checkbox')element.checked=value;else element.value=value;element.dispatchEvent(new Event('change',{bubbles:true}));return true;};
       return {
         bypass:set('[data-lab="bypass"]',advanced),
