@@ -40,11 +40,11 @@ export class WorldRenderer {
     return created;
   }
 
-  private getMaterial(key: string, diffuse: [number, number, number], textureKind?: TextureKind, variant = 0, tiling: [number, number] = [1, 1], emissive?: [number, number, number], emissiveIntensity = 1): pc.StandardMaterial {
-    const fullKey = `${key}:${variant}:${tiling.join(',')}:${emissiveIntensity}`;
+  private getMaterial(key: string, diffuse: [number, number, number], textureKind?: TextureKind, variant = 0, tiling: [number, number] = [1, 1], emissive?: [number, number, number], emissiveIntensity = 1, uvOffset: [number, number] = [0, 0]): pc.StandardMaterial {
+    const fullKey = `${key}:${variant}:${tiling.join(',')}:${emissiveIntensity}:${uvOffset.join(',')}`;
     const existing = this.materials.get(fullKey);
     if (existing) return existing;
-    const created = makeMaterial(diffuse, textureKind ? this.texture(textureKind, variant) : undefined, tiling, emissive, emissiveIntensity);
+    const created = makeMaterial(diffuse, textureKind ? this.texture(textureKind, variant) : undefined, tiling, emissive, emissiveIntensity, uvOffset);
     this.materials.set(fullKey, created);
     return created;
   }
@@ -146,7 +146,7 @@ export class WorldRenderer {
       const name = (child as pc.Entity & { name?: string }).name;
       if (name?.startsWith('fixture:')) child.destroy();
     }
-    const profile = ZONE_PROFILES[descriptor.address.zoneId];
+    const profile = descriptor.world.generationVersion === 'gen3-v1' ? ZONE_PROFILES.baseline : ZONE_PROFILES[descriptor.address.zoneId];
     for (const group of descriptor.lightGroups) {
       const active = group.state !== 'off';
       const fixtureMat = this.getMaterial(
@@ -231,8 +231,8 @@ export class WorldRenderer {
     return sampleLightField(this.lightSources(), playerX, playerZ, elapsedSeconds, reducedFlicker);
   }
 
-  spatialFixtureLights(playerX: number, playerZ: number, elapsedSeconds: number, reducedFlicker: boolean, limit = 4): SpatialFixtureLight[] {
-    return selectSpatialFixtureLights(this.lightSources(), playerX, playerZ, elapsedSeconds, reducedFlicker, limit);
+  spatialFixtureLights(playerX: number, playerZ: number, elapsedSeconds: number, reducedFlicker: boolean, limit = 4, previousIds: readonly string[] = []): SpatialFixtureLight[] {
+    return selectSpatialFixtureLights(this.lightSources(), playerX, playerZ, elapsedSeconds, reducedFlicker, limit, previousIds);
   }
 
   private lightSources() {

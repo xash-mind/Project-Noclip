@@ -155,12 +155,19 @@ def touch_sprint_move_until(
         wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="touch-sprint"]').get_attribute("aria-pressed") == "false", timeout=3, message="Sprint released state")
 
 
-def touch_drag(driver: webdriver.Chrome, selector: str, dx: float, dy: float, steps: int = 1) -> None:
+def touch_drag(driver: webdriver.Chrome, selector: str, dx: float, dy: float, steps: int = 6) -> None:
     point = center_point(driver, selector, 2)
     x = float(point["x"]); y = float(point["y"])
+    input_scale = float(driver.execute_script("return window.devicePixelRatio || 1"))
+    input_dx, input_dy = dx * input_scale, dy * input_scale
     touch_event(driver, "touchStart", [point])
+    # CDP mobile emulation consumes this Look displacement in its device-input
+    # pixel space while the app receives PointerEvent client coordinates in CSS
+    # pixels. Scale only the injected Look drag by DPR; the asserted gesture is
+    # still the requested 84 CSS pixels and the gameplay sensitivity is unchanged.
+    time.sleep(0.06)
     for index in range(1, steps + 1):
-        touch_event(driver, "touchMove", [{**point, "x": x + dx * index / steps, "y": y + dy * index / steps}])
+        touch_event(driver, "touchMove", [{**point, "x": x + input_dx * index / steps, "y": y + input_dy * index / steps}])
         time.sleep(0.04)
     touch_event(driver, "touchEnd", [])
 

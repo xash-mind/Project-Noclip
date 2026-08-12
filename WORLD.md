@@ -57,8 +57,9 @@ When accepted work adds, removes, renames, reclassifies, or materially changes a
 ```text
 WORLD SEED + GENERATION VERSION
   -> KILOMETRE-SCALE REGION/CONDITION AFFINITY FIELDS
-  -> LOCAL ARCHITECTURE FIELDS + EUCLIDEAN GEOMETRY SOLVER
-  -> MATERIALS + CONDITIONS
+  -> WORLD-SPACE WALKABLE / CONNECTIVITY SUBSTRATE
+  -> LOCAL PARTITION SEGMENT SOLVER + CONTINUOUS REGION MODIFIERS
+  -> EUCLIDEAN GEOMETRY + MATERIALS + CONDITIONS
   -> CARVERS
   -> STRUCTURES
   -> FEATURES / ITEMS / TRANSITIONS
@@ -70,9 +71,12 @@ Durable laws:
 
 - New journeys use `gen3-v1`; pre-versioned and explicit `gen2` saves never silently regenerate.
 - Region affinity Fields use kilometre-scale wavelengths; local architecture Fields use smaller scales.
-- Region selection, Blackout pressure, architecture, Carvers, Structures, Features, Items, and Transitions use independent deterministic seed domains.
-- Streaming Cell edges do not place walls or reset architecture cadence.
-- Ordinary architecture is solved in world space from interlocking continuous partitions, varied run scale, and sightline/connectivity pressure, not recognizable room templates. Openings and partition intersections must be capable of shaping traversal rather than leaving every wall globally bypassable through nearby empty floor.
+- Region affinity, Blackout pressure, architecture, Carvers, Structures, Features, Items, and Transitions use independent deterministic seed domains.
+- Generation 3 reserves a deterministic world-space connectivity graph before accepting blocking partitions. Candidate wall/opening segments then make stable local decisions from world coordinates, continuous Fields, neighboring segment state, room-scale pressure and the reserved route network.
+- Small and medium rooms, narrow connectors and interrupted sightlines are the normal Ordinary texture. Larger rooms remain occasional and very large spaces require an explicit rare high-openness/high-room-scale conjunction.
+- Regions are continuous modifiers of the same Level 0 substrate. A Region affinity may change partition acceptance, pillar frequency, divider grammar, Materials and Conditions locally, but never swaps a whole Cell to a separate generator.
+- Streaming Cell edges do not place walls, reset architecture cadence, choose Region grammar, change Arch dimensions, or reset texture phase. Cells own streaming fragments only.
+- Ordinary-looking geometry is the default. Intentional instability, hallucination anchors, fixture failure/flicker and irregular Arch geometry each have explicit sparse budgets; rendering seams, clipping, broken UVs and light-source swaps are always defects.
 - Stable semantic IDs and world addresses include the generation version.
 - Geometry stays Euclidean unless an explicitly scoped, tested design changes it.
 - Generation 3 does not apply legacy unload-count shifting. Any future topology change must be deliberate, deterministic, observable, and save-safe.
@@ -105,9 +109,9 @@ Registered Transition destinations are not playable Levels: Level 1, Level 2, Le
 
 | Region | ID | Status | Generation rule |
 |---|---|---|---|
-| **Ordinary Level 0** | `ordinary-level-0` | **Implemented** | Dominant continuous segmented Level 0 architecture built from interlocking world-space partitions with varied run lengths and deterministic openings. The partition network should read as changing rooms/corridors rather than scattered walls in one open hall. No alcoves, dividers, or Arch motifs. Sparse wallpaper-clad rectangular pillars may occur. |
-| **Pillar Field** | `pillar-field` | **Implemented** | Kilometre-capable wallpaper-clad pillar lattice with broad piers and strong wall suppression. The world lattice remains persistent while pier width keeps the open gaps from reading excessively loose. Region cores target long traversals; benchmark gates require at least 8-minute P50 and 20-minute P90 crossings. |
-| **Arch Rooms** | `arch-rooms` | **Implemented** | Stable pale room networks with full-height surrounding walls plus continuous lower-panel dividers, repeated arch-shaped openings, and continuous headers. Signature Arch dividers belong inside rooms; they must not stand alone across otherwise empty halls. Freestanding arches are forbidden. |
+| **Ordinary Level 0** | `ordinary-level-0` | **Implemented** | The underlying Level 0 grammar everywhere: a connectivity-first world-space partition network with small/medium rooms and narrow connectors as the common texture, occasional larger rooms, and rare very large spaces. Local segment acceptance shapes movement without recurrent sealed boxes or a dominant Cell/orientation cadence. Sparse wallpaper-clad rectangular pillars may occur. |
+| **Pillar Field** | `pillar-field` | **Implemented** | A continuous modifier of Ordinary Level 0. Common Pillar territory retains ordinary wall/room networks while partial/interrupted rows of rectangular wallpaper-clad piers become more frequent and medium open sections appear. Pier spacing remains 7.2 m and generated width is exactly 90% of the dev.3 distribution (`1.395–2.07 m`). Rare deep-field cores suppress most ordinary partitions and intensify the regular lattice, preserving very large near-pure fields as an exceptional deterministic extreme rather than the median experience. |
+| **Arch Rooms** | `arch-rooms` | **Implemented** | A continuous modifier of the common Level 0 network. Pale finishes and world-owned divider spans emerge with affinity while ordinary enclosure walls remain connected through the transition. Each divider chooses one stable bay scale before Cell clipping; normal repeated bays are symmetrical with continuous lower panels/headers and solid terminations. Explicit irregular/asymmetrical dividers use a bounded rare gate; malformed Cell-clipped openings and overlapping pieces are forbidden defects. |
 
 ## Variants
 
@@ -184,8 +188,8 @@ Enabled foundations exist for Level 1, Level 2, Level 27, Level 483, Level 13, a
 Promoted Tier-A reference conclusions:
 
 - **Ordinary Level 0:** pale sickly-yellow patterned wallpaper, tight-knit brownish-beige carpet that reads yellow under fluorescent light, persistently damp floor, suspended ceiling tiles, repeated rectangular panels, and pervasive fluctuating fluorescent buzz. Architecture should form changing rooms, narrow connectors, interrupted sightlines, and larger spaces without degrading into isolated walls scattered across a globally open floor.
-- **Pillar Fields:** broad rectangular wallpaper-clad floor-to-ceiling piers in a world-space lattice, ordinary suspended ceiling/fixture grammar, occasional vents, shallower carpet, and potentially painfully long open traversal. Walls are rare in the core.
-- **Arch Rooms:** pale full-height room walls surround continuous dividing walls with solid lower panels, repeated arch-shaped holes/openings, continuous headers, deep wet carpet, and unusually stable Euclidean layout. Names do not justify freestanding arches, and the dividers must not be the only architecture present.
+- **Pillar Fields:** rectangular wallpaper-clad floor-to-ceiling piers in the persistent 7.2 m world lattice, ordinary suspended ceiling/fixture grammar, occasional vents and shallower carpet. Normal territory mixes the Level 0 wall network with partial/interrupted pillar groups and medium open sections. Only rare deep-field cores become highly regular, wall-sparse and extremely open. Current Gen3 pier widths are exactly 10% narrower than dev.3 (`1.395–2.07 m`).
+- **Arch Rooms:** pale full-height room walls surround continuous dividing walls with solid lower panels, repeated arch-shaped holes/openings, continuous headers, deep wet carpet, and unusually stable Euclidean layout. Divider dimensions belong to the complete world-space span, not a Cell fragment. Normal bay rhythms are symmetrical; rare explicit irregularity is intentional content. Names do not justify freestanding arches, and the dividers must not be the only architecture present.
 - **Blackouts:** recognizable Level 0 Geometry with no local light and no local buzz. Fixtures disappear into the dark ceiling. External light and buzz provide gradual escape cues; lighting must not snap at Cell boundaries.
 - **Hole clusters:** close grids/groups of discrete square pitch-black floor pits with readable bypass lanes. Only the rim and upper depth are readable; no framed recess, shallow destination plate, or unsupported rail.
 - **Red Rooms:** rare distressing crimson Structure with difficult/impossible escape. Exact deterministic closed-loop Geometry remains a human design decision.
@@ -196,7 +200,8 @@ Still images do not establish audio. Audio rules above come from verified author
 
 - Ceiling fixtures are emissive panels plus bounded spatial lights at their actual world positions, with a restrained HDR bloom pass so panels read as luminous rather than painted white boxes.
 - Neighboring fixture light crosses walls/Cell boundaries continuously; no player-following room light.
-- Renderer fixture source energy must not be multiplied merely because the player approaches. Engine light range/falloff owns the physical distance response; bounded source selection must happen outside the useful fixture-light range so it does not read as lights switching on around the player.
+- Renderer fixture source energy must not be multiplied merely because the player approaches. Engine light range/falloff owns the physical distance response. Bounded realtime fixture slots use stable ownership with acquire/release hysteresis so nearest-order crossings do not visibly switch lights while walking.
+- Gen3 wallpaper phase derives from stable world-space wall coordinates/orientation rather than each renderer fragment. Skirting follows the solved wall span and terminates at joins/openings without deliberate end protrusion; Cell clipping must not reset either surface.
 - Global ambient contribution stays low enough that fixtures shape the room.
 - The fluorescent bed uses audible fundamental/harmonic energy suitable for browser/laptop playback while remaining subtle.
 - World Lab may keep ambience audible for inspection; users can disable its audio monitor.

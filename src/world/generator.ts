@@ -5,6 +5,7 @@ import { intInRange, stableId, unitFloat, weightedChoice } from './hash.js';
 import { boundaryWallParts, chooseArchetype, layoutFor } from './layouts.js';
 import { generateLightGroups, validateLightClearance } from './lighting.js';
 import { generateGen3Layout, sampleGen3Environment } from './gen3.js';
+import { sampleGen3RegionInfluence } from './gen3Architecture.js';
 import { makeNote } from './notes.js';
 import { generateManilaRoom, isManilaRoomAvailable, manilaRoomCell } from './structures.js';
 import { chooseZone, districtId, isManilaRoomCell, ZONE_PROFILES } from './zones.js';
@@ -373,7 +374,8 @@ export function generateGen3Cell(options: GenerateCellOptions): CellDescriptor {
   let notes = maybeNotes(seed, x, z, archetype);
   let componentIds: CellDescriptor['componentIds'] = [];
   let compositionSignature = generated.compositionSignature;
-  let spatialProfile: CellDescriptor['spatialProfile'] = environment.regionId === 'pillar-field' ? 'pillar-expanse' : 'standard';
+  const centerInfluence = sampleGen3RegionInfluence(seed, worldX, worldZ, worldDay, exposure, tuning);
+  let spatialProfile: CellDescriptor['spatialProfile'] = centerInfluence.deepPillar > 0.72 ? 'pillar-expanse' : 'standard';
   const structureIds: CellDescriptor['world']['structureIds'] = [];
 
   if (manilaRoom) {
@@ -411,7 +413,7 @@ export function generateGen3Cell(options: GenerateCellOptions): CellDescriptor {
     : reserveGen3OriginArrival(x, z, walls, props);
   featureIds = featureIds.filter((id) => arrivalSafe.props.some((prop) => prop.id === id));
   const ceilingPattern = intInRange(`${seed}:gen3-ceiling:${x}:${z}`, 0, 4);
-  const lightingZone = manilaRoom ? 'manila' : zoneId;
+  const lightingZone = manilaRoom ? 'manila' : 'baseline';
   const lightGroups = generateLightGroups({
     seed, x, z, shiftEpoch, zoneId: lightingZone, roomArchetype: archetype, ceilingPattern,
     walls: arrivalSafe.walls, props: arrivalSafe.props, blackoutStrength: environment.blackoutStrength
@@ -419,11 +421,17 @@ export function generateGen3Cell(options: GenerateCellOptions): CellDescriptor {
   const lightTemperature = lightGroups.length > 0
     ? lightGroups.reduce((sum, group) => sum + group.temperature, 0) / lightGroups.length
     : 0.94;
-  const stability = manilaRoom
-    ? ZONE_PROFILES.manila.stability
-    : environment.regionId === 'arch-rooms'
+  const intentionalIrregularity = !manilaRoom
+  && environment.fields.abnormality > 0.84
+  && environment.fields.stability < 0.3
+  && unitFloat(`${seed}:gen3-v4:intentional-irregularity:${x}:${z}`) < 0.12;
+const stability = manilaRoom
+  ? ZONE_PROFILES.manila.stability
+  : intentionalIrregularity
+    ? 'disorienting'
+    : centerInfluence.arch > 0.68
       ? 'stable'
-      : 'disorienting';
+      : 'semi-stable';
   return {
     id: cellId(x, z), address,
     world: {
@@ -438,7 +446,7 @@ export function generateGen3Cell(options: GenerateCellOptions): CellDescriptor {
     lootNodes: manilaRoom ? [] : lootForGen3Cell(seed, x, z, tuning.lootChance, arrivalSafe.walls, arrivalSafe.props),
     exits, lightGroups, lightFailure: lightGroups.length === 0 || lightGroups.every((group) => group.state === 'off'),
     lightTemperature, ceilingPattern,
-    hallucinationAnchor: !manilaRoom && stability === 'disorienting' && unitFloat(`${seed}:gen3-hallucination:${x}:${z}`) < 0.024
+    hallucinationAnchor: !manilaRoom && intentionalIrregularity && unitFloat(`${seed}:gen3-v4:hallucination:${x}:${z}`) < 0.14
   };
 }
 

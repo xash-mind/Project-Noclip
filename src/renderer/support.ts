@@ -153,12 +153,12 @@ export function canvasTexture(app: pc.Application, kind: TextureKind, variant: n
   return texture;
 }
 
-export function makeMaterial(diffuse: [number, number, number], texture?: pc.Texture, tiling: [number, number] = [1, 1], emissive?: [number, number, number], emissiveIntensity = 1): pc.StandardMaterial {
+export function makeMaterial(diffuse: [number, number, number], texture?: pc.Texture, tiling: [number, number] = [1, 1], emissive?: [number, number, number], emissiveIntensity = 1, uvOffset: [number, number] = [0, 0]): pc.StandardMaterial {
   const result = new pc.StandardMaterial();
   result.diffuse = color(diffuse);
   result.gloss = emissive ? 0.22 : texture ? 0.07 : 0.12;
   result.metalness = 0;
-  if (texture) { result.diffuseMap = texture; result.diffuseMapTiling = new pc.Vec2(tiling[0], tiling[1]); }
+  if (texture) { result.diffuseMap = texture; result.diffuseMapTiling = new pc.Vec2(tiling[0], tiling[1]); (result as unknown as { diffuseMapOffset: pc.Vec2 }).diffuseMapOffset = new pc.Vec2(uvOffset[0], uvOffset[1]); }
   if (emissive) { result.emissive = color(emissive); result.emissiveIntensity = emissiveIntensity; }
   result.update();
   return result;
