@@ -1,7 +1,8 @@
 const { generateCell } = await import('../.test-dist/src/world/generator.js');
 const { locateNearestRegion } = await import('../.test-dist/src/world/gen3.js');
-const { DEFAULT_TUNING, CELL_SIZE, PLAYER_HEIGHT } = await import('../.test-dist/src/world/types.js');
+const { DEFAULT_TUNING, CELL_SIZE } = await import('../.test-dist/src/world/types.js');
 
+const EYE_HEIGHT = 1.65;
 const tuning = (regionOverride) => ({ ...DEFAULT_TUNING, regionOverride, conditionOverride: 'clear', carverOverride: 'none', structureOverride: 'none', gateBypass: true });
 function cell(seed, x, z, t) { return generateCell({ seed, x, z, worldDay: 40, exposure: 10, shiftEpoch: 0, generationVersion: 'gen3-v1', tuning: t }); }
 function collect(seed, cx, cz, radius, t) { const result=[]; for(let x=cx-radius;x<=cx+radius;x++) for(let z=cz-radius;z<=cz+radius;z++) result.push(cell(seed,x,z,t)); return result; }
@@ -20,8 +21,8 @@ function free(x,z,obs){const r=.48;return !obs.some((o)=>x+r>o.minX&&x-r<o.maxX&
 function yawTo(cx,cz,tx,tz){return Math.atan2(-(tx-cx),-(tz-cz))*180/Math.PI;}
 function cameraFor(tx,tz,obs,distance=1.55,pitch=8){
   const dirs=[[0,1],[1,0],[0,-1],[-1,0],[.707,.707],[-.707,.707],[.707,-.707],[-.707,-.707]];
-  for(const [dx,dz] of dirs){const x=tx+dx*distance,z=tz+dz*distance;if(free(x,z,obs))return{x,y:PLAYER_HEIGHT,z,yaw:yawTo(x,z,tx,tz),pitch};}
-  return{x:tx+distance,y:PLAYER_HEIGHT,z:tz+distance,yaw:yawTo(tx+distance,tz+distance,tx,tz),pitch};
+  for(const [dx,dz] of dirs){const x=tx+dx*distance,z=tz+dz*distance;if(free(x,z,obs))return{x,y:EYE_HEIGHT,z,yaw:yawTo(x,z,tx,tz),pitch};}
+  return{x:tx+distance,y:EYE_HEIGHT,z:tz+distance,yaw:yawTo(tx+distance,tz+distance,tx,tz),pitch};
 }
 function isBoundary(value){return Math.abs((value-CELL_SIZE/2)/CELL_SIZE-Math.round((value-CELL_SIZE/2)/CELL_SIZE))<.0002;}
 function seamTarget(cells, material){
