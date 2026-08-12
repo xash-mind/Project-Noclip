@@ -1,5 +1,8 @@
 name: Probe dev4 coherence candidate
-on: [push]
+on:
+  push:
+    branches: [agent/dev4-world-coherence]
+    paths: ['.dev4-probe-trigger']
 permissions:
   contents: read
 jobs:
