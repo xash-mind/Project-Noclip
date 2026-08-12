@@ -80,6 +80,7 @@ export class ProjectNoclipGame {
   private lightFieldAccumulator = 0;
   private regionExtent?: RegionExtentEstimate;
   private regionExtentKey = '';
+  private streamWarmupToken = 0;
 
   constructor() {
     const canvas = document.querySelector<HTMLCanvasElement>('#game-canvas');
@@ -133,8 +134,11 @@ export class ProjectNoclipGame {
     this.renderer = new WorldRenderer(this.app, save);
     this.camera.setPosition(save.position.x, save.position.y, save.position.z);
     this.currentCellX = worldToCell(save.position.x); this.currentCellZ = worldToCell(save.position.z);
-    this.updateStreaming(true); this.updateCameraRotation(); this.started = true; this.paused = true;
+    const startupRadius = Math.min(2, Math.max(1, Math.min(4, Math.round(this.tuning.activeRadius))));
+    this.updateStreaming(true, startupRadius); this.updateCameraRotation(); this.started = true; this.paused = true;
     this.ui.showGame(); this.ui.updateInventory(save.inventory, save.selectedItemId); this.ui.setPaused(true);
+    // Publish the first useful HUD state before the outer cache ring is submitted to PlayCanvas.
+    this.updateUI(); this.scheduleStreamingWarmup();
     await this.ambience.start(save.settings.masterVolume); this.ambience.setLightField(this.lightField); this.resumeInput();
   }
 
@@ -334,9 +338,10 @@ export class ProjectNoclipGame {
     if (this.hallucinationCooldown <= 0 && this.currentCell.hallucinationAnchor) { this.hallucinationCooldown = 24 + unitFloat(`${this.save.seed}:hallucination-time:${this.currentCell.id}:${this.save.savedAt}`) * 35; this.ambience.distantImpact(); this.ui.toast('Something shifts beyond the next opening.', 2400); }
   }
 
-  private updateStreaming(force = false): void {
+  private updateStreaming(force = false, radiusOverride?: number): void {
     if (!this.save || !this.renderer) return;
-    const exposure = this.tuning.exposureOverride ?? calculateExposureDay(this.save.exposure); const worldDay = this.tuning.worldDayOverride ?? calculateWorldDay(Date.now()); const desired = new Set<string>(); const radius = Math.max(1, Math.min(4, Math.round(this.tuning.activeRadius)));
+    if (radiusOverride === undefined) this.streamWarmupToken += 1;
+    const exposure = this.tuning.exposureOverride ?? calculateExposureDay(this.save.exposure); const worldDay = this.tuning.worldDayOverride ?? calculateWorldDay(Date.now()); const desired = new Set<string>(); const targetRadius = Math.max(1, Math.min(4, Math.round(this.tuning.activeRadius))); const radius = Math.max(1, Math.min(targetRadius, radiusOverride ?? targetRadius));
     for (let x = this.currentCellX - radius; x <= this.currentCellX + radius; x += 1) for (let z = this.currentCellZ - radius; z <= this.currentCellZ + radius; z += 1) {
       const id = `${x}:${z}`; desired.add(id); const descriptor = generateCell({ seed: this.save.seed, x, z, worldDay, exposure, shiftEpoch: this.save.shiftEpochs[id] ?? 0, tuning: this.tuning, generationVersion: this.save.generationVersion });
       const existing = this.renderer.loaded.get(id)?.descriptor;
@@ -354,6 +359,19 @@ export class ProjectNoclipGame {
       if (!rendering.autoRender) rendering.renderNextFrame = true;
     }
     this.refreshRegionExtent(); this.refreshLightField(); this.notifyRegionEntry();
+  }
+
+  private scheduleStreamingWarmup(): void {
+    const targetRadius = Math.max(1, Math.min(4, Math.round(this.tuning.activeRadius)));
+    if (targetRadius <= 2) return;
+    const token = ++this.streamWarmupToken;
+    // Two animation frames guarantee one painted, responsive radius-2 world before
+    // the fog-hidden outer cache ring is built. Movement/tuning changes invalidate
+    // the token and fall back to the normal immediate streaming path.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (token !== this.streamWarmupToken || !this.started || !this.save || !this.renderer) return;
+      this.updateStreaming(false, targetRadius);
+    }));
   }
 
   private notifyRegionEntry(): void {
