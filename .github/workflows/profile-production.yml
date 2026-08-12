@@ -141,17 +141,23 @@ jobs:
                   f"draw calls `{metrics.get('drawCalls', 'n/a')}`, loaded Cells `{metrics.get('loadedCells', 'n/a')}`"
               )
           streaming = profile["scenarios"]["boundedStreamingBands"]
-          pillar = benchmark["pillarField"]
+          pillar = benchmark["pillar"]
+          navigation = benchmark["navigation"]
+          arch = benchmark["arch"]
+          normal_first = benchmark["normalFirst"]
           blackout = benchmark["blackout"]
           holes = benchmark["holeCarver"]
-          crossing = benchmark["regionCrossingMinutes"]
+          runtime_us = float(generation["runtimeMicrosecondsPerCell"])
+          cells_per_second = 1_000_000 / runtime_us
           lines.extend([
               "", "### Streaming and generator evidence",
               f"- Deterministic World Lab streaming cycle: `{' → '.join(map(str, streaming['loadedCellsSequence']))}` loaded Cells; peak `{streaming['peakCellsUnloaded']}` unloaded and `{streaming['peakCellsReloaded']}` reloaded without mutating journey save data.",
               f"- Radius transition settle times: `{', '.join(str(step['settleMs']) + ' ms' for step in streaming['transitions'])}`.",
-              f"- Generation `{generation['version']}` benchmark: `{generation['cells']}` Cells / `{generation['microsecondsPerCell']:.2f} µs/Cell` / `{generation['cellsPerSecond']:.2f} Cells/s`.",
-              f"- Fidelity gates: forbidden ordinary motifs `{generation['forbiddenOrdinary']}`, placement errors `{generation['placementErrors']}`, Pillar walls/Cell `{pillar['wallsPerCell']}`, Blackout fixtures `{blackout['localFixtures']}`, hole overlaps `{holes['overlaps']}`.",
-              f"- Region travel: Pillar P50 `{crossing['pillarP50']}` min / P90 `{crossing['pillarP90']}` min; Arch P50 `{crossing['archP50']}` min; boundary max Δ `{benchmark['geographyBoundaryDelta']}`.",
+              f"- Generation `{generation['version']}` benchmark: `{generation['cells']}` Cells / `{runtime_us:.2f} µs/Cell` runtime / `{cells_per_second:.2f} Cells/s`; validation `{generation['validationMicrosecondsPerCell']:.2f} µs/Cell` separately.",
+              f"- Navigation: reachable area `{navigation['ordinaryReachableAreaRatio']:.4f}`, isolated `{navigation['ordinaryIsolatedAreaRatio']:.4f}` / `{navigation['ordinaryIsolatedPockets']}` pockets, open-space P50/P90 `{navigation['ordinaryOpenAreaP50']:.2f}/{navigation['ordinaryOpenAreaP90']:.2f} m²`, mean `{navigation['ordinaryCellsCrossed']:.1f}` Cells crossed.",
+              f"- Pillar: exact width scale `{pillar['widthScale']:.2f}` (`{pillar['generatedWidthRange'][0]:.3f}–{pillar['generatedWidthRange'][1]:.4f} m`), common `{pillar['common']['wallsPerCell']:.3f}` walls / `{pillar['common']['columnsPerCell']:.3f}` pillars per Cell; deep sample rate `{pillar['extentDistribution']['deepSampleRate']:.4f}`, max deep run `{pillar['extentDistribution']['maxDeepMeters']}` m.",
+              f"- Arch: `{arch['dividerSamples']}` divider samples, irregular rate `{arch['irregularRate']:.4f}`, `{arch['distinctBayWidths']}` distinct intentional bay widths. Normal-first disorienting rate `{normal_first['disorientingRate']:.4f}` / flicker-group rate `{normal_first['flickerGroupRate']:.4f}`.",
+              f"- Placement errors `{generation['placementErrors']}`, Blackout fixtures `{blackout['localFixtures']}`, hole overlaps `{holes['overlaps']}`, boundary max Δ `{benchmark['geographyBoundaryDelta']}`.",
               f"- Save/reload: schema v{profile['saveReload']['version']} / `{profile['saveReload']['generationVersion']}` preserved, position delta `{profile['saveReload']['positionDeltaMeters']:.4f} m`.",
               f"- Browser console errors: `{len(profile.get('browserErrors', []))}`.",
               "",
