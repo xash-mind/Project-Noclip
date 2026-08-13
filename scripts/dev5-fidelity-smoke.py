@@ -181,6 +181,15 @@ def main() -> None:
         report["arch"] = {"message": arch_message, "route": route, "before": before, "after": after, "pointerLock": True}
 
         qa_locate(driver, "ordinary-level-0", "nearest")
+        # The long approach/pass/retreat capture is a visual gate, not a full-load benchmark.
+        # Keep only the nearby streamed ring so SwiftShader can advance real movement at a useful rate.
+        radius_changed = driver.execute_script("""
+          const element=document.querySelector('[data-lab="radius"]');
+          if(!element)return false; element.value='1';
+          element.dispatchEvent(new Event('change',{bubbles:true})); return true;
+        """)
+        if not radius_changed: raise AssertionError("Could not reduce the visual-capture stream radius")
+        time.sleep(0.8)
         approach = driver.execute_script("return window.__projectNoclipQa?.placeAtFixtureApproach?.() ?? null;")
         if not approach: raise AssertionError("Could not resolve a freshly streamed clear fixture approach/pass/retreat path")
         time.sleep(0.6)
@@ -188,7 +197,7 @@ def main() -> None:
         frames = [{"file": "fixture-approach-00.png", "threshold": 0.0, "progress": 0.0, "snapshot": qa_snapshot(driver)}]
         capture_canvas(driver, ARTIFACT_DIR / "fixture-approach-00.png")
         capture_targets = [(index / 8, f"fixture-approach-{index:02d}.png") for index in range(1, 9)]
-        final_lighting, captured = drive_forward_to_progress(driver, approach["start"], approach["end"], 0.98, 35.0, capture_targets)
+        final_lighting, captured = drive_forward_to_progress(driver, approach["start"], approach["end"], 0.98, 90.0, capture_targets)
         frames.extend(captured)
         if len(frames) != 9: raise AssertionError(f"Fixture spatial capture missed milestones: {frames}")
         fixture_id = str(approach["fixtureId"])
