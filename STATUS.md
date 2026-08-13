@@ -1,39 +1,33 @@
 # Project Status
 
-**Last verified runtime:** 2026-08-12 (Asia/Kolkata)  
+**Last verified runtime:** 2026-08-13 (Asia/Kolkata)  
 **Canonical production:** https://project-noclip.vercel.app  
-**Production release commit:** `5b8c95e19ea3104d21e218229c9bd2d25277d8c0`  
-**Visible deployed version:** `v0.3.0-dev.4`  
-**Product change source:** PR #43 / squash merge `c17da1ef81e96a7d46cf75b221f189925dae4628`, release commit `5b8c95e19ea3104d21e218229c9bd2d25277d8c0`  
+**Production release commit:** `e6f5c7246d2d574e62c2ef4ec2738d1b3822f4e1`  
+**Visible deployed version:** `v0.3.0-dev.5`  
+**Product change source:** PR #49 / merge commit `e6f5c7246d2d574e62c2ef4ec2738d1b3822f4e1`  
 **Save schema:** `v2`  
 **New-journey generation:** `gen3-v1`  
 **Current architecture direction:** Generation 3 — GitHub Issue #31  
+**Current bounded player-facing objective:** GitHub Issue #50 — dev.6 lighting/Pillar/Arch correction  
 **World vocabulary/catalog:** `WORLD.md`
 
 ## Health
 
-**Canonical production remains accepted at `v0.3.0-dev.4`, but the first normal human dev.4 play audit found material player-facing Generation 3 gaps.** Dev.4 fixed dev.3's catastrophic navigability failure and is a clear step in the right direction; it is not yet the accepted end-state for Level 0 spatial/fidelity work.
+Canonical production serves `v0.3.0-dev.5`. The dev.5 Space Topology direction is accepted and must be preserved: Ordinary Level 0 reads as intentional spaces rather than an airy wall network, Pillar territory has continuous edge→core depth, Ordinary walls use the accepted chevron presentation, the separate protruding brown skirting geometry is gone, and World Lab can inspect Region depth.
 
-The current corrective objective is [Issue #46](https://github.com/xash-mind/Project-Noclip/issues/46), under the Generation 3 architecture in #31 and Level 0 fidelity contract in #37.
+Dev.6 is implemented on PR #52 and is the current release candidate. It keeps the accepted dev.5 topology while correcting fixture-state lighting, Pillar finish/clearance, curved Arch openings, Blackout visibility and the existing flashlight item behavior. The current candidate passes strict TypeScript, deterministic/system tests and the 10,000-Cell benchmark. Hosted Visual Coherence is still unreliable at the long software-rendered fixture traversal, so release acceptance must distinguish product failures from harness/runtime timing failures rather than blocking indefinitely on SwiftShader wall-clock movement.
 
-### Fresh audit conclusions
+The current corrective objective remains [Issue #50](https://github.com/xash-mind/Project-Noclip/issues/50), under Generation 3 #31 and Level 0 fidelity #37. Issue #46 is closed after its dev.4→dev.5 topology/Pillar-depth objective was delivered; unresolved Arch fidelity was explicitly carried into #50. Legacy Alpha-era Issue #11 is closed as superseded.
 
-- **Ordinary Level 0:** broad reachability is fixed, but normal space is too airy. The current solver lacks enough bounded one-entry rooms, short constrained connectors and genuinely claustrophobic pockets.
-- **Junction morphology:** four-way top-down `+` wall intersections are structurally overrepresented. Both orthogonal substrate axes are solved independently on the same world lattice; there is no perpendicular junction-type resolver/budget.
-- **Pillar Field:** dev.4 overcorrected away from the near-pure dev.3 lattice. Common Pillar territory can read as wall rooms with occasional pillars because the wall substrate is generated first, normal Pillar influence suppresses walls only mildly, and pillar candidates are then discarded when they intersect walls or reserved passages.
-- **Region depth:** the existing continuous affinity Fields are the correct foundation, but Pillar identity needs a clearer monotonic blend-edge → mixed → pillar-dominant → rare near-pure-lattice progression. Do not replace this with hard Cell bands.
-- **Hole Carver:** natural clusters currently use a hard radius and near-uniform candidate lattice. The validated follow-up direction is sparse outer pits → denser core while retaining bypass lanes; Hole remains a Carver, not a Region.
-- **Arch Rooms:** current mathematical symmetry/seam tests do not guarantee source fidelity in normal play. The runtime can fail to read as the promoted continuous pale divider with repeated arch-shaped openings, visible vertical bay/end structure, solid lower band and continuous header. This is a source-fidelity and implementation-quality regression tracked by #46/#37.
-
-## Accepted dev.4 baseline that must be preserved
+## Accepted dev.5 direction that must be preserved
 
 Generation 3 remains world-first:
 
 ```text
 seed + generation version
   -> kilometre-scale Region / Condition affinity Fields
-  -> deterministic world-space walkable/connectivity substrate
-  -> local partition-segment solver + continuous Region modifiers
+  -> deterministic world-space Space Topology / walkable substrate
+  -> architecture + continuous Region modifiers
   -> Euclidean Geometry + Materials + Conditions
   -> Carvers
   -> Structures
@@ -42,49 +36,72 @@ seed + generation version
   -> Cells as streaming/cache ownership only
 ```
 
-Preserve `gen3-v1`, schema-v2 save compatibility, Euclidean Geometry, stable semantic identities where possible, seed-domain separation, Manila/Transition rules, renderer budgets and frozen Gen2 old-save isolation.
+Preserve:
 
-The dev.4 candidate evidence before release remains valid technical baseline evidence: 56/56 deterministic/system tests, healthy 10,000-Cell generation benchmark, renderer/save-reload regression, and candidate Visual Coherence captures. The post-release GitHub Actions billing/spending-limit block still prevents a fresh canonical-production workflow run from being claimed as green.
+- `gen3-v1` and schema-v2 save compatibility;
+- Euclidean Geometry until explicitly scoped otherwise;
+- stable semantic identities where possible and independent seed domains;
+- the player-approved Space Topology architecture and its controlled small/one-entry spaces;
+- Pillar continuous Region depth and the 7.2 m lattice;
+- the accepted Ordinary chevron wall direction and removal of separate protruding brown skirting geometry;
+- Region-depth QA tooling;
+- Manila/Transition laws, renderer budgets and frozen Gen2 old-save isolation.
 
-## Verification interpretation
+Do **not** solve dev.6 by returning to wall-probability tuning, Cell-authored rooms, fixed room templates, globally reducing pillar density, or widening into unsupported content.
 
-The dev.4 automated gates successfully detected dev.3's sealed-world failure, but they are incomplete as player-facing acceptance:
+## Current verification reality
 
-- Ordinary tests emphasize very high reachable-area ratio and broad P50/P90/P99 open-space ranges, but do not require a lower-tail frequency of claustrophobic one-entry spaces.
-- No permanent gate currently budgets four-way `+` junctions against corners, T-junctions, terminations and straight spans.
-- Pillar tests accept a broad mixed range of walls and columns but do not require monotonic density by Region depth or a source-like core progression.
-- Arch diagnostics prove world ownership, symmetry rarity and non-overlap, but not the complete rendered REF-L0-007 silhouette.
+For accepted production main commit `e6f5c7246d2d574e62c2ef4ec2738d1b3822f4e1`:
 
-Human play therefore remains authoritative for these perceptual requirements.
+- main CI: **PASS**;
+- Renderer Regression: **PASS**;
+- Production Profile: **PASS**;
+- canonical Production Smoke desktop Chromium journey: **PASS**;
+- canonical Production Smoke landscape-touch journey: **PASS**;
+- dev.5 Visual Coherence: **FAIL at the dedicated close-range fidelity capture step**, which correctly motivated #50.
+
+For dev.6 PR #52:
+
+- strict TypeScript/system tests: **PASS**;
+- deterministic/system suite: **65/65 PASS** on the latest verified candidate;
+- 10,000-Cell benchmark: **PASS**, including 0 placement errors and 0 sealed spaces;
+- Pillar route/opening reservations: **PASS across multiple seeds**;
+- curved Arch representation and route clearance regressions: **PASS**;
+- bounded room light-field and fixture pulse synchronization regressions: **PASS**;
+- Visual Coherence currently reaches the final long fixture traversal before failing to attain an exact 0.98 path-progress threshold under headless SwiftShader; this is treated as a harness/performance limitation unless reproduced as an actual gameplay collision;
+- Renderer Regression on the prior candidate failed because this file still declared dev.4 as production. This STATUS reconciliation restores the correct dev.5 comparison baseline;
+- perceptual audio quality remains **unverified** unless actually listened to;
+- physical Android/iOS performance remains unmeasured.
 
 ## Current ready work
 
-**Issue #46 — restore spatial hierarchy, Region depth and Arch fidelity.** This is the largest safe coherent next objective because all three high-impact findings live in the Generation 3 architecture/Region-modifier layer:
+**Issue #50 — dev.6 fixture-state lighting, Pillar finish/clearance, true Arch openings and flashlight usability.**
 
-1. add deterministic junction morphology so four-way crosses become an intentional minority;
-2. add a bounded lower tail of claustrophobic/one-entry spaces without recreating sealed-world failures;
-3. make Pillar density and wall suppression vary monotonically with Region depth, ending in rare near-pure lattice cores;
-4. restore rendered Arch divider fidelity against the promoted source grammar.
+The candidate implements:
 
-Treat the Hole border-to-core density gradient as the immediate Carver follow-up unless it remains a small, safely verifiable extension of the same run.
-
-Do not tune only to historical wall-count or reachable-area metrics. Add morphology, Region-depth and rendered-silhouette acceptance evidence.
+1. coherent illumination from already-on visible fluorescent fixtures while retaining a bounded realtime-light budget;
+2. synchronized off/on/flicker panel emission and emitted illumination, including truly non-emissive off fixtures;
+3. Gen3 Pillars through the accepted Level 0 wallpaper grammar/scale;
+4. one shared route/opening/landing reservation envelope so route-bearing openings cannot be obstructed by Pillars;
+5. genuine curved Arch silhouettes while preserving continuous pale divider structure, lower panels where source-backed, headers, bay rhythm and complete ends;
+6. route-bearing Arch collision clearance;
+7. a functioning camera-mounted light for the existing flashlight item, preserving battery/charge behavior and Blackout use.
 
 ## Remaining known gaps
 
-- Fresh canonical-production automation is still affected by the GitHub Actions billing/spending-limit runner block recorded during dev.4 acceptance.
-- This audit environment could not independently capture the live Vercel runtime, so current visual findings rely on direct human play evidence plus code/test reconciliation. Do not pretend perceptual audio was heard; audio quality remains unverified in this audit.
+- Hole Carver border→core density and terminal-fall behavior remain separate work and are not part of dev.6.
+- Perceptual fluorescent/HVAC/footstep/reverb quality remains unverified; no claim is made that audio fidelity is complete.
 - Physical Android/iOS FPS, thermals, battery use and native-browser ergonomics remain unmeasured.
 - Long-session memory growth remains unmeasured.
-- Primitive geometry remains placeholder-quality in places.
+- Automated long-path visual capture under SwiftShader remains slower and less reliable than the product implementation itself; do not confuse harness wall-clock timeouts with proven gameplay regressions.
 
 ## Decisions needed from Sash
 
-**None for the next run.** The dev.4 player audit supplies enough direction to execute Issue #46 within the existing world laws.
+**None for this release.** The user explicitly requested continuation and production deployment of dev.6, with testing kept proportional to implementation risk rather than waiting indefinitely for flaky hosted visual traversal.
 
 ## Version policy
 
-Project Noclip remains opted into the manual-project version indicator policy. Canonical production remains `v0.3.0-dev.4` at release commit `5b8c95e19ea3104d21e218229c9bd2d25277d8c0`. This audit does not change the visible version and must not deploy.
+Project Noclip remains opted into the manual-project version indicator policy. Canonical production is currently `v0.3.0-dev.5` at `e6f5c7246d2d574e62c2ef4ec2738d1b3822f4e1`. PR #52 carries `v0.3.0-dev.6`; after merge and verified canonical production deployment, STATUS should advance its production release commit to the merged dev.6 SHA.
 
 ## Important links
 
@@ -92,6 +109,7 @@ Project Noclip remains opted into the manual-project version indicator policy. C
 - Production: https://project-noclip.vercel.app
 - Generation 3 architecture: https://github.com/xash-mind/Project-Noclip/issues/31
 - Level 0 fidelity: https://github.com/xash-mind/Project-Noclip/issues/37
-- Dev.4 player audit / next objective: https://github.com/xash-mind/Project-Noclip/issues/46
-- Dev.4 world-coherence release: https://github.com/xash-mind/Project-Noclip/pull/43
+- Dev.6 player-facing objective: https://github.com/xash-mind/Project-Noclip/issues/50
+- Dev.6 implementation: https://github.com/xash-mind/Project-Noclip/pull/52
+- Dev.5 Space Topology release: https://github.com/xash-mind/Project-Noclip/pull/49
 - World vocabulary/catalog: `WORLD.md`

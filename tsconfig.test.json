@@ -16,7 +16,9 @@
     "src/persistence/types.ts",
     "src/simulation/**/*.ts",
     "src/physics/**/*.ts",
+    "src/playcanvas-compat.d.ts",
     "src/renderer/objectCatalog.ts",
-    "src/renderer/dev5Wallpaper.ts"
+    "src/renderer/dev5Wallpaper.ts",
+    "src/renderer/dev6FollowupPresentation.ts"
   ]
 }

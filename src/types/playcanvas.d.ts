@@ -5,7 +5,7 @@ declare module 'playcanvas' {
   export const FILTER_LINEAR: number;
   export const FILTER_LINEAR_MIPMAP_LINEAR: number;
   export const FOG_LINEAR: string;
-  export class Color { constructor(r?: number, g?: number, b?: number, a?: number); }
+  export class Color { constructor(r?: number, g?: number, b?: number, a?: number); r: number; g: number; b: number; }
   export class Vec2 { constructor(x?: number, y?: number); x: number; y: number; }
   export class Texture {
     constructor(device: unknown, options?: Record<string, unknown>);
@@ -25,6 +25,17 @@ declare module 'playcanvas' {
     diffuseMap?: Texture;
     diffuseMapTiling?: Vec2;
     update(): void;
+  }
+  export class Mesh {
+    constructor(device: unknown);
+    setPositions(positions: number[] | ArrayBufferView): void;
+    setNormals(normals: number[] | ArrayBufferView): void;
+    setUvs(channel: number, uvs: number[] | ArrayBufferView): void;
+    setIndices(indices: number[] | Uint8Array | Uint16Array | Uint32Array): void;
+    update(): void;
+  }
+  export class MeshInstance {
+    constructor(mesh: Mesh, material: StandardMaterial);
   }
   export class Entity {
     constructor(name?: string);

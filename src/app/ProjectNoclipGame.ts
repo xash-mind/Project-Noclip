@@ -172,8 +172,8 @@ export class ProjectNoclipGame {
     blackoutGuideLight.addComponent('light', { type: 'omni', color: new pc.Color(0.88, 0.84, 0.56), range: 22, intensity: 0, castShadows: false });
     blackoutGuideLight.enabled = false; app.root.addChild(blackoutGuideLight);
     const flashlight = new pc.Entity('flashlight');
-    flashlight.addComponent('light', { type: 'spot', color: new pc.Color(0.93, 0.91, 0.72), range: 18, intensity: 1.35, innerConeAngle: 24, outerConeAngle: 38, castShadows: false });
-    camera.addChild(flashlight); flashlight.setLocalPosition(0, -0.08, -0.2); flashlight.setLocalEulerAngles(0, 180, 0); flashlight.enabled = false;
+    flashlight.addComponent('light', { type: 'spot', color: new pc.Color(0.93, 0.91, 0.72), range: 22, intensity: 2.4, innerConeAngle: 20, outerConeAngle: 36, castShadows: false });
+    camera.addChild(flashlight); flashlight.setLocalPosition(0, -0.08, -0.2); flashlight.setLocalEulerAngles(90, 0, 0); flashlight.enabled = false;
     this.app = app; this.camera = camera; this.blackoutGuideLight = blackoutGuideLight; this.flashlight = flashlight;
     app.on('update', (dt) => this.update(Math.min(dt, 0.05))); app.start(); window.addEventListener('resize', () => app.resizeCanvas());
   }
@@ -501,10 +501,15 @@ export class ProjectNoclipGame {
     });
 
     const visibleAmbient = Math.pow(1 - blackoutStrength, 1.7);
-    this.app.scene.ambientLight = new pc.Color(0.26 * visibleAmbient + 0.002, 0.245 * visibleAmbient + 0.002, 0.135 * visibleAmbient + 0.001);
-    const fogR = 0.15 * visibleAmbient;
-    const fogG = 0.135 * visibleAmbient;
-    const fogB = 0.075 * visibleAmbient;
+    const atmosphericCue = Math.pow(blackoutStrength, 2.1);
+    this.app.scene.ambientLight = new pc.Color(
+      0.26 * visibleAmbient + 0.002 + 0.004 * atmosphericCue,
+      0.245 * visibleAmbient + 0.002 + 0.004 * atmosphericCue,
+      0.135 * visibleAmbient + 0.001 + 0.003 * atmosphericCue
+    );
+    const fogR = 0.15 * visibleAmbient + 0.018 * atmosphericCue;
+    const fogG = 0.135 * visibleAmbient + 0.017 * atmosphericCue;
+    const fogB = 0.075 * visibleAmbient + 0.011 * atmosphericCue;
     this.app.scene.fogColor = new pc.Color(fogR, fogG, fogB);
     this.app.scene.fogStart = LEVEL0_FOG_START - blackoutStrength * (LEVEL0_FOG_START - 7);
     this.app.scene.fogEnd = LEVEL0_FOG_END - blackoutStrength * (LEVEL0_FOG_END - 29);

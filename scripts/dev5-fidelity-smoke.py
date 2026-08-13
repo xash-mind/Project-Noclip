@@ -107,8 +107,16 @@ def resume_input(driver: webdriver.Chrome) -> bool:
         return False
 
 
+def movement_key(driver: webdriver.Chrome, event_type: str, key: str, code: str, key_code: int) -> None:
+    driver.execute_cdp_cmd("Input.dispatchKeyEvent", {"type": event_type, "key": key, "code": code, "windowsVirtualKeyCode": key_code, "nativeVirtualKeyCode": key_code})
+
+
 def key_event(driver: webdriver.Chrome, event_type: str) -> None:
-    driver.execute_cdp_cmd("Input.dispatchKeyEvent", {"type": event_type, "key": "w", "code": "KeyW", "windowsVirtualKeyCode": 87, "nativeVirtualKeyCode": 87})
+    movement_key(driver, event_type, "w", "KeyW", 87)
+
+
+def sprint_event(driver: webdriver.Chrome, event_type: str) -> None:
+    movement_key(driver, event_type, "Shift", "ShiftLeft", 16)
 
 
 def qa_snapshot(driver: webdriver.Chrome) -> dict[str, Any] | None:
@@ -181,6 +189,16 @@ def main() -> None:
         report["arch"] = {"message": arch_message, "route": route, "before": before, "after": after, "pointerLock": True}
 
         qa_locate(driver, "ordinary-level-0", "nearest")
+        # The long approach/pass/retreat capture is a visual gate, not a full-load benchmark.
+        # Keep only the nearby streamed ring and sprint through the same collision path so
+        # SwiftShader tests spatial ownership rather than wall-clock software-render speed.
+        radius_changed = driver.execute_script("""
+          const element=document.querySelector('[data-lab="radius"]');
+          if(!element)return false; element.value='1';
+          element.dispatchEvent(new Event('change',{bubbles:true})); return true;
+        """)
+        if not radius_changed: raise AssertionError("Could not reduce the visual-capture stream radius")
+        time.sleep(0.8)
         approach = driver.execute_script("return window.__projectNoclipQa?.placeAtFixtureApproach?.() ?? null;")
         if not approach: raise AssertionError("Could not resolve a freshly streamed clear fixture approach/pass/retreat path")
         time.sleep(0.6)
@@ -188,7 +206,11 @@ def main() -> None:
         frames = [{"file": "fixture-approach-00.png", "threshold": 0.0, "progress": 0.0, "snapshot": qa_snapshot(driver)}]
         capture_canvas(driver, ARTIFACT_DIR / "fixture-approach-00.png")
         capture_targets = [(index / 8, f"fixture-approach-{index:02d}.png") for index in range(1, 9)]
-        final_lighting, captured = drive_forward_to_progress(driver, approach["start"], approach["end"], 0.98, 35.0, capture_targets)
+        sprint_event(driver, "keyDown")
+        try:
+            final_lighting, captured = drive_forward_to_progress(driver, approach["start"], approach["end"], 0.98, 90.0, capture_targets)
+        finally:
+            sprint_event(driver, "keyUp")
         frames.extend(captured)
         if len(frames) != 9: raise AssertionError(f"Fixture spatial capture missed milestones: {frames}")
         fixture_id = str(approach["fixtureId"])
