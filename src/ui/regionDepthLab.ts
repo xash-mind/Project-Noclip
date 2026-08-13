@@ -5,7 +5,13 @@ import type { CellVisual, WorldCollider } from '../renderer/support.js';
 import type { WorldRenderer } from '../renderer/WorldRenderer.js';
 import { calculateExposureDay, calculateWorldDay } from '../simulation/timeline.js';
 import { CELL_SIZE, type RegionId, type WorldTuning } from '../world/types.js';
-import { formatRegionDepth, locateRegionAtDepth, regionDepthTargetSupported, type RegionDepthTarget } from '../world/regionInspection.js';
+import {
+  formatRegionDepth,
+  locateRegionAtDepth,
+  REGION_DEPTH_SEARCH_RADIUS_METERS,
+  regionDepthTargetSupported,
+  type RegionDepthTarget
+} from '../world/regionInspection.js';
 
 const REGION_LABELS: Record<RegionId, string> = {
   'ordinary-level-0': 'Ordinary Level 0',
@@ -29,6 +35,9 @@ interface GameLabAccess {
   persist(): Promise<void>;
 }
 
+interface InspectionOrigin { x: number; z: number; }
+interface InspectionAnchor extends InspectionOrigin { seed: string; regionId: RegionId; }
+
 export interface ArchRouteEvidence {
   orientation: 'x' | 'z';
   fixed: number;
@@ -44,10 +53,18 @@ export interface FixtureApproachEvidence {
   end: { x: number; z: number };
 }
 
+export interface MarkerWallEvidence {
+  wallId: string;
+  start: { x: number; z: number };
+  yaw: number;
+  distanceToSurface: number;
+}
+
 export interface ProjectNoclipQaBridge {
   locate(regionId: RegionId, depth: RegionDepthTarget): Promise<string | undefined>;
   placeAtArchRoute(): ArchRouteEvidence | undefined;
   placeAtFixtureApproach(): FixtureApproachEvidence | undefined;
+  placeAtMarkerWall(): MarkerWallEvidence | undefined;
   snapshot(): { x: number; y: number; z: number; yaw: number; pitch: number; sourceIds: string[] } | undefined;
 }
 
@@ -91,7 +108,13 @@ function setInspectionPosition(access: GameLabAccess, x: number, z: number, yaw?
   access.updateStreaming(true);
 }
 
-async function locateForLab(access: GameLabAccess, regionId: RegionId, depth: RegionDepthTarget, status?: HTMLElement): Promise<string | undefined> {
+async function locateForLab(
+  access: GameLabAccess,
+  regionId: RegionId,
+  depth: RegionDepthTarget,
+  status?: HTMLElement,
+  inspectionOrigin?: InspectionOrigin
+): Promise<string | undefined> {
   if (!access.save || !access.camera || access.save.generationVersion !== 'gen3-v1') {
     access.ui.toast('Region-depth inspection is available for Generation 3 journeys.');
     return undefined;
@@ -103,10 +126,11 @@ async function locateForLab(access: GameLabAccess, regionId: RegionId, depth: Re
   const worldDay = access.tuning.worldDayOverride ?? calculateWorldDay(Date.now());
   const exposure = access.tuning.exposureOverride ?? calculateExposureDay(access.save.exposure);
   const position = access.camera.getPosition();
+  const origin = inspectionOrigin ?? { x: position.x, z: position.z };
   const occurrence = locateRegionAtDepth({
     seed: access.save.seed,
-    originX: position.x,
-    originZ: position.z,
+    originX: origin.x,
+    originZ: origin.z,
     targetRegion: regionId,
     targetDepth: depth,
     worldDay,
@@ -114,7 +138,8 @@ async function locateForLab(access: GameLabAccess, regionId: RegionId, depth: Re
     tuning: access.tuning
   });
   if (!occurrence) {
-    const message = `${REGION_LABELS[regionId]} ${depth} was not found within 12 km. Check timeline gates or enable the local bypass.`;
+    const radiusKm = depth === 'nearest' ? 12 : REGION_DEPTH_SEARCH_RADIUS_METERS / 1000;
+    const message = `${REGION_LABELS[regionId]} ${depth} was not found within ${radiusKm.toFixed(0)} km of the inspection anchor. Check timeline gates or enable the local bypass.`;
     if (status) status.textContent = message;
     access.ui.toast(message, 5600);
     return undefined;
@@ -125,7 +150,7 @@ async function locateForLab(access: GameLabAccess, regionId: RegionId, depth: Re
   access.tuning = { ...access.tuning, regionOverride: undefined };
   setInspectionPosition(access, occurrence.worldX, occurrence.worldZ);
   const detail = formatRegionDepth(regionId, depth, occurrence);
-  const message = `Located ${REGION_LABELS[regionId]} ${occurrence.distanceMeters.toFixed(0)} m away · ${detail}.`;
+  const message = `Located ${REGION_LABELS[regionId]} ${occurrence.distanceMeters.toFixed(0)} m from inspection anchor · ${detail}.`;
   if (status) status.textContent = message;
   access.ui.toast(message, 6500);
   await access.persist();
@@ -220,11 +245,52 @@ function findFixtureApproach(access: GameLabAccess): FixtureApproachEvidence | u
   return chosen.evidence;
 }
 
-function installQaBridge(access: GameLabAccess): void {
+/** Resolve a real current floor wall for touch-marker smoke instead of hard-coding old topology coordinates. */
+function findMarkerWall(access: GameLabAccess): MarkerWallEvidence | undefined {
+  const renderer = access.renderer;
+  const camera = access.camera;
+  if (!renderer || !camera) return undefined;
+  const colliders = [...renderer.walls.values()];
+  const position = camera.getPosition();
+  const candidates: Array<{ evidence: MarkerWallEvidence; distance: number }> = [];
+
+  for (const wall of colliders) {
+    if (!wall.drawable || wall.minY > 1.5 || wall.maxY < 1.8) continue;
+    const normalHalf = wall.orientation === 'x' ? wall.sx / 2 : wall.sz / 2;
+    const wallLength = wall.orientation === 'x' ? wall.sz : wall.sx;
+    if (wallLength < 1.6) continue;
+    for (const side of [-1, 1] as const) {
+      const surfaceGap = 1.75;
+      const start = wall.orientation === 'x'
+        ? { x: wall.cx + side * (normalHalf + surfaceGap), z: wall.cz }
+        : { x: wall.cx, z: wall.cz + side * (normalHalf + surfaceGap) };
+      const near = wall.orientation === 'x'
+        ? { x: wall.cx + side * (normalHalf + 0.62), z: wall.cz }
+        : { x: wall.cx, z: wall.cz + side * (normalHalf + 0.62) };
+      if (!playerClear(colliders, start.x, start.z) || !pathClear(colliders, start, near)) continue;
+      const yaw = Math.atan2(-(wall.cx - start.x), -(wall.cz - start.z)) * 180 / Math.PI;
+      candidates.push({
+        evidence: { wallId: wall.id, start, yaw, distanceToSurface: surfaceGap },
+        distance: Math.hypot(start.x - position.x, start.z - position.z)
+      });
+    }
+  }
+
+  const chosen = candidates.sort((left, right) => left.distance - right.distance)[0]?.evidence;
+  if (!chosen) return undefined;
+  setInspectionPosition(access, chosen.start.x, chosen.start.z, chosen.yaw);
+  return chosen;
+}
+
+function installQaBridge(
+  access: GameLabAccess,
+  locate: (regionId: RegionId, depth: RegionDepthTarget, status?: HTMLElement) => Promise<string | undefined>
+): void {
   window.__projectNoclipQa = {
-    locate: (regionId, depth) => locateForLab(access, regionId, depth),
+    locate: (regionId, depth) => locate(regionId, depth),
     placeAtArchRoute: () => findArchRoute(access),
     placeAtFixtureApproach: () => findFixtureApproach(access),
+    placeAtMarkerWall: () => findMarkerWall(access),
     snapshot: () => {
       if (!access.camera) return undefined;
       const position = access.camera.getPosition();
@@ -278,16 +344,28 @@ export function installRegionDepthLab(game: ProjectNoclipGame): void {
   status.className = 'region-depth-status';
   status.style.gridColumn = '1 / -1';
   status.style.color = 'var(--muted)';
-  status.textContent = 'Depth sampling uses the natural continuous Region field; no Cell bands are created.';
+  status.textContent = 'Depth sampling uses one stable inspection anchor over the natural continuous Region field; no Cell bands are created.';
   locateButton.after(status);
 
+  let anchor: InspectionAnchor | undefined;
+  const locate = async (regionId: RegionId, depth: RegionDepthTarget, targetStatus?: HTMLElement): Promise<string | undefined> => {
+    const save = access.save;
+    const camera = access.camera;
+    if (!save || !camera) return locateForLab(access, regionId, depth, targetStatus);
+    const position = camera.getPosition();
+    if (depth === 'nearest' || !anchor || anchor.seed !== save.seed || anchor.regionId !== regionId) {
+      anchor = { seed: save.seed, regionId, x: position.x, z: position.z };
+    }
+    return locateForLab(access, regionId, depth, targetStatus, { x: anchor.x, z: anchor.z });
+  };
+
   syncDepthOptions(regionSelect, depthSelect);
-  regionSelect.addEventListener('change', () => syncDepthOptions(regionSelect, depthSelect));
+  regionSelect.addEventListener('change', () => { anchor = undefined; syncDepthOptions(regionSelect, depthSelect); });
   locateButton.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopImmediatePropagation();
-    void locateForLab(access, regionSelect.value as RegionId, depthSelect.value as RegionDepthTarget, status);
+    void locate(regionSelect.value as RegionId, depthSelect.value as RegionDepthTarget, status);
   }, true);
 
-  installQaBridge(access);
+  installQaBridge(access, locate);
 }

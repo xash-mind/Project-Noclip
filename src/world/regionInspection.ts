@@ -1,5 +1,5 @@
-import { sampleGen3Environment, locateNearestRegion, type RegionOccurrence } from './gen3.js';
-import { sampleGen3RegionInfluence } from './gen3Architecture.js';
+import { sampleWorldGeography } from './fields.js';
+import { locateNearestRegion, type RegionOccurrence } from './gen3.js';
 import { CELL_SIZE, type RegionId, type WorldTuning } from './types.js';
 
 export type RegionDepthTarget = 'nearest' | 'edge' | 'interior' | 'core' | 'deep-core';
@@ -25,6 +25,9 @@ const ARCH_BANDS: Partial<Record<Exclude<RegionDepthTarget, 'nearest'>, Band>> =
   core: { min: 0.86, max: 1.001, ideal: 0.94 }
 };
 
+/** Depth QA can range farther than the ordinary nearest-Region locator without changing geography. */
+export const REGION_DEPTH_SEARCH_RADIUS_METERS = 48_000;
+
 export function regionDepthTargetSupported(regionId: RegionId, target: RegionDepthTarget): boolean {
   if (target === 'nearest') return true;
   if (regionId === 'ordinary-level-0') return false;
@@ -42,6 +45,18 @@ function naturalTuning(tuning: WorldTuning): WorldTuning {
   return { ...tuning, regionOverride: undefined };
 }
 
+function clamp01(value: number): number { return Math.max(0, Math.min(1, value)); }
+function smooth01(value: number): number { const x = clamp01(value); return x * x * (3 - 2 * x); }
+function strength(value: number, start: number, full: number): number { return smooth01((value - start) / (full - start)); }
+function regionGateOpen(worldDay: number, exposure: number, tuning: WorldTuning): boolean {
+  return tuning.gateBypass || (worldDay >= 3 && exposure >= 0.6);
+}
+
+/**
+ * Depth inspection samples only the canonical kilometre-scale geography channels.
+ * This mirrors the Region classification/depth laws without calculating unrelated
+ * local room Fields twice for tens of thousands of QA probes.
+ */
 function sampleDepth(
   seed: string,
   worldX: number,
@@ -51,31 +66,36 @@ function sampleDepth(
   exposure: number,
   tuning: WorldTuning
 ): { depthValue: number; regionInfluence: number; matchesRegion: boolean } {
-  const environment = sampleGen3Environment(seed, worldX, worldZ, worldDay, exposure, tuning);
-  const influence = sampleGen3RegionInfluence(seed, worldX, worldZ, worldDay, exposure, tuning);
+  const geography = sampleWorldGeography(seed, worldX, worldZ);
+  const unlocked = regionGateOpen(worldDay, exposure, tuning);
+  const pillarRegionStrength = unlocked ? strength(geography.pillarAffinity, 0.58, 0.72) : 0;
+  const archRegionStrength = unlocked ? strength(geography.archAffinity, 0.6, 0.74) : 0;
+  let naturalRegion: RegionId = 'ordinary-level-0';
+  if (pillarRegionStrength > 0.52 && pillarRegionStrength >= archRegionStrength + 0.04) naturalRegion = 'pillar-field';
+  else if (archRegionStrength > 0.52 && archRegionStrength > pillarRegionStrength) naturalRegion = 'arch-rooms';
+
+  const pillarInfluence = unlocked ? strength(geography.pillarAffinity, 0.54, 0.8) : 0;
+  const pillarDepth = unlocked ? strength(geography.pillarAffinity, 0.64, 0.86) : 0;
+  const archInfluence = unlocked ? strength(geography.archAffinity, 0.56, 0.8) : 0;
+
   if (regionId === 'pillar-field') {
     return {
-      depthValue: influence.pillarDepth,
-      regionInfluence: influence.pillar,
-      matchesRegion: environment.regionId === regionId && influence.arch < 0.3
+      depthValue: pillarDepth,
+      regionInfluence: pillarInfluence,
+      matchesRegion: naturalRegion === regionId && archInfluence < 0.3
     };
   }
   if (regionId === 'arch-rooms') {
-    return {
-      depthValue: influence.arch,
-      regionInfluence: influence.arch,
-      matchesRegion: environment.regionId === regionId
-    };
+    return { depthValue: archInfluence, regionInfluence: archInfluence, matchesRegion: naturalRegion === regionId };
   }
   return {
-    depthValue: environment.regionStrength,
-    regionInfluence: environment.regionStrength,
-    matchesRegion: environment.regionId === regionId
+    depthValue: 1 - Math.max(pillarRegionStrength, archRegionStrength),
+    regionInfluence: 1 - Math.max(pillarRegionStrength, archRegionStrength),
+    matchesRegion: naturalRegion === regionId
   };
 }
 
 function occurrenceAt(
-  seed: string,
   originX: number,
   originZ: number,
   worldX: number,
@@ -92,6 +112,10 @@ function occurrenceAt(
     depthValue: sampled.depthValue,
     regionInfluence: sampled.regionInfluence
   };
+}
+
+function scoreOccurrence(occurrence: RegionInspectionOccurrence, ideal: number, depthWeight: number): number {
+  return occurrence.distanceMeters + Math.abs(occurrence.depthValue - ideal) * depthWeight;
 }
 
 /**
@@ -111,10 +135,10 @@ export function locateRegionAtDepth(options: {
 }): RegionInspectionOccurrence | undefined {
   const { seed, originX, originZ, targetRegion, targetDepth, worldDay, exposure } = options;
   const tuning = naturalTuning(options.tuning);
-  const maxDistance = options.maxDistanceMeters ?? 12_000;
   if (!regionDepthTargetSupported(targetRegion, targetDepth)) return undefined;
 
   if (targetDepth === 'nearest') {
+    const maxDistance = options.maxDistanceMeters ?? 12_000;
     const nearest = locateNearestRegion({
       seed, originX, originZ, target: targetRegion, worldDay, exposure, tuning, maxDistanceMeters: maxDistance
     });
@@ -125,41 +149,48 @@ export function locateRegionAtDepth(options: {
 
   const band = bandFor(targetRegion, targetDepth);
   if (!band) return undefined;
-  const coarse = CELL_SIZE * 8;
+  const maxDistance = options.maxDistanceMeters ?? REGION_DEPTH_SEARCH_RADIUS_METERS;
+  // Preserve the old close-range precision for explicitly bounded tests/searches,
+  // but use a coarse kilometre-scale pass for deliberate deep-Region QA.
+  const coarse = maxDistance <= 12_000 ? CELL_SIZE * 8 : CELL_SIZE * 32;
   let best: RegionInspectionOccurrence | undefined;
-  let bestDepthError = Number.POSITIVE_INFINITY;
+  let bestScore = Number.POSITIVE_INFINITY;
 
   for (let dx = -maxDistance; dx <= maxDistance; dx += coarse) {
     for (let dz = -maxDistance; dz <= maxDistance; dz += coarse) {
       const distanceMeters = Math.hypot(dx, dz);
       if (distanceMeters > maxDistance) continue;
+      if (best && distanceMeters > best.distanceMeters + coarse * 2) continue;
       const worldX = originX + dx;
       const worldZ = originZ + dz;
       const sampled = sampleDepth(seed, worldX, worldZ, targetRegion, worldDay, exposure, tuning);
       if (!sampled.matchesRegion || sampled.depthValue < band.min || sampled.depthValue >= band.max) continue;
-      const depthError = Math.abs(sampled.depthValue - band.ideal);
-      if (best && distanceMeters > best.distanceMeters + coarse * 1.5) continue;
-      if (!best || distanceMeters < best.distanceMeters - coarse * 0.5 || depthError < bestDepthError) {
-        best = occurrenceAt(seed, originX, originZ, worldX, worldZ, targetDepth, sampled);
-        bestDepthError = depthError;
-      }
+      const candidate = occurrenceAt(originX, originZ, worldX, worldZ, targetDepth, sampled);
+      const score = scoreOccurrence(candidate, band.ideal, coarse);
+      if (!best || score < bestScore) { best = candidate; bestScore = score; }
     }
   }
   if (!best) return undefined;
 
-  const refinement = CELL_SIZE * 10;
-  let refined = best;
-  let refinedScore = best.distanceMeters + Math.abs(best.depthValue - band.ideal) * CELL_SIZE * 2;
-  for (let worldX = best.worldX - refinement; worldX <= best.worldX + refinement; worldX += CELL_SIZE) {
-    for (let worldZ = best.worldZ - refinement; worldZ <= best.worldZ + refinement; worldZ += CELL_SIZE) {
-      const sampled = sampleDepth(seed, worldX, worldZ, targetRegion, worldDay, exposure, tuning);
-      if (!sampled.matchesRegion || sampled.depthValue < band.min || sampled.depthValue >= band.max) continue;
-      const candidate = occurrenceAt(seed, originX, originZ, worldX, worldZ, targetDepth, sampled);
-      const score = candidate.distanceMeters + Math.abs(sampled.depthValue - band.ideal) * CELL_SIZE * 2;
-      if (score < refinedScore) { refined = candidate; refinedScore = score; }
+  const refine = (center: RegionInspectionOccurrence, radius: number, step: number): RegionInspectionOccurrence => {
+    let refined = center;
+    let refinedScore = scoreOccurrence(center, band.ideal, coarse);
+    for (let worldX = center.worldX - radius; worldX <= center.worldX + radius; worldX += step) {
+      for (let worldZ = center.worldZ - radius; worldZ <= center.worldZ + radius; worldZ += step) {
+        const distanceMeters = Math.hypot(worldX - originX, worldZ - originZ);
+        if (distanceMeters > maxDistance + step) continue;
+        const sampled = sampleDepth(seed, worldX, worldZ, targetRegion, worldDay, exposure, tuning);
+        if (!sampled.matchesRegion || sampled.depthValue < band.min || sampled.depthValue >= band.max) continue;
+        const candidate = occurrenceAt(originX, originZ, worldX, worldZ, targetDepth, sampled);
+        const score = scoreOccurrence(candidate, band.ideal, coarse);
+        if (score < refinedScore) { refined = candidate; refinedScore = score; }
+      }
     }
-  }
-  return refined;
+    return refined;
+  };
+
+  best = refine(best, coarse, CELL_SIZE * 4);
+  return refine(best, CELL_SIZE * 8, CELL_SIZE);
 }
 
 export function formatRegionDepth(regionId: RegionId, target: RegionDepthTarget, occurrence: RegionInspectionOccurrence): string {

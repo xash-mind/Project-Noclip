@@ -164,7 +164,7 @@ def touch_drag(driver: webdriver.Chrome, selector: str, dx: float, dy: float, st
     # CDP mobile emulation consumes this Look displacement in its device-input
     # pixel space while the app receives PointerEvent client coordinates in CSS
     # pixels. Scale only the injected Look drag by DPR; the asserted gesture is
-    # still the requested 84 CSS pixels and the gameplay sensitivity is unchanged.
+    # still the requested CSS displacement and gameplay sensitivity is unchanged.
     time.sleep(0.06)
     for index in range(1, steps + 1):
         touch_event(driver, "touchMove", [{**point, "x": x + input_dx * index / steps, "y": y + input_dy * index / steps}])
@@ -318,29 +318,28 @@ def main() -> None:
         }
         seeded["inventory"] = [item for item in seeded.get("inventory", []) if item.get("definitionId") != "marker"] + [marker]
         seeded["selectedItemId"] = marker["instanceId"]
-        # threshold-001 / gen3-v1 owns a continuous north-south partition at
-        # world X -2.527. Stand east of it and face west so marker coverage is
-        # tied to canonical Generation 3 geometry, not a removed Gen2 room wall.
-        seeded["position"] = {"x": -0.7, "y": 1.65, "z": 0.0, "yaw": 90, "pitch": 0}
         write_save(driver, seeded)
         driver.refresh()
         wait_for(driver, lambda current: displayed(current, '[data-action="continue"]'), timeout=20, message="Continue after marker setup")
         click_button(driver, '[data-action="continue"]')
         wait_for(driver, lambda current: displayed(current, '[data-ui="touch-controls"]'), timeout=35, message="touch controls after Continue")
-        wait_for(driver, lambda current: (pos if (pos := metrics_position(current)) and abs(pos[0] + 0.7) < 0.3 and abs(pos[1]) < 0.3 else False), timeout=15, message="Generation 3 marker test position")
+        wait_for(driver, lambda current: bool(current.execute_script("return window.__projectNoclipQa")), timeout=10, message="current-world QA bridge")
+        marker_target = driver.execute_script("return window.__projectNoclipQa?.placeAtMarkerWall?.() ?? null;")
+        assert marker_target, "Could not resolve a current collider-clear wall for touch marker coverage"
+        report["markerTarget"] = marker_target
+        time.sleep(0.8)
         click_button(driver, '[data-action="touch-marker"]')
         wait_for(driver, lambda current: displayed(current, '[data-ui="marker-mode"]'), timeout=5, message="touch marker mode")
         touch_marker_text = str(driver.find_element(By.CSS_SELECTOR, '.touch-marker-instruction').get_attribute("textContent") or "")
         assert "drag" in touch_marker_text.lower() and "look" in touch_marker_text.lower()
         assert "primary" not in touch_marker_text.lower()
         assert not displayed(driver, '.desktop-marker-instruction')
-        # This wall is a long world-space run; 24 px clears the persisted
-        # mark sampler's normalized point threshold while remaining a small,
-        # ordinary camera gesture on a mobile look surface.
+        # Acquire the wall from the running renderer so this touch regression is
+        # topology-independent. A small drag must still sample a second point.
         touch_drag(driver, '[data-touch="look"]', 24, 0, steps=1)
         marked_save = wait_for(driver, lambda current: (save if (save := read_save(current)) and len(save.get("marks", [])) >= 1 else False), timeout=12, message="persisted touch marker stroke")
         report["persistedMarks"] = len(marked_save.get("marks", []))
-        checks.append("Marker arms from the mobile action and a raw Look touch gesture persists a SurfaceMark without ambiguous primary-button wording")
+        checks.append("Marker arms from the mobile action and a raw Look touch gesture persists a SurfaceMark against current Generation 3 geometry")
 
         click_button(driver, '[data-action="touch-interact"]')
         click_button(driver, '[data-action="touch-use"]')

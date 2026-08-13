@@ -112,7 +112,20 @@ jobs:
           profile = json.loads((root / "profile.json").read_text(encoding="utf-8"))
           benchmark = json.loads((root / "benchmark.json").read_text(encoding="utf-8"))
           generation = benchmark["generation"]
+          navigation = benchmark["navigation"]
+          pillar = benchmark["pillar"]
+          arch = benchmark["arch"]
+          normal_first = benchmark["normalFirst"]
+          blackout = benchmark["blackout"]
+          holes = benchmark["holeCarver"]
           run_url = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          runtime_us = float(generation["runtimeMicrosecondsPerCell"])
+          cells_per_second = 1_000_000 / runtime_us
+          depth_bins = pillar.get("depthBins", [])
+          pillar_progression = " → ".join(
+              f"{entry['walls']:.3f}w/{entry['columns']:.3f}p" for entry in depth_bins
+          ) or "n/a"
+
           lines = [
               "## Issue #14 production profile: passed", "",
               f"- Public URL: `{profile['baseUrl']}`",
@@ -140,29 +153,23 @@ jobs:
                   f"median FPS `{fps['median']:.2f}`, main-thread busy `{cpu.get('mainThreadBusyPct', 'n/a')}%`, "
                   f"draw calls `{metrics.get('drawCalls', 'n/a')}`, loaded Cells `{metrics.get('loadedCells', 'n/a')}`"
               )
+
           streaming = profile["scenarios"]["boundedStreamingBands"]
-          pillar = benchmark["pillar"]
-          navigation = benchmark["navigation"]
-          arch = benchmark["arch"]
-          normal_first = benchmark["normalFirst"]
-          blackout = benchmark["blackout"]
-          holes = benchmark["holeCarver"]
-          runtime_us = float(generation["runtimeMicrosecondsPerCell"])
-          cells_per_second = 1_000_000 / runtime_us
           lines.extend([
-              "", "### Streaming and generator evidence",
+              "", "### Streaming and current-branch generator evidence",
               f"- Deterministic World Lab streaming cycle: `{' → '.join(map(str, streaming['loadedCellsSequence']))}` loaded Cells; peak `{streaming['peakCellsUnloaded']}` unloaded and `{streaming['peakCellsReloaded']}` reloaded without mutating journey save data.",
               f"- Radius transition settle times: `{', '.join(str(step['settleMs']) + ' ms' for step in streaming['transitions'])}`.",
-              f"- Generation `{generation['version']}` benchmark: `{generation['cells']}` Cells / `{runtime_us:.2f} µs/Cell` runtime / `{cells_per_second:.2f} Cells/s`; validation `{generation['validationMicrosecondsPerCell']:.2f} µs/Cell` separately.",
-              f"- Navigation: reachable area `{navigation['ordinaryReachableAreaRatio']:.4f}`, isolated `{navigation['ordinaryIsolatedAreaRatio']:.4f}` / `{navigation['ordinaryIsolatedPockets']}` pockets, open-space P50/P90 `{navigation['ordinaryOpenAreaP50']:.2f}/{navigation['ordinaryOpenAreaP90']:.2f} m²`, mean `{navigation['ordinaryCellsCrossed']:.1f}` Cells crossed.",
-              f"- Pillar: exact width scale `{pillar['widthScale']:.2f}` (`{pillar['generatedWidthRange'][0]:.3f}–{pillar['generatedWidthRange'][1]:.4f} m`), common `{pillar['common']['wallsPerCell']:.3f}` walls / `{pillar['common']['columnsPerCell']:.3f}` pillars per Cell; deep sample rate `{pillar['extentDistribution']['deepSampleRate']:.4f}`, max deep run `{pillar['extentDistribution']['maxDeepMeters']}` m.",
-              f"- Arch: `{arch['dividerSamples']}` divider samples, irregular rate `{arch['irregularRate']:.4f}`, `{arch['distinctBayWidths']}` distinct intentional bay widths. Normal-first disorienting rate `{normal_first['disorientingRate']:.4f}` / flicker-group rate `{normal_first['flickerGroupRate']:.4f}`.",
-              f"- Placement errors `{generation['placementErrors']}`, Blackout fixtures `{blackout['localFixtures']}`, hole overlaps `{holes['overlaps']}`, boundary max Δ `{benchmark['geographyBoundaryDelta']}`.",
+              f"- Generation 3 benchmark: `{generation['cells']}` Cells / `{runtime_us:.2f} µs/Cell` runtime / `{cells_per_second:.2f} Cells/s`; validation `{generation['validationMicrosecondsPerCell']:.2f} µs/Cell` separately; placement errors `{generation['placementErrors']}`.",
+              f"- Raw finite-window navigation diagnostic: reachable `{navigation['reachableAreaRatio']:.4f}`, isolated `{navigation['isolatedAreaRatio']:.4f}`, open-space P50/P90 `{navigation['openAreaP50']:.2f}/{navigation['openAreaP90']:.2f} m²`, mean `{navigation['cellsCrossed']:.1f}` Cells crossed; all boundaries reached `{navigation['allBoundaryReached']}`.",
+              f"- Pillar: exact width scale `{pillar['widthScale']:.2f}` (`{pillar['minWidth']:.3f}–{pillar['maxWidth']:.3f} m`); common `{pillar['commonWallsPerCell']:.3f}` walls / `{pillar['commonColumnsPerCell']:.3f}` pillars per Cell; depth progression `{pillar_progression}`.",
+              f"- Arch: `{arch['dividerSamples']}` divider samples, `{arch['distinctBayWidths']}` distinct intentional bay widths, `{arch['routeDividers']}` route dividers, minimum route width `{arch['minimumRouteWidth']:.4f} m`. Normal-first disorienting rate `{normal_first['disorientingRate']:.4f}` / flicker-group rate `{normal_first['flickerGroupRate']:.4f}`.",
+              f"- Blackout local light groups `{blackout['localLightGroups']}`, hole overlaps `{holes['overlaps']}`, boundary max Δ `{benchmark['geographyBoundaryDelta']}`.",
               f"- Save/reload: schema v{profile['saveReload']['version']} / `{profile['saveReload']['generationVersion']}` preserved, position delta `{profile['saveReload']['positionDeltaMeters']:.4f} m`.",
               f"- Browser console errors: `{len(profile.get('browserErrors', []))}`.",
               "",
-              "Headless CI uses SwiftShader, so its absolute FPS is a software-renderer stress observation rather than a physical-GPU FPS claim. Chromium journey smoke remains the separate input and fidelity regression gate.",
-              "The artifact contains `profile.json`, `benchmark.json`, and available scenario screenshots. This profiling workflow does not modify the deployed game runtime.",
+              "The deterministic benchmark comes from the workflow commit; the browser profile above targets the accepted production deployment resolved from STATUS.md.",
+              "Headless CI uses SwiftShader, so its absolute FPS is a software-renderer stress observation rather than a physical-GPU FPS claim.",
+              "The artifact contains `profile.json`, `benchmark.json`, and available scenario screenshots. This workflow does not modify the deployed game runtime.",
           ])
           for warning in profile.get("warnings", []):
               lines.append(f"- Non-blocking evidence warning: {warning.splitlines()[0]}")
