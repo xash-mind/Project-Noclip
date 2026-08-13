@@ -34,19 +34,35 @@ test('space topology is exactly deterministic and actual collider traversal rema
   for (const [seed, x, z] of [['coherence-a', 0, 0], ['coherence-b', 12, -7], ['coherence-c', -20, 13], ['coherence-d', 31, 24]]) {
     const cells = window(seed, x, z, 7, clean('ordinary-level-0'));
     const nav = analyzeNavigation(cells, { startWorld: { x: x * CELL_SIZE, z: z * CELL_SIZE }, step: 0.7, playerRadius: 0.42 });
-    assert.ok(nav.reachableAreaRatio >= 0.95, JSON.stringify(nav));
-    assert.ok(nav.isolatedAreaRatio <= 0.05, JSON.stringify(nav));
+    assert.ok(nav.nonSealedAreaRatio >= 0.95, JSON.stringify(nav));
+    assert.ok(nav.sealedAreaRatio <= 0.05, JSON.stringify(nav));
+    assert.equal(nav.sealedPockets, 0, JSON.stringify(nav));
     assert.ok(nav.boundaryReached && nav.cellsCrossed >= 12, JSON.stringify(nav));
     assert.ok(cells.every((entry) => validateCellPlacement(entry).length === 0), `${seed} has placement overlap`);
   }
+});
+
+test('finite navigation windows do not classify boundary-returning routes as sealed world pockets', () => {
+  const tuning = clean('ordinary-level-0');
+  const cropped = analyzeNavigation(window('forced-ordinary-level-0', 0, 0, 5, tuning), { startWorld: { x: 0, z: 0 }, step: 0.7, playerRadius: 0.42 });
+  assert.equal(cropped.sealedPockets, 0, JSON.stringify(cropped));
+  assert.equal(cropped.sealedAreaRatio, 0, JSON.stringify(cropped));
+  assert.ok(cropped.nonSealedAreaRatio >= 0.99, JSON.stringify(cropped));
+
+  // Four additional Cells of context are enough for this deterministic reproducer
+  // to reconnect the routes that leave the radius-5 crop and later re-enter it.
+  const padded = analyzeNavigation(window('forced-ordinary-level-0', 0, 0, 9, tuning), { startWorld: { x: 0, z: 0 }, step: 0.7, playerRadius: 0.42 });
+  assert.ok(padded.reachableAreaRatio >= 0.98, JSON.stringify(padded));
+  assert.equal(padded.sealedPockets, 0, JSON.stringify(padded));
 });
 
 test('forced Regions and natural Region seams remain traversable in both directions', () => {
   for (const region of ['ordinary-level-0', 'pillar-field', 'arch-rooms']) {
     const cells = window(`forced-${region}`, 0, 0, 5, clean(region));
     const result = analyzeNavigation(cells, { startWorld: { x: 0, z: 0 }, step: 0.7, playerRadius: 0.42 });
-    assert.ok(result.reachableAreaRatio >= 0.95, `${region}: ${JSON.stringify(result)}`);
-    assert.ok(result.isolatedAreaRatio <= 0.05, `${region}: ${JSON.stringify(result)}`);
+    assert.ok(result.nonSealedAreaRatio >= 0.95, `${region}: ${JSON.stringify(result)}`);
+    assert.ok(result.sealedAreaRatio <= 0.05, `${region}: ${JSON.stringify(result)}`);
+    assert.equal(result.sealedPockets, 0, `${region}: ${JSON.stringify(result)}`);
     assert.ok(result.boundaryReached && result.cellsCrossed >= 9, `${region}: ${JSON.stringify(result)}`);
   }
   for (const [target, seed] of [['pillar-field', 'dev5-transition-pillar'], ['arch-rooms', 'dev5-transition-arch']]) {

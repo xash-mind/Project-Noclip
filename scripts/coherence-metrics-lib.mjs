@@ -29,9 +29,14 @@ function propBounds(cell, prop) {
   return { minX: worldX - sx / 2, maxX: worldX + sx / 2, minZ: worldZ - sz / 2, maxZ: worldZ + sz / 2 };
 }
 
+/** Mirror the running Gen3 renderer's 2D collision contract. */
+function wallOwnsFloorCollision(wall) {
+  return wall.cy - wall.sy / 2 <= 0.04;
+}
+
 export function collectObstacles(cells) {
   return cells.flatMap((cell) => [
-    ...cell.walls.map((wall) => obstacleBounds(cell, wall)),
+    ...cell.walls.filter(wallOwnsFloorCollision).map((wall) => obstacleBounds(cell, wall)),
     ...cell.props.filter((prop) => prop.solid).map((prop) => propBounds(cell, prop))
   ]);
 }
@@ -107,23 +112,38 @@ function flood(grid, start) {
   return { visited, previous, count: tail };
 }
 
-function componentSizes(grid) {
+/**
+ * Classify finite-window components without calling routes that leave the crop
+ * and re-enter elsewhere "sealed". A genuine sealed pocket cannot touch the
+ * artificial analysis boundary.
+ */
+function componentSummary(grid) {
   const seen = new Uint8Array(grid.walkable.length);
-  const sizes = [];
+  const components = [];
   const queue = new Int32Array(grid.walkable.length);
   for (let start = 0; start < grid.walkable.length; start += 1) {
     if (!grid.walkable[start] || seen[start]) continue;
-    let head = 0; let tail = 0; seen[start] = 1; queue[tail++] = start;
+    let head = 0; let tail = 0; let touchesBoundary = false;
+    seen[start] = 1; queue[tail++] = start;
     while (head < tail) {
       const current = queue[head++];
+      const ix = current % grid.width; const iz = Math.floor(current / grid.width);
+      if (ix === 0 || iz === 0 || ix === grid.width - 1 || iz === grid.height - 1) touchesBoundary = true;
       for (const next of neighbors(grid, current)) {
         if (seen[next]) continue;
         seen[next] = 1; queue[tail++] = next;
       }
     }
-    sizes.push(tail);
+    components.push({ size: tail, touchesBoundary });
   }
-  return sizes.sort((a, b) => b - a);
+  components.sort((a, b) => b.size - a.size);
+  const sealed = components.filter((component) => !component.touchesBoundary);
+  return {
+    sizes: components.map((component) => component.size),
+    boundaryTouchingComponents: components.filter((component) => component.touchesBoundary).length,
+    sealedPockets: sealed.length,
+    sealedNodes: sealed.reduce((sum, component) => sum + component.size, 0)
+  };
 }
 
 function maxDeadEndDepth(grid, visited) {
@@ -217,17 +237,29 @@ export function analyzeNavigation(cells, options = {}) {
   const grid = buildNavigationGrid(cells, options);
   const startWorld = options.startWorld ?? { x: 0, z: 0 };
   const startIndex = nearestWalkable(grid, startWorld.x, startWorld.z);
-  if (startIndex === undefined) return { reachableAreaRatio: 0, isolatedPockets: 1, isolatedAreaRatio: 1, maxDeadEndDepth: 0, openAreaP50: 0, openAreaP90: 0, openAreaP99: 0, boundaryReached: false, cellsCrossed: 0, pathMeters: 0, walkableNodes: grid.walkableCount, reachableNodes: 0 };
+  if (startIndex === undefined) return {
+    reachableAreaRatio: 0, isolatedPockets: 1, isolatedAreaRatio: 1,
+    nonSealedAreaRatio: 0, sealedPockets: 1, sealedAreaRatio: 1, boundaryTouchingComponents: 0,
+    maxDeadEndDepth: 0, openAreaP50: 0, openAreaP90: 0, openAreaP99: 0,
+    boundaryReached: false, cellsCrossed: 0, pathMeters: 0, walkableNodes: grid.walkableCount, reachableNodes: 0
+  };
   grid.startIndex = startIndex;
   const reached = flood(grid, startIndex);
-  const components = componentSizes(grid);
-  const isolatedNodes = components.slice(1).reduce((sum, size) => sum + size, 0);
+  const components = componentSummary(grid);
+  const isolatedNodes = components.sizes.slice(1).reduce((sum, size) => sum + size, 0);
   const openAreas = openAreaSamples(grid, reached.visited);
   const traversal = pathToFarthestBoundary(grid, reached);
   return {
+    // Raw finite-window figures remain visible as diagnostics.
     reachableAreaRatio: grid.walkableCount ? reached.count / grid.walkableCount : 0,
-    isolatedPockets: Math.max(0, components.length - 1),
+    isolatedPockets: Math.max(0, components.sizes.length - 1),
     isolatedAreaRatio: grid.walkableCount ? isolatedNodes / grid.walkableCount : 0,
+    // Release gates use only interior components that cannot escape through the
+    // artificial analysis boundary.
+    nonSealedAreaRatio: grid.walkableCount ? 1 - components.sealedNodes / grid.walkableCount : 0,
+    sealedPockets: components.sealedPockets,
+    sealedAreaRatio: grid.walkableCount ? components.sealedNodes / grid.walkableCount : 0,
+    boundaryTouchingComponents: components.boundaryTouchingComponents,
     maxDeadEndDepth: maxDeadEndDepth(grid, reached.visited),
     openAreaP50: percentile(openAreas, 0.5),
     openAreaP90: percentile(openAreas, 0.9),
