@@ -19,7 +19,7 @@ jobs:
         run: python -m pip install --disable-pip-version-check selenium==4.46.0
       - name: Resolve deterministic visual targets
         run: |
-          mkdir -p artifacts/dev4-visual artifacts/dev5-fidelity
+          mkdir -p artifacts/dev4-visual artifacts/dev5-fidelity artifacts/dev6-flashlight
           npx tsc -p tsconfig.test.json
           node scripts/dev4-visual-targets.mjs > artifacts/dev4-visual/targets.json
       - name: Capture close-range world and dev.5 fidelity evidence
@@ -39,6 +39,8 @@ jobs:
           python scripts/dev4-visual-smoke.py
           NOCLIP_DEV5_FIDELITY_ARTIFACTS="artifacts/dev5-fidelity" \
           python scripts/dev5-fidelity-smoke.py
+          NOCLIP_DEV6_FLASHLIGHT_ARTIFACTS="artifacts/dev6-flashlight" \
+          python scripts/dev6-flashlight-smoke.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -46,4 +48,5 @@ jobs:
           path: |
             artifacts/dev4-visual
             artifacts/dev5-fidelity
+            artifacts/dev6-flashlight
           retention-days: 30
