@@ -23,7 +23,6 @@ import {
 import {
   DOMAIN_FINE_SPANS,
   DOMAIN_MAJOR_SPANS,
-  TOPOLOGY_ARCH_MAX_SHARE,
   domainParent,
   domainWorldBounds,
   generateTopologyDomainSlice,
@@ -45,9 +44,15 @@ export interface RouteReservationEnvelope {
   maxZ: number;
 }
 
-export const ROUTE_RESERVATION_LANDING_DEPTH = 2.15;
-export const ROUTE_RESERVATION_PLAYER_MARGIN = 0.54;
-export const ARCH_CURVE_SEGMENTS = 8;
+/**
+ * One route envelope is shared by perpendicular wall carving and Pillar
+ * exclusion. The landing depth is intentionally close to the accepted dev.5
+ * 2 m landing while the lateral margin is only just beyond the 0.42 m player
+ * radius; the envelope protects traversal without hollowing common Pillar
+ * territory into another open hall.
+ */
+export const ROUTE_RESERVATION_LANDING_DEPTH = 1.9;
+export const ROUTE_RESERVATION_PLAYER_MARGIN = 0.46;
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
@@ -91,36 +96,28 @@ export function topologySeamWall(
   const worldZ = vertical ? mid : fixed;
   const influence = sampleGen3RegionInfluence(ctx.seed, worldX, worldZ, ctx.worldDay, ctx.exposure, ctx.tuning);
   const key = `seam:${boundaryAxis}:${line}:${alongDomain}`;
-
   const parentLeft = domainParent(ctx.seed, left);
   const parentRight = domainParent(ctx.seed, right);
   const mandatory = sameDomain(parentLeft, right) || sameDomain(parentRight, left);
   const omitted = influence.pillarDepth > 0.55
     && unitFloat(`${ctx.seed}:gen3-v5:pillar-seam-open:${key}`) < clamp01((influence.pillarDepth - 0.55) / 0.45 * 0.94);
-
   const length = end - start;
   const connected = mandatory || unitFloat(`${ctx.seed}:gen3-v5:seam-connect:${key}`) < 0.85;
-  const selectedWidth = portalWidth(ctx.seed, key, length);
-  const margin = selectedWidth.width / 2 + 0.7;
+  const selected = portalWidth(ctx.seed, key, length);
+  const margin = selected.width / 2 + 0.7;
   const available = Math.max(0, length - margin * 2);
   const center = available > 0
     ? start + margin + available * (0.18 + unitFloat(`${ctx.seed}:gen3-v5:seam-center:${key}`) * 0.64)
     : (start + end) / 2;
   const portal: TopologyPortal | undefined = connected
-    ? {
-        id: stableId('gen3-v5-seam-portal', ctx.seed, key),
-        kind: selectedWidth.kind,
-        width: selectedWidth.width,
-        center,
-        mandatory
-      }
+    ? { id: stableId('gen3-v5-seam-portal', ctx.seed, key), kind: selected.kind, width: selected.width, center, mandatory }
     : undefined;
   const extraPortals: TopologyPortal[] = [];
   const optionalChance = mandatory ? 0.22 : 0.14;
   if (connected && portal && unitFloat(`${ctx.seed}:gen3-v5:seam-extra:${key}`) < optionalChance) {
     const extraWidth = portalWidth(ctx.seed, `${key}:extra`, length);
     const extraCenter = start + length * (unitFloat(`${ctx.seed}:gen3-v5:seam-extra-center:${key}`) < 0.5 ? 0.30 : 0.70);
-    if (Math.abs(extraCenter - center) > extraWidth.width + selectedWidth.width / 2 + 1.5) {
+    if (Math.abs(extraCenter - center) > extraWidth.width + selected.width / 2 + 1.5) {
       extraPortals.push({
         id: stableId('gen3-v5-seam-portal', ctx.seed, `${key}:extra`),
         kind: extraWidth.kind,
@@ -178,12 +175,13 @@ export function routeReservationEnvelope(wall: TopologyWall, portal: TopologyPor
   };
 }
 
+function portalsForWall(wall: TopologyWall): TopologyPortal[] {
+  const portals = [...(wall.portal ? [wall.portal] : []), ...wall.extraPortals];
+  return wall.arch ? portals.map((portal) => alignArchPortal(wall, portal)) : portals;
+}
+
 function reservationsForWalls(walls: readonly TopologyWall[]): RouteReservationEnvelope[] {
-  return walls.flatMap((wall) => {
-    const portals = [...(wall.portal ? [wall.portal] : []), ...wall.extraPortals];
-    const aligned = wall.arch ? portals.map((portal) => alignArchPortal(wall, portal)) : portals;
-    return aligned.map((portal) => routeReservationEnvelope(wall, portal));
-  });
+  return walls.flatMap((wall) => portalsForWall(wall).map((portal) => routeReservationEnvelope(wall, portal)));
 }
 
 function reservationCutForWall(target: TopologyWall, reservation: RouteReservationEnvelope): [number, number] | undefined {
@@ -200,13 +198,8 @@ function reservationCutForWall(target: TopologyWall, reservation: RouteReservati
   return end - start > 0.02 ? [start, end] : undefined;
 }
 
-function ownPortalCuts(wall: TopologyWall, portals: readonly TopologyPortal[]): Array<[number, number]> {
-  return portals.map((portal) => {
-    const reservation = routeReservationEnvelope(wall, portal);
-    return wall.runAxis === 'x'
-      ? [reservation.minX, reservation.maxX]
-      : [reservation.minZ, reservation.maxZ];
-  });
+function ownPortalCuts(portals: readonly TopologyPortal[]): Array<[number, number]> {
+  return portals.map((portal) => [portal.center - portal.width / 2, portal.center + portal.width / 2]);
 }
 
 function addArchWall(
@@ -217,8 +210,8 @@ function addArchWall(
   wall: TopologyWall,
   externalCuts: readonly [number, number][]
 ): void {
-  const portals = [...(wall.portal ? [wall.portal] : []), ...wall.extraPortals].map((portal) => alignArchPortal(wall, portal));
-  const routeCuts = ownPortalCuts(wall, portals);
+  const portals = portalsForWall(wall);
+  const routeCuts = ownPortalCuts(portals);
   const add = (
     id: string,
     start: number,
@@ -232,6 +225,9 @@ function addArchWall(
     }
   };
 
+  // Semantic/collision structure stays deliberately small. Curved intrados are
+  // render-only geometry in dev6FollowupPresentation.ts, so they cannot inflate
+  // wall/collider budgets again.
   add('lower', wall.start, wall.end, ARCH_LOWER_HEIGHT / 2, ARCH_LOWER_HEIGHT, routeCuts);
   add('header', wall.start, wall.end, WALL_HEIGHT - ARCH_HEADER_HEIGHT / 2, ARCH_HEADER_HEIGHT, []);
 
@@ -246,40 +242,6 @@ function addArchWall(
   const termination = Math.min(0.56, (wall.end - wall.start) * 0.08);
   add('term-start', wall.start, wall.start + termination, WALL_HEIGHT / 2, WALL_HEIGHT, []);
   add('term-end', wall.end - termination, wall.end, WALL_HEIGHT / 2, WALL_HEIGHT, []);
-
-  const headerBottom = WALL_HEIGHT - ARCH_HEADER_HEIGHT;
-  const springY = Math.max(ARCH_LOWER_HEIGHT + 0.52, 1.52);
-  const apexY = headerBottom - 0.035;
-  let bayIndex = 0;
-  for (let center = wall.start + bay / 2; center < wall.end - 0.2; center += bay) {
-    const openingStart = Math.max(wall.start + termination, center - bay / 2 + ARCH_PIER_WIDTH / 2);
-    const openingEnd = Math.min(wall.end - termination, center + bay / 2 - ARCH_PIER_WIDTH / 2);
-    const openingWidth = openingEnd - openingStart;
-    if (openingWidth < 1.8) {
-      bayIndex += 1;
-      continue;
-    }
-    const halfWidth = openingWidth / 2;
-    for (let segmentIndex = 0; segmentIndex < ARCH_CURVE_SEGMENTS; segmentIndex += 1) {
-      const start = openingStart + openingWidth * segmentIndex / ARCH_CURVE_SEGMENTS;
-      const end = openingStart + openingWidth * (segmentIndex + 1) / ARCH_CURVE_SEGMENTS;
-      const outerDistance = Math.max(Math.abs(start - center), Math.abs(end - center));
-      const normalized = Math.min(1, outerDistance / halfWidth);
-      const curve = Math.sqrt(Math.max(0, 1 - normalized * normalized));
-      const openingCeiling = springY + (apexY - springY) * curve;
-      const fillHeight = headerBottom - openingCeiling;
-      if (fillHeight < 0.075) continue;
-      add(
-        `curve:${bayIndex}:${segmentIndex}`,
-        start,
-        end,
-        openingCeiling + fillHeight / 2,
-        fillHeight,
-        []
-      );
-    }
-    bayIndex += 1;
-  }
 }
 
 function pillarCutsForWall(
@@ -328,8 +290,7 @@ function addNormalWall(
   wall: TopologyWall,
   externalCuts: readonly [number, number][]
 ): void {
-  const portals = [...(wall.portal ? [wall.portal] : []), ...wall.extraPortals];
-  const cuts = [...ownPortalCuts(wall, portals), ...externalCuts];
+  const cuts = [...ownPortalCuts(portalsForWall(wall)), ...externalCuts];
   for (const [a, b] of subtractIntervals(wall.start, wall.end, cuts)) {
     pushClippedWall(output, ctx.seed, cellX, cellZ, wall.id, wall.runAxis, wall.fixed, a, b, WALL_HEIGHT / 2, WALL_HEIGHT, wall.materialId);
   }
@@ -361,35 +322,34 @@ function addPillars(
     for (let gridZ = Math.floor((centerZ - half - offsetZ) / PILLAR_SPACING) - 1; gridZ <= Math.ceil((centerZ + half - offsetZ) / PILLAR_SPACING) + 1; gridZ += 1) {
       const worldX = gridX * PILLAR_SPACING + offsetX;
       const worldZ = gridZ * PILLAR_SPACING + offsetZ;
-      if (worldX < centerX - half + 0.75 || worldX > centerX + half - 0.75 || worldZ < centerZ - half + 0.75 || worldZ > centerZ + half - 0.75) continue;
-
+      if (
+        worldX < centerX - half + 0.75 || worldX > centerX + half - 0.75
+        || worldZ < centerZ - half + 0.75 || worldZ > centerZ + half - 0.75
+      ) continue;
       const influence = sampleGen3RegionInfluence(ctx.seed, worldX, worldZ, ctx.worldDay, ctx.exposure, ctx.tuning);
       if (influence.arch > 0.28) continue;
       const key = `${gridX}:${gridZ}`;
       const ordinary = influence.pillar < 0.08;
       if (ordinary && unitFloat(`${ctx.seed}:gen3-v4:ordinary-pillar:${key}`) > 0.018) continue;
       if (influence.pillarDepth > 0.78) deepSamples += 1;
-
       const keepChance = ordinary
         ? 0.8
         : clamp01(
-            0.015
-            + influence.pillar * 0.08
-            + influence.pillarDepth * 0.88
-            + influence.deepPillar * 0.20
-            + Math.max(unitFloat(`${ctx.seed}:row:${gridZ}`), unitFloat(`${ctx.seed}:col:${gridX}`)) * 0.05
-          );
+          0.015
+          + influence.pillar * 0.08
+          + influence.pillarDepth * 0.88
+          + influence.deepPillar * 0.20
+          + Math.max(unitFloat(`${ctx.seed}:row:${gridZ}`), unitFloat(`${ctx.seed}:col:${gridX}`)) * 0.05
+        );
       if (unitFloat(`${ctx.seed}:gen3-v5:pillar:${key}`) > keepChance) continue;
-
       const size = PILLAR_MIN_WIDTH + unitFloat(`${ctx.seed}:gen3-pillar:${key}:size`) * (PILLAR_MAX_WIDTH - PILLAR_MIN_WIDTH);
-      const pillarBounds = {
+      const bounds = {
         minX: worldX - size / 2,
         maxX: worldX + size / 2,
         minZ: worldZ - size / 2,
         maxZ: worldZ + size / 2
       };
-      if (reservations.some((reservation) => boundsOverlap(pillarBounds, reservation))) continue;
-
+      if (reservations.some((reservation) => boundsOverlap(bounds, reservation))) continue;
       output.push({
         id: stableId('gen3-pillar', ctx.seed, key),
         kind: 'column',
@@ -415,10 +375,8 @@ function relevantDomains(seed: string, cellX: number, cellZ: number): Array<{ x:
     for (let domainZ = approximateZ - 2; domainZ <= approximateZ + 2; domainZ += 1) {
       const bounds = domainWorldBounds(seed, domainX, domainZ);
       if (
-        bounds.maxX < centerX - half - 0.5
-        || bounds.minX > centerX + half + 0.5
-        || bounds.maxZ < centerZ - half - 0.5
-        || bounds.minZ > centerZ + half + 0.5
+        bounds.maxX < centerX - half - 0.5 || bounds.minX > centerX + half + 0.5
+        || bounds.maxZ < centerZ - half - 0.5 || bounds.minZ > centerZ + half + 0.5
       ) continue;
       result.push({ x: domainX, z: domainZ });
     }
@@ -426,11 +384,7 @@ function relevantDomains(seed: string, cellX: number, cellZ: number): Array<{ x:
   return result;
 }
 
-function collectTopologyWalls(
-  ctx: DomainContext,
-  cellX: number,
-  cellZ: number
-): TopologyWall[] {
+function collectTopologyWalls(ctx: DomainContext, cellX: number, cellZ: number): TopologyWall[] {
   const domains = relevantDomains(ctx.seed, cellX, cellZ);
   const half = CELL_SIZE / 2;
   const clip = {
@@ -440,9 +394,7 @@ function collectTopologyWalls(
     maxZ: cellZ * CELL_SIZE + half + 0.35
   };
   const topologyWalls: TopologyWall[] = [];
-  for (const domain of domains) {
-    topologyWalls.push(...generateTopologyDomainSlice(ctx, domain.x, domain.z, clip));
-  }
+  for (const domain of domains) topologyWalls.push(...generateTopologyDomainSlice(ctx, domain.x, domain.z, clip));
 
   const seamKeys = new Set<string>();
   for (const domain of domains) {
@@ -456,7 +408,6 @@ function collectTopologyWalls(
     const seam = topologySeamWall(ctx, axisRaw as 'x' | 'z', Number(lineRaw), Number(alongRaw));
     if (!seam.omitted) topologyWalls.push(seam);
   }
-
   const unique = new Map<string, TopologyWall>();
   for (const wall of topologyWalls) unique.set(wall.id, wall);
   return [...unique.values()];
@@ -498,7 +449,6 @@ export function generateSpaceTopologyArchitecture(options: {
   const topologyWalls = collectTopologyWalls(ctx, options.cellX, options.cellZ);
   const reservations = reservationsForWalls(topologyWalls);
   const archIds = new Set<string>();
-
   const pillar = addPillars(ctx, options.cellX, options.cellZ, reservations, props);
   for (const wall of topologyWalls) {
     const externalCuts = [
@@ -512,7 +462,6 @@ export function generateSpaceTopologyArchitecture(options: {
       addNormalWall(walls, ctx, options.cellX, options.cellZ, wall, externalCuts);
     }
   }
-
   return {
     walls,
     props,
