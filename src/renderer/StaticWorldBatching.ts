@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
 import { CELL_SIZE } from '../world/types.js';
+import { installDev6FollowupPresentation } from './dev6FollowupPresentation.js';
 
 const STATIC_WORLD_BATCH_GROUP_ID = 1601;
 const STATIC_WORLD_BATCH_GROUP_NAME = 'level0-static-world';
@@ -57,6 +58,7 @@ function getRunningApplication(): BatchApplication | undefined {
  * enter this layer.
  */
 export function installStaticWorldBatching(): void {
+  installDev6FollowupPresentation();
   let currentApp: BatchApplication | undefined;
   let previousCellGuids = new Set<string>();
 

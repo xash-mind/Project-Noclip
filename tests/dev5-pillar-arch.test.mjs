@@ -19,12 +19,17 @@ import {
 
 const { lightFlickerValue, sampleLightField } = await import('../.test-dist/src/world/lighting.js');
 const { routeReservationEnvelopesForCell } = await import('../.test-dist/src/world/gen3SpaceTopologyBuild.js');
+const { archCurveSegmentsForCell, carpetProfileForCell, holeDepthBands } = await import('../.test-dist/src/renderer/dev6FollowupPresentation.js');
 
 function overlaps(left, right) {
   return left.maxX > right.minX
     && left.minX < right.maxX
     && left.maxZ > right.minZ
     && left.minZ < right.maxZ;
+}
+
+function tintEnergy(profile) {
+  return profile.tint.reduce((sum, value) => sum + value, 0);
 }
 
 test('Pillar geography monotonically removes room partitions and fills the 7.2 m lattice toward the core', () => {
@@ -172,31 +177,64 @@ test('Arch topology emits stable complete divider runs instead of floating fragm
   );
 });
 
-test('Arch dividers contain a multi-step curved aperture silhouette rather than rectangular shoulder boxes', () => {
+test('Arch curves are render-only multi-step apertures and do not inflate semantic wall counts', () => {
   const tuning = clean('arch-rooms');
   const curveBottoms = new Set();
   let curvedPieces = 0;
+  let semanticCurvePieces = 0;
+  let checkedCells = 0;
+  let maxSemanticWalls = 0;
   for (let seedIndex = 0; seedIndex < 5; seedIndex += 1) {
     const seed = `dev6-arch-curve-${seedIndex}`;
     for (let x = -3; x <= 3; x += 1) {
       for (let z = -3; z <= 3; z += 1) {
         const entry = cell(seed, x, z, tuning);
+        checkedCells += 1;
+        maxSemanticWalls = Math.max(maxSemanticWalls, entry.walls.length);
+        const segments = archCurveSegmentsForCell(entry);
+        curvedPieces += segments.length;
+        for (const segment of segments) {
+          curveBottoms.add((segment.position[1] - segment.scale[1] / 2).toFixed(3));
+        }
         for (const wall of entry.walls) {
           if (wall.materialId !== 'arch-pale-wallpaper') continue;
           const minY = wall.cy - wall.sy / 2;
           const maxY = wall.cy + wall.sy / 2;
-          if (minY <= 1.45 || minY >= 2.72 || maxY < WALL_HEIGHT - 0.46) continue;
-          curveBottoms.add(minY.toFixed(3));
-          curvedPieces += 1;
+          if (minY > 1.45 && minY < 2.72 && maxY >= WALL_HEIGHT - 0.46) semanticCurvePieces += 1;
         }
       }
     }
   }
-  assert.ok(curvedPieces > 120, `only ${curvedPieces} curved aperture segments`);
-  assert.ok(
-    curveBottoms.size >= 4,
-    `arch aperture has only ${curveBottoms.size} distinct upper-curve heights: ${[...curveBottoms].join(', ')}`
-  );
+  assert.equal(semanticCurvePieces, 0, 'curved intrados leaked back into semantic/collision walls');
+  assert.ok(curvedPieces > 120, `only ${curvedPieces} render-only curved aperture segments`);
+  assert.ok(curveBottoms.size >= 4, `arch aperture has only ${curveBottoms.size} distinct curve heights`);
+  assert.ok(maxSemanticWalls <= 64, `Arch semantic wall budget reached ${maxSemanticWalls} across ${checkedCells} sampled cells`);
+});
+
+test('region carpet correction stays within Level 0 grammar and holes use ordinary carpet', () => {
+  const ordinary = carpetProfileForCell('ordinary-level-0', false);
+  const holes = carpetProfileForCell('ordinary-level-0', true);
+  const pillar = carpetProfileForCell('pillar-field', false);
+  const pillarHole = carpetProfileForCell('pillar-field', true);
+  const arch = carpetProfileForCell('arch-rooms', false);
+  assert.deepEqual(holes.tint, ordinary.tint);
+  assert.deepEqual(pillarHole.tint, ordinary.tint);
+  assert.ok(tintEnergy(pillar) > tintEnergy(ordinary), 'Pillar carpet is not lighter than ordinary Level 0');
+  assert.ok(tintEnergy(arch) < tintEnergy(ordinary), 'Arch carpet is not darker than ordinary Level 0');
+  assert.ok(tintEnergy(pillar) - tintEnergy(ordinary) < 0.15, 'Pillar carpet diverged too far from Level 0 grammar');
+  assert.ok(tintEnergy(ordinary) - tintEnergy(arch) < 0.35, 'Arch carpet diverged too far from Level 0 grammar');
+});
+
+test('hole presentation transitions from readable upper walls to full dark depth without per-hole light tiers', () => {
+  const bands = holeDepthBands();
+  assert.deepEqual(bands.map((band) => band.key), ['upper', 'middle', 'deep']);
+  assert.ok(bands[0].top > -0.1, `upper hole wall starts too deep: ${bands[0].top}`);
+  assert.equal(bands[0].bottom, bands[1].top);
+  assert.equal(bands[1].bottom, bands[2].top);
+  assert.ok(bands[2].bottom <= -4.4, `hole depth is only ${Math.abs(bands[2].bottom)} m`);
+  const energies = bands.map((band) => band.tint.reduce((sum, value) => sum + value, 0));
+  assert.ok(energies[0] > energies[1] && energies[1] > energies[2], `hole depth does not darken monotonically: ${energies.join(', ')}`);
+  assert.ok(energies[2] < 0.02, `deep hole walls remain too readable: ${energies[2]}`);
 });
 
 test('bounded room light-field samples all active loaded groups while realtime local ownership remains capped', () => {
