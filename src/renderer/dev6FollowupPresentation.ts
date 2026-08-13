@@ -13,13 +13,36 @@ import {
 import { WorldRenderer } from './WorldRenderer.js';
 import { makeMaterial, type CellVisual } from './support.js';
 
+interface RendererAccess { app: pc.Application; }
 interface FollowupCache { materials: Map<string, pc.StandardMaterial>; }
 interface CarpetProfile { key: 'ordinary' | 'pillar' | 'arch'; tint: readonly [number, number, number]; gloss?: number; }
+type Vec3Tuple = readonly [number, number, number];
+type Vec2Tuple = readonly [number, number];
+type Interval = readonly [number, number];
+
+interface ArchLine {
+  orientation: WallSpec['orientation'];
+  fixed: number;
+  headers: WallSpec[];
+  solids: Interval[];
+}
+interface ArchCurveOpening {
+  id: string;
+  sourceWallId: string;
+  orientation: WallSpec['orientation'];
+  fixed: number;
+  start: number;
+  end: number;
+  springY: number;
+  apexY: number;
+  headerBottom: number;
+}
+
 export interface ArchCurveSegment {
   id: string;
   sourceWallId: string;
-  position: readonly [number, number, number];
-  scale: readonly [number, number, number];
+  position: Vec3Tuple;
+  scale: Vec3Tuple;
 }
 export interface HoleDepthBand {
   key: 'upper' | 'middle' | 'deep';
@@ -32,8 +55,9 @@ const caches = new WeakMap<WorldRenderer, FollowupCache>();
 const carpetClones = new WeakMap<pc.StandardMaterial, Map<string, pc.StandardMaterial>>();
 let installed = false;
 const CARPET_REPEAT_METERS = CELL_SIZE / 5;
-const ARCH_CURVE_SEGMENTS = 10;
+const ARCH_CURVE_SEGMENTS = 24;
 const ARCH_HEADER_BRIDGE_MAX_GAP = 4.1;
+const ARCH_UV_REPEAT_METERS = 2.8;
 
 function childrenOf(entity: pc.Entity): pc.Entity[] {
   return [...(entity as pc.Entity & { children: readonly pc.Entity[] }).children];
@@ -58,8 +82,8 @@ function material(cache: FollowupCache, key: string, tint: readonly [number, num
 function addBox(
   name: string,
   parent: pc.Entity,
-  position: readonly [number, number, number],
-  scale: readonly [number, number, number],
+  position: Vec3Tuple,
+  scale: Vec3Tuple,
   value: pc.StandardMaterial
 ): pc.Entity {
   const entity = new pc.Entity(name);
@@ -85,8 +109,8 @@ function carpetClone(
   source: pc.StandardMaterial,
   profile: CarpetProfile,
   key: string,
-  tiling?: readonly [number, number],
-  offset?: readonly [number, number]
+  tiling?: Vec2Tuple,
+  offset?: Vec2Tuple
 ): pc.StandardMaterial {
   let variants = carpetClones.get(source);
   if (!variants) {
@@ -120,8 +144,8 @@ function applyCarpetPresentation(visual: CellVisual): void {
     const scale = child.getLocalScale();
     const minWorldX = descriptor.address.cellX * CELL_SIZE + position.x - scale.x / 2;
     const minWorldZ = descriptor.address.cellZ * CELL_SIZE + position.z - scale.z / 2;
-    const tiling: readonly [number, number] = [scale.x / CARPET_REPEAT_METERS, scale.z / CARPET_REPEAT_METERS];
-    const offset: readonly [number, number] = [wrap01(minWorldX / CARPET_REPEAT_METERS), wrap01(minWorldZ / CARPET_REPEAT_METERS)];
+    const tiling: Vec2Tuple = [scale.x / CARPET_REPEAT_METERS, scale.z / CARPET_REPEAT_METERS];
+    const offset: Vec2Tuple = [wrap01(minWorldX / CARPET_REPEAT_METERS), wrap01(minWorldZ / CARPET_REPEAT_METERS)];
     const uvKey = `${profile.key}:${tiling[0].toFixed(4)}:${tiling[1].toFixed(4)}:${offset[0].toFixed(4)}:${offset[1].toFixed(4)}`;
     child.render.material = carpetClone(child.render.material as pc.StandardMaterial, profile, uvKey, tiling, offset);
   }
@@ -174,13 +198,6 @@ function replaceHoleDepth(renderer: WorldRenderer, visual: CellVisual): void {
   }
 }
 
-type Interval = readonly [number, number];
-interface ArchLine {
-  orientation: WallSpec['orientation'];
-  fixed: number;
-  headers: WallSpec[];
-  solids: Interval[];
-}
 function wallMinY(wall: WallSpec): number { return wall.cy - wall.sy / 2; }
 function wallMaxY(wall: WallSpec): number { return wall.cy + wall.sy / 2; }
 function longInterval(wall: WallSpec): Interval {
@@ -241,9 +258,9 @@ function subtractSolids(interval: Interval, solids: readonly Interval[]): Interv
   return pieces;
 }
 
-export function archCurveSegmentsForCell(descriptor: CellDescriptor): ArchCurveSegment[] {
+function archCurveOpeningsForCell(descriptor: CellDescriptor): ArchCurveOpening[] {
   if (descriptor.world.generationVersion !== 'gen3-v1' || descriptor.world.regionId !== 'arch-rooms') return [];
-  const output: ArchCurveSegment[] = [];
+  const output: ArchCurveOpening[] = [];
   const headerBottom = WALL_HEIGHT - ARCH_HEADER_HEIGHT;
   const springY = Math.max(ARCH_LOWER_HEIGHT + 0.52, 1.52);
   const apexY = headerBottom - 0.035;
@@ -254,31 +271,52 @@ export function archCurveSegmentsForCell(descriptor: CellDescriptor): ArchCurveS
       for (const opening of subtractSolids(longInterval(header), solids)) {
         const width = opening[1] - opening[0];
         if (width < 1.7 || width > 6.4) continue;
-        const center = (opening[0] + opening[1]) / 2;
-        const halfWidth = width / 2;
-        for (let index = 0; index < ARCH_CURVE_SEGMENTS; index += 1) {
-          const start = opening[0] + width * index / ARCH_CURVE_SEGMENTS;
-          const end = opening[0] + width * (index + 1) / ARCH_CURVE_SEGMENTS;
-          const outerDistance = Math.max(Math.abs(start - center), Math.abs(end - center));
-          const normalized = Math.min(1, outerDistance / halfWidth);
-          const curve = Math.sqrt(Math.max(0, 1 - normalized * normalized));
-          const bottom = springY + (apexY - springY) * curve;
-          const height = headerBottom - bottom;
-          if (height < 0.045) continue;
-          const along = (start + end) / 2;
-          output.push({
-            id: `dev6-arch-curve:${lineKey}:${openingIndex}:${index}`,
-            sourceWallId: header.id,
-            position: line.orientation === 'z'
-              ? [along, bottom + height / 2, line.fixed]
-              : [line.fixed, bottom + height / 2, along],
-            scale: line.orientation === 'z'
-              ? [end - start, height, WALL_THICKNESS + 0.008]
-              : [WALL_THICKNESS + 0.008, height, end - start]
-          });
-        }
-        openingIndex += 1;
+        output.push({
+          id: `dev6-arch-curve:${lineKey}:${openingIndex++}`,
+          sourceWallId: header.id,
+          orientation: line.orientation,
+          fixed: line.fixed,
+          start: opening[0],
+          end: opening[1],
+          springY,
+          apexY,
+          headerBottom
+        });
       }
+    }
+  }
+  return output;
+}
+
+function archCurveY(opening: ArchCurveOpening, along: number): number {
+  const center = (opening.start + opening.end) / 2;
+  const halfWidth = (opening.end - opening.start) / 2;
+  const normalized = Math.min(1, Math.abs(along - center) / halfWidth);
+  return opening.springY
+    + (opening.apexY - opening.springY) * Math.sqrt(Math.max(0, 1 - normalized * normalized));
+}
+
+export function archCurveSegmentsForCell(descriptor: CellDescriptor): ArchCurveSegment[] {
+  const output: ArchCurveSegment[] = [];
+  for (const opening of archCurveOpeningsForCell(descriptor)) {
+    const width = opening.end - opening.start;
+    for (let index = 0; index < ARCH_CURVE_SEGMENTS; index += 1) {
+      const start = opening.start + width * index / ARCH_CURVE_SEGMENTS;
+      const end = opening.start + width * (index + 1) / ARCH_CURVE_SEGMENTS;
+      const bottom = Math.min(archCurveY(opening, start), archCurveY(opening, end));
+      const height = opening.headerBottom - bottom;
+      if (height < 0.025) continue;
+      const along = (start + end) / 2;
+      output.push({
+        id: `${opening.id}:${index}`,
+        sourceWallId: opening.sourceWallId,
+        position: opening.orientation === 'z'
+          ? [along, bottom + height / 2, opening.fixed]
+          : [opening.fixed, bottom + height / 2, along],
+        scale: opening.orientation === 'z'
+          ? [end - start, height, WALL_THICKNESS + 0.008]
+          : [WALL_THICKNESS + 0.008, height, end - start]
+      });
     }
   }
   return output;
@@ -313,25 +351,152 @@ export function archHeaderBridgeSegmentsForCell(descriptor: CellDescriptor): Arc
   return output;
 }
 
-function renderArchPresentation(visual: CellVisual): void {
+function subtract(left: Vec3Tuple, right: Vec3Tuple): Vec3Tuple {
+  return [left[0] - right[0], left[1] - right[1], left[2] - right[2]];
+}
+function cross(left: Vec3Tuple, right: Vec3Tuple): Vec3Tuple {
+  return [
+    left[1] * right[2] - left[2] * right[1],
+    left[2] * right[0] - left[0] * right[2],
+    left[0] * right[1] - left[1] * right[0]
+  ];
+}
+function normalize(value: Vec3Tuple): Vec3Tuple {
+  const length = Math.hypot(value[0], value[1], value[2]) || 1;
+  return [value[0] / length, value[1] / length, value[2] / length];
+}
+function dot(left: Vec3Tuple, right: Vec3Tuple): number {
+  return left[0] * right[0] + left[1] * right[1] + left[2] * right[2];
+}
+function curvePoint(opening: ArchCurveOpening, along: number, y: number, normalOffset: number): Vec3Tuple {
+  return opening.orientation === 'z'
+    ? [along, y, opening.fixed + normalOffset]
+    : [opening.fixed + normalOffset, y, along];
+}
+function curveUv(along: number, y: number): Vec2Tuple {
+  return [along / ARCH_UV_REPEAT_METERS, y / ARCH_UV_REPEAT_METERS];
+}
+function pushQuad(
+  positions: number[],
+  normals: number[],
+  uvs: number[],
+  indices: number[],
+  points: readonly [Vec3Tuple, Vec3Tuple, Vec3Tuple, Vec3Tuple],
+  texcoords: readonly [Vec2Tuple, Vec2Tuple, Vec2Tuple, Vec2Tuple],
+  desiredNormal: Vec3Tuple
+): void {
+  let orderedPoints = [...points] as Vec3Tuple[];
+  let orderedUvs = [...texcoords] as Vec2Tuple[];
+  let normal = normalize(cross(subtract(orderedPoints[1]!, orderedPoints[0]!), subtract(orderedPoints[2]!, orderedPoints[0]!)));
+  if (dot(normal, desiredNormal) < 0) {
+    orderedPoints = [orderedPoints[0]!, orderedPoints[3]!, orderedPoints[2]!, orderedPoints[1]!];
+    orderedUvs = [orderedUvs[0]!, orderedUvs[3]!, orderedUvs[2]!, orderedUvs[1]!];
+    normal = normalize(cross(subtract(orderedPoints[1]!, orderedPoints[0]!), subtract(orderedPoints[2]!, orderedPoints[0]!)));
+  }
+  const base = positions.length / 3;
+  for (let index = 0; index < 4; index += 1) {
+    const point = orderedPoints[index]!;
+    const uv = orderedUvs[index]!;
+    positions.push(point[0], point[1], point[2]);
+    normals.push(normal[0], normal[1], normal[2]);
+    uvs.push(uv[0], uv[1]);
+  }
+  indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+}
+
+function addArchCurveMesh(
+  renderer: WorldRenderer,
+  root: pc.Entity,
+  opening: ArchCurveOpening,
+  value: pc.StandardMaterial
+): void {
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const halfThickness = (WALL_THICKNESS + 0.01) / 2;
+  const width = opening.end - opening.start;
+  const frontNormal: Vec3Tuple = opening.orientation === 'z' ? [0, 0, -1] : [-1, 0, 0];
+  const backNormal: Vec3Tuple = opening.orientation === 'z' ? [0, 0, 1] : [1, 0, 0];
+
+  for (let index = 0; index < ARCH_CURVE_SEGMENTS; index += 1) {
+    const start = opening.start + width * index / ARCH_CURVE_SEGMENTS;
+    const end = opening.start + width * (index + 1) / ARCH_CURVE_SEGMENTS;
+    const startY = archCurveY(opening, start);
+    const endY = archCurveY(opening, end);
+    const startUvBottom = curveUv(start, startY);
+    const endUvBottom = curveUv(end, endY);
+    const startUvTop = curveUv(start, opening.headerBottom);
+    const endUvTop = curveUv(end, opening.headerBottom);
+
+    pushQuad(
+      positions, normals, uvs, indices,
+      [
+        curvePoint(opening, start, startY, -halfThickness),
+        curvePoint(opening, start, opening.headerBottom, -halfThickness),
+        curvePoint(opening, end, opening.headerBottom, -halfThickness),
+        curvePoint(opening, end, endY, -halfThickness)
+      ],
+      [startUvBottom, startUvTop, endUvTop, endUvBottom],
+      frontNormal
+    );
+    pushQuad(
+      positions, normals, uvs, indices,
+      [
+        curvePoint(opening, start, startY, halfThickness),
+        curvePoint(opening, end, endY, halfThickness),
+        curvePoint(opening, end, opening.headerBottom, halfThickness),
+        curvePoint(opening, start, opening.headerBottom, halfThickness)
+      ],
+      [startUvBottom, endUvBottom, endUvTop, startUvTop],
+      backNormal
+    );
+    pushQuad(
+      positions, normals, uvs, indices,
+      [
+        curvePoint(opening, start, startY, -halfThickness),
+        curvePoint(opening, end, endY, -halfThickness),
+        curvePoint(opening, end, endY, halfThickness),
+        curvePoint(opening, start, startY, halfThickness)
+      ],
+      [[start / ARCH_UV_REPEAT_METERS, 0], [end / ARCH_UV_REPEAT_METERS, 0], [end / ARCH_UV_REPEAT_METERS, 0.16], [start / ARCH_UV_REPEAT_METERS, 0.16]],
+      [0, -1, 0]
+    );
+  }
+
+  const app = (renderer as unknown as RendererAccess).app;
+  const mesh = new pc.Mesh(app.graphicsDevice);
+  mesh.setPositions(positions);
+  mesh.setNormals(normals);
+  mesh.setUvs(0, uvs);
+  mesh.setIndices(indices);
+  mesh.update();
+  const meshInstance = new pc.MeshInstance(mesh, value);
+  const entity = new pc.Entity(`${opening.id}:mesh`);
+  entity.addComponent('render', { meshInstances: [meshInstance] });
+  root.addChild(entity);
+}
+
+function renderArchPresentation(renderer: WorldRenderer, visual: CellVisual): void {
   for (const child of childrenOf(visual.root)) {
     if (child.name.startsWith('dev6-arch-curve:') || child.name.startsWith('dev6-arch-header-bridge:')) child.destroy();
   }
-  const segments = [
-    ...archHeaderBridgeSegmentsForCell(visual.descriptor),
-    ...archCurveSegmentsForCell(visual.descriptor)
-  ];
-  for (const segment of segments) {
+  for (const segment of archHeaderBridgeSegmentsForCell(visual.descriptor)) {
     const source = entityByName(visual.root, segment.sourceWallId);
     if (!source?.render) continue;
     addBox(segment.id, visual.root, segment.position, segment.scale, source.render.material as pc.StandardMaterial);
+  }
+  for (const opening of archCurveOpeningsForCell(visual.descriptor)) {
+    const source = entityByName(visual.root, opening.sourceWallId);
+    if (!source?.render) continue;
+    addArchCurveMesh(renderer, visual.root, opening, source.render.material as pc.StandardMaterial);
   }
 }
 
 function applyFollowup(renderer: WorldRenderer, visual: CellVisual): void {
   if (visual.descriptor.world.generationVersion !== 'gen3-v1') return;
   replaceHoleDepth(renderer, visual);
-  renderArchPresentation(visual);
+  renderArchPresentation(renderer, visual);
   applyCarpetPresentation(visual);
 }
 
