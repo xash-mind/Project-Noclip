@@ -16,6 +16,7 @@
     "src/persistence/types.ts",
     "src/simulation/**/*.ts",
     "src/physics/**/*.ts",
-    "src/renderer/objectCatalog.ts"
+    "src/renderer/objectCatalog.ts",
+    "src/renderer/dev5Wallpaper.ts"
   ]
 }

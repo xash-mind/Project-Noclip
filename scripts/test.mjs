@@ -14,6 +14,7 @@ const test = spawnSync(process.execPath, [
   'tests/fields.test.mjs',
   'tests/generation-3.test.mjs',
   'tests/dev5-morphology-navigation.test.mjs',
-  'tests/dev5-pillar-arch.test.mjs'
+  'tests/dev5-pillar-arch.test.mjs',
+  'tests/dev5-fidelity-regressions.test.mjs'
 ], { stdio: 'inherit' });
 process.exit(test.status ?? 1);

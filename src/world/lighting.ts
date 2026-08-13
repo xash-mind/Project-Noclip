@@ -19,8 +19,12 @@ export const LIGHT_FIELD_RADIUS = CELL_SIZE * 2.7;
 export const LIGHT_FIELD_UPDATE_INTERVAL = 0.1;
 export const BASELINE_OFF_CHANCE = 0.0005;
 export const BASELINE_FLICKER_CHANCE = 0.006;
-const FIXTURE_LIGHT_ACQUIRE_RADIUS = 21.5;
-const FIXTURE_LIGHT_RELEASE_RADIUS = 27.5;
+/** Must stay aligned with the bounded PlayCanvas omni range in ProjectNoclipGame. */
+export const FIXTURE_PHYSICAL_LIGHT_RANGE = 23.5;
+/** Pre-arm a source while its physical light is still outside visible contribution range. */
+export const FIXTURE_LIGHT_ACQUIRE_RADIUS = 30;
+/** Retain ownership farther out than acquisition to prevent threshold churn. */
+export const FIXTURE_LIGHT_RELEASE_RADIUS = 35;
 
 interface Bounds { minX: number; maxX: number; minZ: number; maxZ: number; }
 
@@ -257,40 +261,64 @@ export function sampleLightField(
  * retired player-following omni, these sources illuminate continuously across
  * streaming Cell boundaries from their actual ceiling locations. Source energy
  * is deliberately independent of player distance; PlayCanvas owns physical
- * falloff, while the 30 m selection radius only bounds renderer work outside
- * the 23.5 m fixture-light range.
+ * falloff. Acquisition happens at 30 m, safely outside the 23.5 m physical range,
+ * and 35 m release hysteresis prevents ownership churn while the player passes a
+ * visibly-on fixture.
  */
 export function selectSpatialFixtureLights(
-sources: readonly LightFieldSource[], playerX: number, playerZ: number, elapsedSeconds: number,
-reducedFlicker: boolean, limit = 4, previousIds: readonly string[] = []
+  sources: readonly LightFieldSource[],
+  playerX: number,
+  playerZ: number,
+  elapsedSeconds: number,
+  reducedFlicker: boolean,
+  limit = 4,
+  previousIds: readonly string[] = []
 ): SpatialFixtureLight[] {
-const candidates = new Map<string, SpatialFixtureLight>();
-for (const source of sources) {
-  if (source.group.state === 'off') continue;
-  const pulse = lightFlickerValue(source.group, elapsedSeconds, reducedFlicker);
-  for (let index = 0; index < source.group.fixtures.length; index += 1) {
-    const fixture = source.group.fixtures[index]!;
-    const worldX = source.cellX * CELL_SIZE + fixture.x;
-    const worldZ = source.cellZ * CELL_SIZE + fixture.z;
-    const distance = Math.hypot(worldX - playerX, worldZ - playerZ);
-    if (distance > FIXTURE_LIGHT_RELEASE_RADIUS) continue;
-    const id = `${source.group.id}:${index}`;
-    candidates.set(id, { id, worldX, worldY: fixture.y - 0.18, worldZ, distance, intensity: source.group.intensity * pulse * 0.82, temperature: source.group.temperature });
+  const boundedLimit = Math.max(0, limit);
+  if (boundedLimit === 0) return [];
+  const candidates = new Map<string, SpatialFixtureLight>();
+  for (const source of sources) {
+    if (source.group.state === 'off') continue;
+    const pulse = lightFlickerValue(source.group, elapsedSeconds, reducedFlicker);
+    for (let index = 0; index < source.group.fixtures.length; index += 1) {
+      const fixture = source.group.fixtures[index]!;
+      const worldX = source.cellX * CELL_SIZE + fixture.x;
+      const worldZ = source.cellZ * CELL_SIZE + fixture.z;
+      const distance = Math.hypot(worldX - playerX, worldZ - playerZ);
+      if (distance > FIXTURE_LIGHT_RELEASE_RADIUS) continue;
+      const id = `${source.group.id}:${index}`;
+      candidates.set(id, {
+        id,
+        worldX,
+        worldY: fixture.y - 0.18,
+        worldZ,
+        distance,
+        intensity: source.group.intensity * pulse * 0.82,
+        temperature: source.group.temperature
+      });
+    }
   }
-}
-const selected: SpatialFixtureLight[] = [];
-const selectedIds = new Set<string>();
-for (const id of previousIds) {
-  const candidate = candidates.get(id);
-  if (!candidate || selected.length >= Math.max(0, limit)) continue;
-  selected.push(candidate); selectedIds.add(id);
-}
-const available = [...candidates.values()].filter((c) => c.distance <= FIXTURE_LIGHT_ACQUIRE_RADIUS && !selectedIds.has(c.id)).sort((l,r) => l.distance-r.distance || l.id.localeCompare(r.id));
-for (const candidate of available) {
-  if (selected.length >= Math.max(0, limit)) break;
-  selected.push(candidate); selectedIds.add(candidate.id);
-}
-return selected;
+
+  const selected: SpatialFixtureLight[] = [];
+  const selectedIds = new Set<string>();
+  // Stable owners always win while inside the wider release radius. We never
+  // evict a currently-contributing fixture merely because another became closer.
+  for (const id of previousIds) {
+    const candidate = candidates.get(id);
+    if (!candidate || selected.length >= boundedLimit) continue;
+    selected.push(candidate);
+    selectedIds.add(id);
+  }
+
+  const available = [...candidates.values()]
+    .filter((candidate) => candidate.distance <= FIXTURE_LIGHT_ACQUIRE_RADIUS && !selectedIds.has(candidate.id))
+    .sort((left, right) => left.distance - right.distance || left.id.localeCompare(right.id));
+  for (const candidate of available) {
+    if (selected.length >= boundedLimit) break;
+    selected.push(candidate);
+    selectedIds.add(candidate.id);
+  }
+  return selected;
 }
 
 export function validateLightClearance(groups: readonly LightGroupSpec[], walls: readonly WallSpec[], props: readonly PropSpec[]): string[] {
