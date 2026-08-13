@@ -94,6 +94,23 @@ function pathClear(colliders: readonly WorldCollider[], start: { x: number; z: n
   return true;
 }
 
+function runtimePathClear(renderer: WorldRenderer, start: { x: number; z: number }, end: { x: number; z: number }, radius = 0.34): boolean {
+  const distance = Math.hypot(end.x - start.x, end.z - start.z);
+  const steps = Math.max(2, Math.ceil(distance / 0.18));
+  let currentX = start.x;
+  let currentZ = start.z;
+  for (let index = 1; index <= steps; index += 1) {
+    const t = index / steps;
+    const targetX = start.x + (end.x - start.x) * t;
+    const targetZ = start.z + (end.z - start.z) * t;
+    const [resolvedX, resolvedZ] = renderer.resolveMovement(currentX, currentZ, targetX, targetZ, radius);
+    if (Math.hypot(resolvedX - targetX, resolvedZ - targetZ) > 0.035) return false;
+    currentX = resolvedX;
+    currentZ = resolvedZ;
+  }
+  return Math.hypot(currentX - end.x, currentZ - end.z) <= 0.08;
+}
+
 function setInspectionPosition(access: GameLabAccess, x: number, z: number, yaw?: number): void {
   const camera = access.camera;
   if (!camera) return;
@@ -145,8 +162,6 @@ async function locateForLab(
     return undefined;
   }
 
-  // QA navigation clears only a local Region override. It never changes the
-  // deterministic geography being inspected.
   access.tuning = { ...access.tuning, regionOverride: undefined };
   setInspectionPosition(access, occurrence.worldX, occurrence.worldZ);
   const detail = formatRegionDepth(regionId, depth, occurrence);
@@ -171,14 +186,17 @@ function worldWall(visual: CellVisual, wall: CellVisual['descriptor']['walls'][n
   };
 }
 
-function findArchRoute(access: GameLabAccess): ArchRouteEvidence | undefined {
-  const renderer = access.renderer;
-  const camera = access.camera;
-  if (!renderer || !camera) return undefined;
+interface ArchRouteCandidate {
+  key: string;
+  evidence: ArchRouteEvidence;
+  distance: number;
+  yaw: number;
+}
+
+function archRouteCandidates(renderer: WorldRenderer, camera: pc.Entity, rejected: ReadonlySet<string>): ArchRouteCandidate[] {
   const colliders = [...renderer.walls.values()];
   const position = camera.getPosition();
-  const candidates: Array<{ evidence: ArchRouteEvidence; distance: number }> = [];
-
+  const candidates: ArchRouteCandidate[] = [];
   for (const visual of renderer.loaded.values()) {
     if (visual.descriptor.world.regionId !== 'arch-rooms') continue;
     for (const wall of visual.descriptor.walls) {
@@ -186,21 +204,47 @@ function findArchRoute(access: GameLabAccess): ArchRouteEvidence | undefined {
       const overheadHeader = wall.materialId === 'arch-pale-wallpaper' && geometry.minY > 2.68 && wall.sy > 0.34 && wall.sy < 0.55;
       if (!overheadHeader || geometry.end - geometry.start < 2.5) continue;
       for (let along = geometry.start + 1.05; along <= geometry.end - 1.05; along += 0.34) {
+        const key = `${wall.id}:${along.toFixed(2)}`;
+        if (rejected.has(key)) continue;
         const crossing = geometry.orientation === 'z' ? { x: along, z: geometry.fixed } : { x: geometry.fixed, z: along };
         const start = geometry.orientation === 'z' ? { x: along, z: geometry.fixed - 1.75 } : { x: geometry.fixed - 1.75, z: along };
         const end = geometry.orientation === 'z' ? { x: along, z: geometry.fixed + 1.75 } : { x: geometry.fixed + 1.75, z: along };
         if (!pathClear(colliders, start, end)) continue;
-        const evidence: ArchRouteEvidence = { orientation: geometry.orientation, fixed: geometry.fixed, crossingCoordinate: along, start, end };
-        candidates.push({ evidence, distance: Math.hypot(crossing.x - position.x, crossing.z - position.z) });
+        const yaw = geometry.orientation === 'z' ? 180 : -90;
+        candidates.push({
+          key,
+          evidence: { orientation: geometry.orientation, fixed: geometry.fixed, crossingCoordinate: along, start, end },
+          distance: Math.hypot(crossing.x - position.x, crossing.z - position.z),
+          yaw
+        });
         break;
       }
     }
   }
-  const chosen = candidates.sort((left, right) => left.distance - right.distance)[0]?.evidence;
-  if (!chosen) return undefined;
-  const yaw = chosen.orientation === 'z' ? 180 : -90;
-  setInspectionPosition(access, chosen.start.x, chosen.start.z, yaw);
-  return chosen;
+  return candidates.sort((left, right) => left.distance - right.distance);
+}
+
+function findArchRoute(access: GameLabAccess): ArchRouteEvidence | undefined {
+  const renderer = access.renderer;
+  const camera = access.camera;
+  if (!renderer || !camera) return undefined;
+  const rejected = new Set<string>();
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const candidate = archRouteCandidates(renderer, camera, rejected)[0];
+    if (!candidate) return undefined;
+    rejected.add(candidate.key);
+    setInspectionPosition(access, candidate.evidence.start.x, candidate.evidence.start.z, candidate.yaw);
+
+    // Revalidate only after streaming recenters. The previous QA picker checked
+    // against the old loaded-cell collider set, which could make an aperture
+    // look route-clear before a newly loaded neighbor restored a blocker.
+    const freshColliders = [...renderer.walls.values()];
+    if (!pathClear(freshColliders, candidate.evidence.start, candidate.evidence.end)) continue;
+    if (!runtimePathClear(renderer, candidate.evidence.start, candidate.evidence.end)) continue;
+    return candidate.evidence;
+  }
+  return undefined;
 }
 
 function findFixtureApproach(access: GameLabAccess): FixtureApproachEvidence | undefined {
@@ -245,7 +289,6 @@ function findFixtureApproach(access: GameLabAccess): FixtureApproachEvidence | u
   return chosen.evidence;
 }
 
-/** Resolve a real current floor wall for touch-marker smoke instead of hard-coding old topology coordinates. */
 function findMarkerWall(access: GameLabAccess): MarkerWallEvidence | undefined {
   const renderer = access.renderer;
   const camera = access.camera;
@@ -311,7 +354,6 @@ function syncDepthOptions(regionSelect: HTMLSelectElement, depthSelect: HTMLSele
   depthSelect.disabled = regionId === 'ordinary-level-0';
 }
 
-/** Add QA-only Region-depth navigation beside the existing deterministic Region locator. */
 export function installRegionDepthLab(game: ProjectNoclipGame): void {
   const access = gameAccess(game);
   const regionSelect = document.querySelector<HTMLSelectElement>('[data-lab="region"]');
