@@ -131,10 +131,29 @@ def resume_input(driver: webdriver.Chrome) -> bool:
         return False
 
 
+def key_event(driver: webdriver.Chrome, event_type: str) -> None:
+    # Browser-level CDP input is trusted by Chromium and exercises the same
+    # keyboard -> PlayerIntent -> movement/collision path as a real W key.
+    driver.execute_cdp_cmd("Input.dispatchKeyEvent", {
+        "type": event_type,
+        "key": "w",
+        "code": "KeyW",
+        "windowsVirtualKeyCode": 87,
+        "nativeVirtualKeyCode": 87,
+    })
+
+
 def press_forward(driver: webdriver.Chrome, seconds: float) -> None:
-    driver.execute_script("window.dispatchEvent(new KeyboardEvent('keydown',{key:'w',code:'KeyW',bubbles:true}));")
-    time.sleep(seconds)
-    driver.execute_script("window.dispatchEvent(new KeyboardEvent('keyup',{key:'w',code:'KeyW',bubbles:true}));")
+    key_event(driver, "keyDown")
+    try:
+        deadline = time.monotonic() + seconds
+        # Keep headless Chromium rendering while the key is held; a bare Python
+        # sleep can throttle requestAnimationFrame to roughly one frame.
+        while time.monotonic() < deadline:
+            time.sleep(0.08)
+            driver.execute_script("return performance.now();")
+    finally:
+        key_event(driver, "keyUp")
 
 
 def qa_snapshot(driver: webdriver.Chrome) -> dict[str, Any] | None:
@@ -189,13 +208,15 @@ def main() -> None:
         capture_canvas(driver, ARTIFACT_DIR / "fixture-approach-00.png")
         lighting_frames.append({"file": "fixture-approach-00.png", "snapshot": qa_snapshot(driver)})
         if pointer_lock:
-            driver.execute_script("window.dispatchEvent(new KeyboardEvent('keydown',{key:'w',code:'KeyW',bubbles:true}));")
-            for index in range(1, 9):
-                time.sleep(0.48)
-                file_name = f"fixture-approach-{index:02d}.png"
-                capture_canvas(driver, ARTIFACT_DIR / file_name)
-                lighting_frames.append({"file": file_name, "snapshot": qa_snapshot(driver)})
-            driver.execute_script("window.dispatchEvent(new KeyboardEvent('keyup',{key:'w',code:'KeyW',bubbles:true}));")
+            key_event(driver, "keyDown")
+            try:
+                for index in range(1, 9):
+                    time.sleep(0.48)
+                    file_name = f"fixture-approach-{index:02d}.png"
+                    capture_canvas(driver, ARTIFACT_DIR / file_name)
+                    lighting_frames.append({"file": file_name, "snapshot": qa_snapshot(driver)})
+            finally:
+                key_event(driver, "keyUp")
         report["lighting"] = {"approach": approach, "pointerLock": pointer_lock, "frames": lighting_frames}
 
         report["browserErrors"].extend(severe_errors(driver))
