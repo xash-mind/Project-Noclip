@@ -17,6 +17,7 @@ BASE_URL = os.environ.get("NOCLIP_BASE_URL", "http://127.0.0.1:4173")
 ARTIFACT_DIR = Path(os.environ.get("NOCLIP_FIDELITY_ARTIFACTS", "artifacts/fidelity"))
 ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 ARCH_ROUTE_CROSSING_PROGRESS = 0.71
+FLICKER_THRESHOLD = 0.5
 
 
 def wait_for(driver: webdriver.Chrome, predicate: Callable[[webdriver.Chrome], Any], timeout: float = 30, message: str = "condition") -> Any:
@@ -149,6 +150,29 @@ def drive_forward_to_progress(
     raise AssertionError(f"Player did not reach path progress {target_progress:.2f}; final={final_snapshot}, start={start}, end={end}")
 
 
+def fixture_snapshot(driver: webdriver.Chrome, group_id: str) -> dict[str, Any]:
+    value = driver.execute_script(
+        "return window.__projectNoclipQa?.fixtureStateSnapshot?.(arguments[0]) ?? null;",
+        group_id,
+    )
+    if not value:
+        raise AssertionError(f"Missing fixture state snapshot for {group_id}")
+    return value
+
+
+def wait_for_flicker_phase(driver: webdriver.Chrome, group_id: str, lit: bool, timeout: float = 24.0) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        value = fixture_snapshot(driver, group_id)
+        pulse = float(value.get("pulse", -1))
+        if (pulse >= FLICKER_THRESHOLD) == lit:
+            # Allow the renderer one frame to apply the same thresholded pulse before capture.
+            time.sleep(0.08)
+            return fixture_snapshot(driver, group_id)
+        time.sleep(0.04)
+    raise AssertionError(f"Timed out waiting for flicker {'lit' if lit else 'dark'} phase for {group_id}")
+
+
 def fixture_state_evidence(driver: webdriver.Chrome, state: str) -> dict[str, Any]:
     evidence = driver.execute_script("return window.__projectNoclipQa?.placeAtFixtureState?.(arguments[0]) ?? null;", state)
     if not evidence:
@@ -159,30 +183,37 @@ def fixture_state_evidence(driver: webdriver.Chrome, state: str) -> dict[str, An
         raise AssertionError(f"Missing runtime snapshot for {state} fixture")
     if snapshot.get("sourceIds"):
         raise AssertionError(f"Player-relative fixture-light ownership reappeared for {state}: {snapshot}")
-    fixture_snapshot = driver.execute_script(
-        "return window.__projectNoclipQa?.fixtureStateSnapshot?.(arguments[0]) ?? null;",
-        evidence["groupId"],
-    )
-    if not fixture_snapshot:
-        raise AssertionError(f"Missing fixture state snapshot for {state}: {evidence}")
-    if fixture_snapshot.get("state") != state:
-        raise AssertionError(f"Fixture state changed during {state} capture: {fixture_snapshot}")
-    if fixture_snapshot.get("sourceOwned"):
-        raise AssertionError(f"Retired player-relative source ownership reappeared for {state}: {fixture_snapshot}")
-    pulse = float(fixture_snapshot.get("pulse", -1))
+    state_snapshot = fixture_snapshot(driver, evidence["groupId"])
+    if state_snapshot.get("state") != state:
+        raise AssertionError(f"Fixture state changed during {state} capture: {state_snapshot}")
+    if state_snapshot.get("sourceOwned"):
+        raise AssertionError(f"Retired player-relative source ownership reappeared for {state}: {state_snapshot}")
+
+    if state == "flicker":
+        lit_snapshot = wait_for_flicker_phase(driver, evidence["groupId"], True)
+        capture_canvas(driver, ARTIFACT_DIR / "fixture-flicker-lit.png")
+        dark_snapshot = wait_for_flicker_phase(driver, evidence["groupId"], False)
+        capture_canvas(driver, ARTIFACT_DIR / "fixture-flicker-dark.png")
+        return {
+            "files": ["fixture-flicker-lit.png", "fixture-flicker-dark.png"],
+            "placement": evidence,
+            "runtime": snapshot,
+            "lit": lit_snapshot,
+            "dark": dark_snapshot,
+        }
+
+    pulse = float(state_snapshot.get("pulse", -1))
     if state == "on" and abs(pulse - 1) > 1e-9:
-        raise AssertionError(f"On fixture pulse was not 1: {fixture_snapshot}")
+        raise AssertionError(f"On fixture pulse was not 1: {state_snapshot}")
     if state == "off" and abs(pulse) > 1e-9:
-        raise AssertionError(f"Off fixture pulse was not 0: {fixture_snapshot}")
-    if state == "flicker" and not (0 <= pulse <= 1):
-        raise AssertionError(f"Flicker pulse escaped [0,1]: {fixture_snapshot}")
+        raise AssertionError(f"Off fixture pulse was not 0: {state_snapshot}")
     file_name = f"fixture-{state}.png"
     capture_canvas(driver, ARTIFACT_DIR / file_name)
     return {
         "file": file_name,
         "placement": evidence,
         "runtime": snapshot,
-        "fixture": fixture_snapshot,
+        "fixture": state_snapshot,
     }
 
 
@@ -206,19 +237,16 @@ def main() -> None:
         if not route: raise AssertionError("Could not resolve a freshly streamed runtime-clear Arch route bay")
         time.sleep(0.7); before = qa_snapshot(driver); capture_canvas(driver, ARTIFACT_DIR / "arch-route-before.png")
         if not resume_input(driver): raise AssertionError("Pointer lock unavailable for required Arch traversal")
-        # The semantic gate below requires the player to clear the divider by 0.7 m.
-        # 0.71 progress reaches that margin; the old 0.80 wait redundantly demanded
-        # extra corridor travel after the route had already been proven traversable.
-        after = drive_forward_to_progress(driver, route["start"], route["end"], ARCH_ROUTE_CROSSING_PROGRESS, 24.0)
+        # The semantic gate remains unchanged; the larger timeout only tolerates slow SwiftShader frames.
+        after = drive_forward_to_progress(driver, route["start"], route["end"], ARCH_ROUTE_CROSSING_PROGRESS, 36.0)
         capture_canvas(driver, ARTIFACT_DIR / "arch-route-after.png")
         fixed, axis = float(route["fixed"]), "z" if route["orientation"] == "z" else "x"
         if not before or not (float(before[axis]) < fixed - 0.7 and float(after[axis]) > fixed + 0.7):
             raise AssertionError(f"Player did not traverse the selected Arch route bay: {before} -> {after}, route={route}")
         report["arch"] = {"message": arch_message, "route": route, "before": before, "after": after, "pointerLock": True}
 
-        # Fixture-specific visual evidence belongs here; the primary CI journey owns
-        # long movement/collision traversal. Sample deterministic fixture states directly
-        # so this suite verifies presentation and ownership without duplicating navigation.
+        # Fixture-specific evidence verifies actual deterministic on/off states and both
+        # sides of the renderer's shared binary flicker threshold.
         qa_locate(driver, "ordinary-level-0", "nearest")
         fixture_states = {
             state: fixture_state_evidence(driver, state)
