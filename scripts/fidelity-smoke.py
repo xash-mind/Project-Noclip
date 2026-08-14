@@ -14,8 +14,9 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
 BASE_URL = os.environ.get("NOCLIP_BASE_URL", "http://127.0.0.1:4173")
-ARTIFACT_DIR = Path(os.environ.get("NOCLIP_DEV5_FIDELITY_ARTIFACTS", "artifacts/dev5-fidelity"))
+ARTIFACT_DIR = Path(os.environ.get("NOCLIP_FIDELITY_ARTIFACTS", "artifacts/fidelity"))
 ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
+ARCH_ROUTE_CROSSING_PROGRESS = 0.71
 
 
 def wait_for(driver: webdriver.Chrome, predicate: Callable[[webdriver.Chrome], Any], timeout: float = 30, message: str = "condition") -> Any:
@@ -70,8 +71,8 @@ def severe_errors(driver: webdriver.Chrome) -> list[dict[str, Any]]:
 
 def scene_only(driver: webdriver.Chrome) -> None:
     driver.execute_script("""
-      if (document.querySelector('#dev5-fidelity-style')) return;
-      const style=document.createElement('style'); style.id='dev5-fidelity-style';
+      if (document.querySelector('#fidelity-smoke-style')) return;
+      const style=document.createElement('style'); style.id='fidelity-smoke-style';
       style.textContent='[data-ui="hud"] > :not(canvas), .pause-overlay, [data-ui="version-indicator"] { opacity:0 !important; }';
       document.head.appendChild(style);
     """)
@@ -168,7 +169,7 @@ def main() -> None:
         driver.get(BASE_URL)
         wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="new"]'), message="new journey").click()
         wait_for(driver, lambda current: current.execute_script("return document.querySelector('[data-ui=title]').hidden && !document.querySelector('[data-ui=hud]').hidden"), timeout=35, message="journey HUD")
-        wait_for(driver, lambda current: current.execute_script("return Boolean(window.__projectNoclipQa)"), message="dev.5 QA bridge")
+        wait_for(driver, lambda current: current.execute_script("return Boolean(window.__projectNoclipQa)"), message="runtime QA bridge")
         configure_lab(driver); scene_only(driver)
 
         for depth in ("edge", "interior", "core", "deep-core"):
@@ -181,7 +182,10 @@ def main() -> None:
         if not route: raise AssertionError("Could not resolve a freshly streamed runtime-clear Arch route bay")
         time.sleep(0.7); before = qa_snapshot(driver); capture_canvas(driver, ARTIFACT_DIR / "arch-route-before.png")
         if not resume_input(driver): raise AssertionError("Pointer lock unavailable for required Arch traversal")
-        after, _ = drive_forward_to_progress(driver, route["start"], route["end"], 0.80, 24.0)
+        # The semantic gate below requires the player to clear the divider by 0.7 m.
+        # 0.71 progress reaches that margin; the old 0.80 wait redundantly demanded
+        # extra corridor travel after the route had already been proven traversable.
+        after, _ = drive_forward_to_progress(driver, route["start"], route["end"], ARCH_ROUTE_CROSSING_PROGRESS, 24.0)
         capture_canvas(driver, ARTIFACT_DIR / "arch-route-after.png")
         fixed, axis = float(route["fixed"]), "z" if route["orientation"] == "z" else "x"
         if not before or not (float(before[axis]) < fixed - 0.7 and float(after[axis]) > fixed + 0.7):

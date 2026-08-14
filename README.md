@@ -6,23 +6,21 @@ A browser-first living Backrooms project focused on immense deterministic spaces
 
 ## Start here
 
-Agents and contributors should read, in order:
+Agents and contributors should begin with the fast navigation path:
 
-1. [`AGENTS.md`](AGENTS.md) — repository-specific operating and verification rules
-2. [`PROJECT.md`](PROJECT.md) — durable product scope, principles, architecture, and non-goals
-3. [`STATUS.md`](STATUS.md) — compact verified current state and exact next action
-4. [`docs/VISION.md`](docs/VISION.md) — deeper product thesis
-5. Relevant GitHub Issues and Pull Requests
-6. The shared playbook and Engineering Standards in [`xash-mind/project-operations`](https://github.com/xash-mind/project-operations)
+1. [`AGENTS.md`](AGENTS.md) — repository operating, cleanliness, verification, and fast-path rules
+2. [`docs/CODE_MAP.md`](docs/CODE_MAP.md) — authoritative subsystem/file navigation
+3. [`docs/TERMINOLOGY.md`](docs/TERMINOLOGY.md) — canonical vocabulary and short addresses
+4. The named target's implementation and directly relevant tests
 
-`docs/CURRENT_STATE.md` is retained as the Iteration 2 historical snapshot. `STATUS.md` is the current accepted-state record going forward.
+Read [`PROJECT.md`](PROJECT.md), [`STATUS.md`](STATUS.md), [`WORLD.md`](WORLD.md), Issues/PRs, or shared [`xash-mind/project-operations`](https://github.com/xash-mind/project-operations) guidance only when the target actually depends on product state, release state, world rules, tracked intent, or shared process. `docs/CURRENT_STATE.md` is retained as the Iteration 2 historical snapshot.
 
 ## Level 0 Generation 3 / 0.3 development
 
 - Continuous world-space Level 0 architecture driven by deterministic multi-scale Fields; Cells are streaming/cache units, never rooms.
 - Kilometre-capable Ordinary Level 0, Pillar Field, and Arch Rooms Regions with measured travel-time budgets.
 - Blackout Conditions with zero local light/buzz, rare floor-hole Carvers, Manila as one Structure, and exits as Transitions rather than geography.
-- Reference-calibrated wallpaper, carpet, suspended ceiling, spatial fixture lighting with restrained bloom, and layered fluorescent ambience.
+- Reference-calibrated wallpaper, carpet, suspended ceiling, fixture-owned fluorescent lighting with restrained bloom, and layered fluorescent ambience.
 - Generation-versioned saves: new journeys use `gen3-v1`; existing journeys remain on frozen `gen2` generation.
 - Smooth swept-circle wall collision and diagonal sliding.
 - Sparse persistent loot and one-time starter rolls.
@@ -55,4 +53,4 @@ Use `npm run check` for the complete local quality gate. Node.js `>=22.12.0` is 
 - Durable technical decisions: `docs/adr/`
 - Current accepted state: `STATUS.md`
 
-Ordinary project agents do not update Notion. A dedicated portfolio sync copies only meaningful summary changes later.
+Notion is not part of routine code navigation. Synchronize the standalone project pages only when accepted facts represented there actually change.

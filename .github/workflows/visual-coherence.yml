@@ -1,52 +1,70 @@
 name: Project Noclip Visual Coherence
-on: [pull_request, workflow_dispatch]
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig*.json'
+      - 'vite.config.ts'
+      - '.github/workflows/visual-coherence.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig*.json'
+      - 'vite.config.ts'
+      - '.github/workflows/visual-coherence.yml'
+
 permissions:
   contents: read
+
 jobs:
   visual-coherence:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22.12.0'
+          cache: npm
       - run: npm install --no-audit --no-fund
       - run: npm run typecheck
       - run: npm test
       - run: npm run benchmark
       - run: npm run build
       - name: Install browser driver
-        run: python -m pip install --disable-pip-version-check selenium==4.46.0
+        run: python3 -m pip install --disable-pip-version-check selenium==4.29.0
       - name: Resolve deterministic visual targets
         run: |
-          mkdir -p artifacts/dev4-visual artifacts/dev5-fidelity artifacts/dev6-flashlight
-          npx tsc -p tsconfig.test.json
-          node scripts/dev4-visual-targets.mjs > artifacts/dev4-visual/targets.json
-      - name: Capture close-range world and dev.6 fidelity evidence
-        shell: bash
+          mkdir -p artifacts/visual artifacts/fidelity artifacts/flashlight
+          node scripts/visual-targets.mjs > artifacts/visual/targets.json
+      - name: Capture close-range world, Region and flashlight evidence
         run: |
-          set -euo pipefail
-          npm run preview > /tmp/project-noclip-preview.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill "$SERVER_PID" 2>/dev/null || true; cat /tmp/project-noclip-preview.log || true' EXIT
-          for attempt in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then break; fi
-            if [ "$attempt" -eq 30 ]; then exit 1; fi
+          npm run preview -- --host 127.0.0.1 > /tmp/project-noclip-visual-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID || true' EXIT
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173 >/dev/null; then break; fi
             sleep 1
           done
-          NOCLIP_DEV4_TARGETS="artifacts/dev4-visual/targets.json" \
-          NOCLIP_DEV4_VISUAL_ARTIFACTS="artifacts/dev4-visual" \
-          python scripts/dev4-visual-smoke.py
-          NOCLIP_DEV6_FLASHLIGHT_ARTIFACTS="artifacts/dev6-flashlight" \
-          python scripts/dev6-flashlight-smoke.py
-          NOCLIP_DEV5_FIDELITY_ARTIFACTS="artifacts/dev5-fidelity" \
-          python scripts/dev5-fidelity-smoke.py
+          NOCLIP_BASE_URL=http://127.0.0.1:4173 NOCLIP_VISUAL_TARGETS=artifacts/visual/targets.json NOCLIP_VISUAL_ARTIFACTS=artifacts/visual python3 scripts/visual-smoke.py
+          NOCLIP_BASE_URL=http://127.0.0.1:4173 NOCLIP_FLASHLIGHT_ARTIFACTS=artifacts/flashlight python3 scripts/flashlight-smoke.py
+          NOCLIP_BASE_URL=http://127.0.0.1:4173 NOCLIP_FIDELITY_ARTIFACTS=artifacts/fidelity python3 scripts/fidelity-smoke.py
       - uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: dev5-visual-coherence-${{ github.sha }}
+          name: visual-coherence-${{ github.sha }}
           path: |
-            artifacts/dev4-visual
-            artifacts/dev5-fidelity
-            artifacts/dev6-flashlight
-          retention-days: 30
+            artifacts/visual
+            artifacts/fidelity
+            artifacts/flashlight
+          if-no-files-found: error
+          retention-days: 14

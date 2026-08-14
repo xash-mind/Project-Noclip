@@ -14,8 +14,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
 BASE_URL = os.environ.get("NOCLIP_BASE_URL", "http://127.0.0.1:4173")
-TARGETS_PATH = Path(os.environ.get("NOCLIP_DEV4_TARGETS", "artifacts/dev4-visual/targets.json"))
-ARTIFACT_DIR = Path(os.environ.get("NOCLIP_DEV4_VISUAL_ARTIFACTS", "artifacts/dev4-visual"))
+TARGETS_PATH = Path(os.environ.get("NOCLIP_VISUAL_TARGETS", "artifacts/visual/targets.json"))
+ARTIFACT_DIR = Path(os.environ.get("NOCLIP_VISUAL_ARTIFACTS", "artifacts/visual"))
 ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -112,7 +112,7 @@ def apply_capture_tuning(driver: webdriver.Chrome, advanced: bool) -> None:
 def scene_only(driver: webdriver.Chrome) -> None:
     driver.execute_script("""
       const style=document.createElement('style');
-      style.id='dev4-visual-style';
+      style.id='visual-smoke-style';
       style.textContent='[data-ui="hud"] > :not(canvas), .pause-overlay, [data-ui="version-indicator"] { opacity:0 !important; }';
       document.head.appendChild(style);
     """)

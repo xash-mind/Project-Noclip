@@ -14,7 +14,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
 BASE_URL = os.environ.get("NOCLIP_BASE_URL", "http://127.0.0.1:4173")
-ARTIFACT_DIR = Path(os.environ.get("NOCLIP_DEV6_FLASHLIGHT_ARTIFACTS", "artifacts/dev6-flashlight"))
+ARTIFACT_DIR = Path(os.environ.get("NOCLIP_FLASHLIGHT_ARTIFACTS", "artifacts/flashlight"))
 ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 FIXED_FLASHLIGHT_NOW = 1_700_000_000_014
 

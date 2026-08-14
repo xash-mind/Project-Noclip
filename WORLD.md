@@ -245,9 +245,12 @@ Still images do not establish audio. Audio rules above come from verified author
 
 ## Presentation rules
 
-- Ceiling fixtures are emissive panels plus bounded spatial lights at their actual world positions, with a restrained HDR bloom pass so panels read as luminous rather than painted white boxes.
+- Ceiling fixtures are emissive panels plus real broad downward spatial lights at their actual world positions, with restrained HDR bloom so panels read as luminous rather than painted white boxes.
+- Every rendered fluorescent fixture owns its real spot for the lifetime of the streamed Cell. There is no player-nearest fixture-light allocator or arbitrary realtime fixture cap; player position never acquires/releases fluorescent lights.
 - Neighboring fixture light crosses walls/Cell boundaries continuously; no player-following room light.
-- Renderer fixture source energy must not be multiplied merely because the player approaches. Engine light range/falloff owns the physical distance response. Bounded realtime fixture slots use stable ownership with acquire/release hysteresis so nearest-order crossings do not visibly switch lights while walking.
+- The deterministic fixture pulse owns both panel emission and real-light energy. `off` means zero contribution; Reduced Flicker makes flicker steady through the same world law.
+- The sampled light field is for ambience/diagnostics only and must never become physical-light allocation or visible Cell-surface illumination ownership.
+- Renderer fixture source energy must not be multiplied merely because the player approaches. Engine light range/falloff owns the physical distance response.
 - Gen3 wallpaper phase derives from stable world-space wall coordinates/orientation rather than each renderer fragment. Skirting follows the solved wall span and terminates at joins/openings without deliberate end protrusion; Cell clipping must not reset either surface.
 - Global ambient contribution stays low enough that fixtures shape the room.
 - The fluorescent bed uses audible fundamental/harmonic energy suitable for browser/laptop playback while remaining subtle.
