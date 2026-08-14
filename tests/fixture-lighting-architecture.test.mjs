@@ -17,24 +17,29 @@ test('runtime no longer owns a fixed player-nearest fluorescent light pool', () 
   assert.ok(appSource.includes('renderer.updateFixtureLighting('));
 });
 
-test('every rendered fixture is wired to one Cell-owned broad downward spot', () => {
+test('every rendered fixture is wired to one Cell-owned downward shadowed spot', () => {
   assert.ok(correctionSource.includes("type: 'spot'"));
   assert.ok(correctionSource.includes('const FIXTURE_SPOT_RANGE = 10.5'));
   assert.ok(correctionSource.includes('const FIXTURE_SPOT_INNER_CONE = 48'));
   assert.ok(correctionSource.includes('const FIXTURE_SPOT_OUTER_CONE = 68'));
-  assert.ok(correctionSource.includes('castShadows: false'));
+  assert.ok(correctionSource.includes('castShadows: true'));
+  assert.ok(correctionSource.includes('const FIXTURE_SHADOW_RESOLUTION = 128'));
+  assert.ok(correctionSource.includes('pc.SHADOWUPDATE_THISFRAME'));
   assert.ok(correctionSource.includes('visual.root.addChild(light)'));
   assert.ok(correctionSource.includes('group.fixtures.forEach'));
-  assert.ok(correctionSource.includes('light.setLocalEulerAngles(90, 0, 0)'));
+  assert.ok(correctionSource.includes('light.setLocalEulerAngles(0, 0, 0)'));
+  assert.equal(correctionSource.includes('light.setLocalEulerAngles(90, 0, 0)'), false);
   assert.ok(batchingSource.includes('installFixtureCentricLightingCorrection()'));
 });
 
-test('fixture mesh emission and emitted light use the same deterministic pulse', () => {
-  assert.ok(correctionSource.includes('const pulse = quantizedPulse(runtime.group, elapsedSeconds, reducedFlicker)'));
+test('fixture mesh and emitted light share the same binary grey/lit flicker pulse', () => {
+  assert.ok(correctionSource.includes('const pulse = fixturePulse(runtime.group, elapsedSeconds, reducedFlicker)'));
   assert.ok(correctionSource.includes('fixtureMaterial(state, runtime.descriptor, runtime.group, pulse)'));
   assert.ok(correctionSource.includes('runtime.group.intensity * pulse * FIXTURE_SPOT_INTENSITY_MULTIPLIER'));
   assert.ok(correctionSource.includes("if (group.state === 'off') return 0"));
   assert.ok(correctionSource.includes('lightFlickerValue(group, elapsedSeconds, reducedFlicker)'));
+  assert.ok(correctionSource.includes('raw >= FIXTURE_FLICKER_LIT_THRESHOLD ? 1 : 0'));
+  assert.ok(correctionSource.includes('const lit = pulse > 0.5'));
 });
 
 test('Blackout core generates no local fluorescent fixtures', () => {

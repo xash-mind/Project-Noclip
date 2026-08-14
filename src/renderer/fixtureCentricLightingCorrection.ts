@@ -8,6 +8,8 @@ const FIXTURE_SPOT_RANGE = 10.5;
 const FIXTURE_SPOT_INNER_CONE = 48;
 const FIXTURE_SPOT_OUTER_CONE = 68;
 const FIXTURE_SPOT_INTENSITY_MULTIPLIER = 1.55;
+const FIXTURE_SHADOW_RESOLUTION = 128;
+const FIXTURE_FLICKER_LIT_THRESHOLD = 0.5;
 
 interface FixtureRuntime {
   id: string;
@@ -17,6 +19,7 @@ interface FixtureRuntime {
   light: pc.Entity;
   mesh?: pc.Entity;
   descriptor: CellDescriptor;
+  shadowDirty: boolean;
 }
 
 interface RendererFixtureState {
@@ -43,10 +46,11 @@ function entityByName(root: pc.Entity, name: string): pc.Entity | undefined {
   return childrenOf(root).find((child) => child.name === name);
 }
 
-function quantizedPulse(group: LightGroupSpec, elapsedSeconds: number, reducedFlicker: boolean): number {
-  const raw = lightFlickerValue(group, elapsedSeconds, reducedFlicker);
+function fixturePulse(group: LightGroupSpec, elapsedSeconds: number, reducedFlicker: boolean): number {
   if (group.state === 'off') return 0;
-  return Math.max(0, Math.min(1, Math.round(raw * 16) / 16));
+  const raw = lightFlickerValue(group, elapsedSeconds, reducedFlicker);
+  if (group.state === 'flicker' && !reducedFlicker) return raw >= FIXTURE_FLICKER_LIT_THRESHOLD ? 1 : 0;
+  return 1;
 }
 
 function fixtureMaterial(
@@ -75,7 +79,7 @@ function fixtureMaterial(
       undefined,
       [1, 1],
       arch ? [1, 0.985, 0.78] : [1, 0.95, 0.68],
-      (arch ? 2.18 : 2.28) * pulse
+      arch ? 2.18 : 2.28
     );
   state.materials.set(key, created);
   return created;
@@ -87,6 +91,10 @@ function lightColor(group: LightGroupSpec): pc.Color {
     Math.min(1, 0.93 * group.temperature),
     0.62
   );
+}
+
+function markFixtureShadowsDirty(state: RendererFixtureState): void {
+  for (const runtime of state.fixtures.values()) runtime.shadowDirty = true;
 }
 
 function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void {
@@ -105,11 +113,13 @@ function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void 
         intensity: 0,
         innerConeAngle: FIXTURE_SPOT_INNER_CONE,
         outerConeAngle: FIXTURE_SPOT_OUTER_CONE,
-        castShadows: false
+        castShadows: true,
+        shadowResolution: FIXTURE_SHADOW_RESOLUTION
       });
       visual.root.addChild(light);
       light.setLocalPosition(fixture.x, fixture.y - 0.12, fixture.z);
-      light.setLocalEulerAngles(90, 0, 0);
+      // PlayCanvas spot cones are centered on local -Y. Identity rotation therefore points straight down.
+      light.setLocalEulerAngles(0, 0, 0);
       light.enabled = false;
 
       state.fixtures.set(id, {
@@ -119,10 +129,13 @@ function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void 
         fixtureIndex,
         light,
         mesh: entityByName(visual.root, `${group.id}:fixture:${fixtureIndex}`),
-        descriptor
+        descriptor,
+        shadowDirty: true
       });
     });
   }
+  // A newly streamed Cell can add occluding walls inside an already-loaded fixture's cone.
+  markFixtureShadowsDirty(state);
 }
 
 function detachCellFixtures(renderer: WorldRenderer, cellId: string): void {
@@ -131,19 +144,26 @@ function detachCellFixtures(renderer: WorldRenderer, cellId: string): void {
   for (const [id, runtime] of state.fixtures) {
     if (runtime.cellId === cellId) state.fixtures.delete(id);
   }
+  // Removing streamed geometry can also invalidate a retained fixture's static shadow map.
+  markFixtureShadowsDirty(state);
 }
 
 function updateFixtureLighting(renderer: WorldRenderer, elapsedSeconds: number, reducedFlicker: boolean): void {
   const state = stateFor(renderer);
   for (const runtime of state.fixtures.values()) {
-    const pulse = quantizedPulse(runtime.group, elapsedSeconds, reducedFlicker);
+    const pulse = fixturePulse(runtime.group, elapsedSeconds, reducedFlicker);
     if (runtime.mesh?.render) {
       runtime.mesh.render.material = fixtureMaterial(state, runtime.descriptor, runtime.group, pulse);
     }
     if (!runtime.light.light) continue;
+    const lit = pulse > 0.5;
     runtime.light.light.color = lightColor(runtime.group);
     runtime.light.light.intensity = runtime.group.intensity * pulse * FIXTURE_SPOT_INTENSITY_MULTIPLIER;
-    runtime.light.enabled = pulse > 0.001;
+    runtime.light.enabled = lit;
+    if (lit && runtime.shadowDirty) {
+      runtime.light.light.shadowUpdateMode = pc.SHADOWUPDATE_THISFRAME;
+      runtime.shadowDirty = false;
+    }
   }
 }
 
@@ -156,14 +176,16 @@ function sourceList(renderer: WorldRenderer): LightFieldSource[] {
 }
 
 export function fixtureLightIntensity(group: LightGroupSpec, elapsedSeconds: number, reducedFlicker: boolean): number {
-  return group.intensity * quantizedPulse(group, elapsedSeconds, reducedFlicker) * FIXTURE_SPOT_INTENSITY_MULTIPLIER;
+  return group.intensity * fixturePulse(group, elapsedSeconds, reducedFlicker) * FIXTURE_SPOT_INTENSITY_MULTIPLIER;
 }
 
 export const FIXTURE_LIGHTING_PROFILE = Object.freeze({
   range: FIXTURE_SPOT_RANGE,
   innerConeAngle: FIXTURE_SPOT_INNER_CONE,
   outerConeAngle: FIXTURE_SPOT_OUTER_CONE,
-  castShadows: false
+  castShadows: true,
+  shadowResolution: FIXTURE_SHADOW_RESOLUTION,
+  shadowUpdateMode: 'streaming-dirty-this-frame'
 });
 
 declare module './WorldRenderer.js' {
@@ -177,7 +199,8 @@ declare module './WorldRenderer.js' {
 /**
  * Render law: every rendered fluorescent fixture owns its own real downward spot.
  * Cells own lifetime only. Player position never selects, acquires or releases a
- * light. The same deterministic fixture pulse drives mesh emission and light energy.
+ * light. The same deterministic binary fixture pulse drives mesh appearance and
+ * light energy, while static shadow maps refresh only when streamed geometry changes.
  */
 export function installFixtureCentricLightingCorrection(): void {
   if (installed) return;
