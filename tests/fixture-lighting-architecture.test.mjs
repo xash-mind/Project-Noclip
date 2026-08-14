@@ -53,12 +53,10 @@ test('Blackout core generates no local fluorescent fixtures', () => {
     generationVersion: 'gen3-v1',
     tuning: {
       ...DEFAULT_TUNING,
-      regionOverride: 'blackout',
-      conditionOverride: 'clear',
-      carverOverride: 'none',
-      structureOverride: 'none',
-      gateBypass: true
+      conditionOverride: 'blackout',
+      structureOverride: 'none'
     }
   });
   assert.equal(cell.lightGroups.length, 0);
+  assert.equal(cell.world.blackoutStrength, 1);
 });
