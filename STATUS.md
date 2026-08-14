@@ -2,22 +2,22 @@
 
 **Last reconciled:** 2026-08-14 (Asia/Kolkata)  
 **Canonical production:** https://project-noclip.vercel.app  
-**Production release commit:** `d3c32d146a1b05a9d64555d102749111abddc75d`  
-**Visible deployed version:** `v0.3.0-dev.6`  
-**Accepted production baseline before PR #54:** `v0.3.0-dev.6` / `d3c32d146a1b05a9d64555d102749111abddc75d`  
-**Current bounded correction:** GitHub Issue #53 / PR #54 — fixture-owned fluorescent lighting  
+**Production release commit:** `8fe71c43b6050ab69b00711116c896f3e52a9337`  
+**Visible deployed version:** `v0.3.0-dev.7`  
+**Accepted production baseline:** `v0.3.0-dev.7` / `8fe71c43b6050ab69b00711116c896f3e52a9337`  
+**Completed bounded correction:** GitHub Issue #53 / PR #54 — fixture-owned fluorescent lighting  
 **Save schema:** `v2`  
 **New-journey generation:** `gen3-v1`  
 **Architecture direction:** Generation 3 — GitHub Issue #31  
 **World vocabulary/catalog:** `WORLD.md`
 
-## Current release correction
+## Current accepted release
 
-Dev.6 is the accepted topology/Pillar/Arch/flashlight baseline, but its fluorescent lighting architecture is rejected as the final lighting model. It used a fixed player-nearest realtime-light pool while a Cell-center sampled light field changed floor/ceiling emission, which made illumination ownership player-relative and could expose Cell-scale brightness patches.
+Dev.7 keeps the accepted dev.6 topology/Pillar/Arch/flashlight baseline and replaces only its rejected fluorescent-light ownership model. Dev.6 used a fixed player-nearest realtime-light pool while a Cell-center sampled light field changed floor/ceiling emission, which made illumination ownership player-relative and could expose Cell-scale brightness patches.
 
-PR #54 is the bounded dev.7 lighting correction. It does not change Generation 3 topology, Region placement, Pillar/Arch geometry, holes, props, saves, movement, inventory or timeline laws.
+PR #54 is merged and Issue #53 is closed. Canonical Vercel production is READY from runtime release commit `8fe71c43b6050ab69b00711116c896f3e52a9337`.
 
-The corrected runtime law is:
+The accepted runtime law is:
 
 - every rendered fluorescent fixture owns one real broad downward PlayCanvas spot for the lifetime of its streamed Cell;
 - there is no app-level fixed eight-light pool and no player-nearest light ownership loop;
@@ -31,9 +31,16 @@ The corrected runtime law is:
 
 Fixture spot profile for dev.7: 10.5 m range, 48° inner cone, 68° outer cone, shadows disabled initially. No arbitrary realtime fixture cap is introduced.
 
-## Verification gate
+## Release evidence
 
-Before dev.7 is declared released, PR #54 must pass the repository TypeScript/system checks and a real Vercel preview must demonstrate that rendered fixture count and real fixture-light count track together without the old fixed pool. After merge, canonical production must independently be checked for visible `v0.3.0-dev.7`; merge state alone is not release proof.
+- TypeScript/typecheck, full deterministic/system tests, 10,000-Cell generation benchmark and production build passed on the runtime candidate.
+- Renderer comparison at the default 49-Cell scene observed 160 rendered fixtures and 160 real fixture lights; draw calls improved from 148 on dev.6 to 138 on dev.7.
+- World Lab comparison observed 160/160 fixture lights and draw calls improved from 185 to 173.
+- Hole-carver radius-1 inspection observed 9 Cells and 25/25 fixture lights.
+- Browser/runtime evidence recorded no severe browser errors and preserved schema-v2/gen3-v1 save identity and position across reload.
+- Flashlight remained independently effective in ordinary and Blackout scenes.
+- The visual traversal harness was corrected to stop asserting the deleted player-owned `sourceIds` model and to use reachable capture milestones; these were test-harness corrections, not runtime lighting changes.
+- Release discipline produced one useful PR preview and one production deployment; documentation/test-only follow-up pushes were skipped/canceled by the repository Vercel ignore policy.
 
 ## Preserved accepted direction
 
@@ -49,6 +56,7 @@ Before dev.7 is declared released, PR #54 must pass the repository TypeScript/sy
 
 - Physical Android/iOS GPU cost for one real spot per rendered fixture still requires real-device playtesting.
 - Fixture shadows remain disabled, so wall-light leakage must be judged in the player test before enabling costly shadowing or another occlusion strategy.
+- Dormant legacy spatial-light selection helpers remain source-level compatibility/test code, but the accepted runtime no longer calls them or gives them light ownership.
 - Hole Carver density/terminal-fall work, content variants and all other non-lighting expansion remain outside this correction.
 - Perceptual audio quality remains unverified unless actually listened to.
 
