@@ -4,12 +4,10 @@ import { CELL_SIZE, type CellDescriptor, type LightGroupSpec } from '../world/ty
 import { WorldRenderer } from './WorldRenderer.js';
 import { makeMaterial, type CellVisual } from './support.js';
 
-// Fluorescent panels are broad ceiling emitters rather than theatrical spotlights.
-// The cone remains a downward hemisphere approximation while walls provide real occlusion.
-const FIXTURE_SPOT_RANGE = 12.5;
-const FIXTURE_SPOT_INNER_CONE = 78;
-const FIXTURE_SPOT_OUTER_CONE = 84;
-const FIXTURE_SPOT_INTENSITY_MULTIPLIER = 2.9;
+// Experimental M-F1 architecture: fluorescent panels own omnidirectional emitters so
+// the same real fixture light can illuminate carpet, walls and the nearby ceiling.
+const FIXTURE_LIGHT_RANGE = 12.5;
+const FIXTURE_LIGHT_INTENSITY_MULTIPLIER = 2.9;
 const FIXTURE_PANEL_HALF_HEIGHT = 0.04;
 const FIXTURE_EMITTER_CLEARANCE = 0.03;
 const FIXTURE_SHADOW_RESOLUTION = 512;
@@ -111,7 +109,7 @@ function fixtureRangeTouchesCell(runtime: FixtureRuntime, descriptor: CellDescri
   const half = CELL_SIZE / 2;
   const dx = Math.max(0, Math.abs(fixture.x - centerX) - half);
   const dz = Math.max(0, Math.abs(fixture.z - centerZ) - half);
-  return Math.hypot(dx, dz) <= FIXTURE_SPOT_RANGE;
+  return Math.hypot(dx, dz) <= FIXTURE_LIGHT_RANGE;
 }
 
 function markFixtureShadowsDirtyNearCell(state: RendererFixtureState, descriptor: CellDescriptor): void {
@@ -130,12 +128,10 @@ function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void 
 
       const light = new pc.Entity(`fixture-owned-light:${id}`);
       light.addComponent('light', {
-        type: 'spot',
+        type: 'omni',
         color: lightColor(group),
-        range: FIXTURE_SPOT_RANGE,
+        range: FIXTURE_LIGHT_RANGE,
         intensity: 0,
-        innerConeAngle: FIXTURE_SPOT_INNER_CONE,
-        outerConeAngle: FIXTURE_SPOT_OUTER_CONE,
         castShadows: true,
         shadowResolution: FIXTURE_SHADOW_RESOLUTION,
         shadowBias: FIXTURE_SHADOW_BIAS,
@@ -150,8 +146,6 @@ function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void 
         fixture.y - FIXTURE_PANEL_HALF_HEIGHT - FIXTURE_EMITTER_CLEARANCE,
         fixture.z
       );
-      // PlayCanvas spot cones are centered on local -Y. Identity rotation points straight down.
-      light.setLocalEulerAngles(0, 0, 0);
       // Flicker changes energy, not component lifetime, so cached shadows survive grey/lit pulses.
       light.enabled = group.state !== 'off';
 
@@ -167,7 +161,7 @@ function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void 
       });
     });
   }
-  // Only nearby retained fixtures can have this streamed Cell inside their spot range.
+  // Only nearby retained fixtures can have this streamed Cell inside their light range.
   markFixtureShadowsDirtyNearCell(state, descriptor);
 }
 
@@ -189,7 +183,7 @@ function updateFixtureLighting(renderer: WorldRenderer, elapsedSeconds: number, 
     }
     if (!runtime.light.light) continue;
     runtime.light.light.color = lightColor(runtime.group);
-    runtime.light.light.intensity = runtime.group.intensity * pulse * FIXTURE_SPOT_INTENSITY_MULTIPLIER;
+    runtime.light.light.intensity = runtime.group.intensity * pulse * FIXTURE_LIGHT_INTENSITY_MULTIPLIER;
     runtime.light.enabled = runtime.group.state !== 'off';
     if (runtime.group.state !== 'off' && pulse > 0.5 && runtime.shadowDirty) {
       runtime.light.light.shadowUpdateMode = pc.SHADOWUPDATE_THISFRAME;
@@ -199,14 +193,13 @@ function updateFixtureLighting(renderer: WorldRenderer, elapsedSeconds: number, 
 }
 
 export function fixtureLightIntensity(group: LightGroupSpec, elapsedSeconds: number, reducedFlicker: boolean): number {
-  return group.intensity * fixturePulse(group, elapsedSeconds, reducedFlicker) * FIXTURE_SPOT_INTENSITY_MULTIPLIER;
+  return group.intensity * fixturePulse(group, elapsedSeconds, reducedFlicker) * FIXTURE_LIGHT_INTENSITY_MULTIPLIER;
 }
 
 export const FIXTURE_LIGHTING_PROFILE = Object.freeze({
-  range: FIXTURE_SPOT_RANGE,
-  innerConeAngle: FIXTURE_SPOT_INNER_CONE,
-  outerConeAngle: FIXTURE_SPOT_OUTER_CONE,
-  intensityMultiplier: FIXTURE_SPOT_INTENSITY_MULTIPLIER,
+  type: 'omni',
+  range: FIXTURE_LIGHT_RANGE,
+  intensityMultiplier: FIXTURE_LIGHT_INTENSITY_MULTIPLIER,
   emitterDrop: FIXTURE_PANEL_HALF_HEIGHT + FIXTURE_EMITTER_CLEARANCE,
   castShadows: true,
   shadowResolution: FIXTURE_SHADOW_RESOLUTION,
@@ -224,7 +217,7 @@ declare module './WorldRenderer.js' {
 }
 
 /**
- * Every rendered fluorescent fixture owns one real broad downward spot. Cells own
+ * Every rendered fluorescent fixture owns one real shadowed omni emitter. Cells own
  * lifetime only; player position never allocates real lights. The same binary
  * deterministic pulse drives panel appearance and emitted energy, while cached
  * shadows refresh only when streamed geometry within the fixture range changes.
@@ -263,6 +256,7 @@ export function installFixtureLighting(): void {
       return states.get(this)?.fixtures.size ?? 0;
     }
   });
+
   Object.defineProperty(WorldRenderer.prototype, 'activeRealtimeFixtureLightCount', {
     configurable: true,
     get(this: WorldRenderer): number {
