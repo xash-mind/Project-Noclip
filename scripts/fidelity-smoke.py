@@ -193,15 +193,15 @@ def main() -> None:
         report["arch"] = {"message": arch_message, "route": route, "before": before, "after": after, "pointerLock": True}
 
         qa_locate(driver, "ordinary-level-0", "nearest")
-        # The long approach/pass/retreat capture is a visual gate, not a full-load benchmark.
-        # Keep only the nearby streamed ring and sprint through the same collision path so
-        # SwiftShader tests spatial presentation rather than wall-clock software-render speed.
+        # This is a visual fixture approach/pass/retreat gate, not the long-traversal benchmark.
+        # Radius 2 keeps the validated ~30 m path inside the streamed collider set while still
+        # avoiding the heavier full World Lab inspection radius under SwiftShader.
         radius_changed = driver.execute_script("""
           const element=document.querySelector('[data-lab="radius"]');
-          if(!element)return false; element.value='1';
+          if(!element)return false; element.value='2';
           element.dispatchEvent(new Event('change',{bubbles:true})); return true;
         """)
-        if not radius_changed: raise AssertionError("Could not reduce the visual-capture stream radius")
+        if not radius_changed: raise AssertionError("Could not set the visual-capture stream radius")
         time.sleep(0.8)
         approach = driver.execute_script("return window.__projectNoclipQa?.placeAtFixtureApproach?.() ?? null;")
         if not approach: raise AssertionError("Could not resolve a freshly streamed clear fixture approach/pass/retreat path")
