@@ -68,6 +68,10 @@ for (let x = -20; x <= 20; x += 1) for (let z = -20; z <= 20; z += 1) commonPill
 const commonPillarWalls = commonPillarCells.reduce((sum, entry) => sum + entry.walls.length, 0) / commonPillarCells.length;
 const commonPillarColumns = commonPillarCells.reduce((sum, entry) => sum + entry.props.filter((prop) => prop.kind === 'column').length, 0) / commonPillarCells.length;
 const pillarWidths = commonPillarCells.flatMap((entry) => entry.props.filter((prop) => prop.kind === 'column').map((prop) => prop.scale.x));
+// P-A1 room-interior offset removes wall splits that were caused only by pillar/boundary overlap.
+// This proxy counts clipped wall fragments, not topology walls, so keep a narrow corrected floor
+// while the unchanged topology/navigation and depth-progression guards remain authoritative.
+const commonPillarWallFragmentFloor = 3.8;
 
 let archDividerSamples = 0; let routeDividers = 0; let minArchRoute = Infinity; const archBayWidths = new Set();
 for (const axis of ['x', 'z']) for (let lineIndex = -24; lineIndex <= 24; lineIndex += 1) for (let groupIndex = -36; groupIndex <= 36; groupIndex += 1) {
@@ -104,7 +108,7 @@ const navPass = ordinaryNavigation.every((sample) => sample.reachableAreaRatio >
 const pillarPass = pillarMeans.every((sample) => sample.samples >= 10) && pillarMeans.slice(1).every((sample, index) => sample.columns > pillarMeans[index].columns && sample.walls < pillarMeans[index].walls) && pillarMeans[0].columns < 1.1 && pillarMeans[3].columns >= 2.4 && pillarMeans[3].walls <= pillarMeans[0].walls * 0.55;
 
 if (placementSamples.length || generationUs > 500 || maxWalls > 64 || maxProps > 8 || maxFixtures > 6 || !topologyPass || !navPass || !pillarPass
-  || commonPillarWalls < 4 || commonPillarWalls > 12 || commonPillarColumns < 0.7 || commonPillarColumns > 2.2
+  || commonPillarWalls < commonPillarWallFragmentFloor || commonPillarWalls > 12 || commonPillarColumns < 0.7 || commonPillarColumns > 2.2
   || PILLAR_WIDTH_SCALE !== 0.9 || pillarWidths.some((width) => width < PILLAR_MIN_WIDTH - 1e-9 || width > PILLAR_MAX_WIDTH + 1e-9)
   || ARCH_IRREGULAR_CHANCE !== 0 || archDividerSamples < 1000 || archBayWidths.size < 8 || routeDividers < archDividerSamples * 0.8 || minArchRoute < 1.95
   || disorienting / cells >= 0.01 || hallucinations / cells >= 0.003 || (lightGroups && offGroups / lightGroups >= 0.005) || (lightGroups && flickerGroups / lightGroups >= 0.025)

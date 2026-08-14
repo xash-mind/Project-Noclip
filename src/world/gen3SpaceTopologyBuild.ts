@@ -53,6 +53,10 @@ export interface RouteReservationEnvelope {
  */
 export const ROUTE_RESERVATION_LANDING_DEPTH = 1.9;
 export const ROUTE_RESERVATION_PLAYER_MARGIN = 0.46;
+/** P-A1 piers remain visibly independent of O-A1 partition boundaries. */
+export const PILLAR_WALL_CLEARANCE = 0.62;
+const PILLAR_ROOM_NUDGE_MARGIN = 0.04;
+const PILLAR_ROOM_NUDGE_PASSES = 4;
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
@@ -303,10 +307,79 @@ function boundsOverlap(
   return left.maxX > right.minX && left.minX < right.maxX && left.maxZ > right.minZ && left.minZ < right.maxZ;
 }
 
+function pillarBounds(worldX: number, worldZ: number, size: number): { minX: number; maxX: number; minZ: number; maxZ: number } {
+  return {
+    minX: worldX - size / 2,
+    maxX: worldX + size / 2,
+    minZ: worldZ - size / 2,
+    maxZ: worldZ + size / 2
+  };
+}
+
+function expandedTopologyWallBounds(wall: TopologyWall): { minX: number; maxX: number; minZ: number; maxZ: number } {
+  if (wall.runAxis === 'x') {
+    return {
+      minX: wall.start - PILLAR_WALL_CLEARANCE,
+      maxX: wall.end + PILLAR_WALL_CLEARANCE,
+      minZ: wall.fixed - WALL_THICKNESS / 2 - PILLAR_WALL_CLEARANCE,
+      maxZ: wall.fixed + WALL_THICKNESS / 2 + PILLAR_WALL_CLEARANCE
+    };
+  }
+  return {
+    minX: wall.fixed - WALL_THICKNESS / 2 - PILLAR_WALL_CLEARANCE,
+    maxX: wall.fixed + WALL_THICKNESS / 2 + PILLAR_WALL_CLEARANCE,
+    minZ: wall.start - PILLAR_WALL_CLEARANCE,
+    maxZ: wall.end + PILLAR_WALL_CLEARANCE
+  };
+}
+
+function pillarClearOfTopologyWalls(worldX: number, worldZ: number, size: number, walls: readonly TopologyWall[]): boolean {
+  const bounds = pillarBounds(worldX, worldZ, size);
+  return walls.every((wall) => !boundsOverlap(bounds, expandedTopologyWallBounds(wall)));
+}
+
+function nudgePillarIntoRoom(
+  ctx: DomainContext,
+  key: string,
+  baseWorldX: number,
+  baseWorldZ: number,
+  size: number,
+  walls: readonly TopologyWall[]
+): { worldX: number; worldZ: number } {
+  let worldX = baseWorldX;
+  let worldZ = baseWorldZ;
+  const required = size / 2 + WALL_THICKNESS / 2 + PILLAR_WALL_CLEARANCE;
+
+  for (let pass = 0; pass < PILLAR_ROOM_NUDGE_PASSES; pass += 1) {
+    let moved = false;
+    for (const wall of walls) {
+      const bounds = pillarBounds(worldX, worldZ, size);
+      if (!boundsOverlap(bounds, expandedTopologyWallBounds(wall))) continue;
+      if (wall.runAxis === 'x') {
+        const distance = worldZ - wall.fixed;
+        const direction = Math.abs(distance) > 0.0001
+          ? Math.sign(distance)
+          : (unitFloat(`${ctx.seed}:gen3-pillar-room-side:${key}:z:${wall.id}`) < 0.5 ? -1 : 1);
+        worldZ += direction * (Math.max(0, required - Math.abs(distance)) + PILLAR_ROOM_NUDGE_MARGIN);
+      } else {
+        const distance = worldX - wall.fixed;
+        const direction = Math.abs(distance) > 0.0001
+          ? Math.sign(distance)
+          : (unitFloat(`${ctx.seed}:gen3-pillar-room-side:${key}:x:${wall.id}`) < 0.5 ? -1 : 1);
+        worldX += direction * (Math.max(0, required - Math.abs(distance)) + PILLAR_ROOM_NUDGE_MARGIN);
+      }
+      moved = true;
+    }
+    if (!moved) break;
+  }
+  return { worldX, worldZ };
+}
+
 function addPillars(
   ctx: DomainContext,
   cellX: number,
   cellZ: number,
+  topologyWalls: readonly TopologyWall[],
   reservations: readonly RouteReservationEnvelope[],
   output: PropSpec[]
 ): { count: number; deepSamples: number } {
@@ -320,13 +393,13 @@ function addPillars(
 
   for (let gridX = Math.floor((centerX - half - offsetX) / PILLAR_SPACING) - 1; gridX <= Math.ceil((centerX + half - offsetX) / PILLAR_SPACING) + 1; gridX += 1) {
     for (let gridZ = Math.floor((centerZ - half - offsetZ) / PILLAR_SPACING) - 1; gridZ <= Math.ceil((centerZ + half - offsetZ) / PILLAR_SPACING) + 1; gridZ += 1) {
-      const worldX = gridX * PILLAR_SPACING + offsetX;
-      const worldZ = gridZ * PILLAR_SPACING + offsetZ;
+      const baseWorldX = gridX * PILLAR_SPACING + offsetX;
+      const baseWorldZ = gridZ * PILLAR_SPACING + offsetZ;
       if (
-        worldX < centerX - half + 0.75 || worldX > centerX + half - 0.75
-        || worldZ < centerZ - half + 0.75 || worldZ > centerZ + half - 0.75
+        baseWorldX < centerX - half + 0.75 || baseWorldX > centerX + half - 0.75
+        || baseWorldZ < centerZ - half + 0.75 || baseWorldZ > centerZ + half - 0.75
       ) continue;
-      const influence = sampleGen3RegionInfluence(ctx.seed, worldX, worldZ, ctx.worldDay, ctx.exposure, ctx.tuning);
+      const influence = sampleGen3RegionInfluence(ctx.seed, baseWorldX, baseWorldZ, ctx.worldDay, ctx.exposure, ctx.tuning);
       if (influence.arch > 0.28) continue;
       const key = `${gridX}:${gridZ}`;
       const ordinary = influence.pillar < 0.08;
@@ -343,13 +416,17 @@ function addPillars(
         );
       if (unitFloat(`${ctx.seed}:gen3-v5:pillar:${key}`) > keepChance) continue;
       const size = PILLAR_MIN_WIDTH + unitFloat(`${ctx.seed}:gen3-pillar:${key}:size`) * (PILLAR_MAX_WIDTH - PILLAR_MIN_WIDTH);
-      const bounds = {
-        minX: worldX - size / 2,
-        maxX: worldX + size / 2,
-        minZ: worldZ - size / 2,
-        maxZ: worldZ + size / 2
-      };
+      const resolved = ordinary
+        ? { worldX: baseWorldX, worldZ: baseWorldZ }
+        : nudgePillarIntoRoom(ctx, key, baseWorldX, baseWorldZ, size, topologyWalls);
+      const { worldX, worldZ } = resolved;
+      if (
+        worldX < centerX - half + 0.75 || worldX > centerX + half - 0.75
+        || worldZ < centerZ - half + 0.75 || worldZ > centerZ + half - 0.75
+      ) continue;
+      const bounds = pillarBounds(worldX, worldZ, size);
       if (reservations.some((reservation) => boundsOverlap(bounds, reservation))) continue;
+      if (!ordinary && !pillarClearOfTopologyWalls(worldX, worldZ, size, topologyWalls)) continue;
       output.push({
         id: stableId('gen3-pillar', ctx.seed, key),
         kind: 'column',
@@ -449,7 +526,7 @@ export function generateSpaceTopologyArchitecture(options: {
   const topologyWalls = collectTopologyWalls(ctx, options.cellX, options.cellZ);
   const reservations = reservationsForWalls(topologyWalls);
   const archIds = new Set<string>();
-  const pillar = addPillars(ctx, options.cellX, options.cellZ, reservations, props);
+  const pillar = addPillars(ctx, options.cellX, options.cellZ, topologyWalls, reservations, props);
   for (const wall of topologyWalls) {
     const externalCuts = [
       ...pillarCutsForWall(options.cellX, options.cellZ, wall, props),

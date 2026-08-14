@@ -5,6 +5,8 @@ declare module 'playcanvas' {
   export const FILTER_LINEAR: number;
   export const FILTER_LINEAR_MIPMAP_LINEAR: number;
   export const FOG_LINEAR: string;
+  export const SHADOWUPDATE_NONE: number;
+  export const SHADOWUPDATE_THISFRAME: number;
   export class Color { constructor(r?: number, g?: number, b?: number, a?: number); r: number; g: number; b: number; }
   export class Vec2 { constructor(x?: number, y?: number); x: number; y: number; }
   export class Texture {
@@ -42,7 +44,7 @@ declare module 'playcanvas' {
     name: string;
     enabled: boolean;
     render?: { material: StandardMaterial };
-    light?: { intensity: number; range: number; color: Color };
+    light?: { intensity: number; range: number; color: Color; shadowUpdateMode: number };
     addComponent(type: string, data?: Record<string, unknown>): void;
     addChild(child: Entity): void;
     setPosition(x: number, y: number, z: number): void;
