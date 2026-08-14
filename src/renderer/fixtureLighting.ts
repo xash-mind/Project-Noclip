@@ -4,15 +4,17 @@ import { CELL_SIZE, type CellDescriptor, type LightGroupSpec } from '../world/ty
 import { WorldRenderer } from './WorldRenderer.js';
 import { makeMaterial, type CellVisual } from './support.js';
 
-// Experimental M-F1 architecture: fluorescent panels own omnidirectional emitters so
-// the same real fixture light can illuminate carpet, walls and the nearby ceiling.
+// M-F1 fluorescent panels own omnidirectional emitters so one real fixture light
+// can illuminate carpet, walls and nearby ceiling. All fixture identities remain
+// rendered, while realtime shadowed participation is bounded around the player.
 const FIXTURE_LIGHT_RANGE = 12.5;
 const FIXTURE_LIGHT_INTENSITY_MULTIPLIER = 2.9;
+const MAX_ACTIVE_FIXTURE_LIGHTS = 128;
 const FIXTURE_PANEL_HALF_HEIGHT = 0.04;
 const FIXTURE_EMITTER_CLEARANCE = 0.03;
 const FIXTURE_SHADOW_RESOLUTION = 512;
-const FIXTURE_SHADOW_BIAS = 0.08;
-const FIXTURE_SHADOW_NORMAL_OFFSET = 0.12;
+const FIXTURE_SHADOW_BIAS = 0.04;
+const FIXTURE_SHADOW_NORMAL_OFFSET = 0.04;
 const FIXTURE_FLICKER_LIT_THRESHOLD = 0.5;
 
 interface FixtureRuntime {
@@ -24,6 +26,7 @@ interface FixtureRuntime {
   mesh?: pc.Entity;
   descriptor: CellDescriptor;
   shadowDirty: boolean;
+  selected: boolean;
 }
 
 interface RendererFixtureState {
@@ -101,6 +104,20 @@ function fixtureWorldPosition(runtime: FixtureRuntime): { x: number; z: number }
   };
 }
 
+function fixtureDistanceTo(runtime: FixtureRuntime, playerX: number, playerZ: number): number {
+  const position = fixtureWorldPosition(runtime);
+  return position ? Math.hypot(position.x - playerX, position.z - playerZ) : Number.POSITIVE_INFINITY;
+}
+
+function selectActiveFixtureIds(state: RendererFixtureState, playerX: number, playerZ: number): Set<string> {
+  const candidates = [...state.fixtures.values()]
+    .filter((runtime) => runtime.group.state !== 'off')
+    .map((runtime) => ({ runtime, distance: fixtureDistanceTo(runtime, playerX, playerZ) }))
+    .sort((a, b) => a.distance - b.distance || a.runtime.id.localeCompare(b.runtime.id))
+    .slice(0, MAX_ACTIVE_FIXTURE_LIGHTS);
+  return new Set(candidates.map(({ runtime }) => runtime.id));
+}
+
 function fixtureRangeTouchesCell(runtime: FixtureRuntime, descriptor: CellDescriptor): boolean {
   const fixture = fixtureWorldPosition(runtime);
   if (!fixture) return false;
@@ -139,15 +156,19 @@ function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void 
         shadowUpdateMode: pc.SHADOWUPDATE_NONE
       });
       visual.root.addChild(light);
-      // Generated fixture.y is the panel centre. The visible panel is 0.08 m tall,
-      // so place the emitter just below its lower face rather than inside the mesh.
       light.setLocalPosition(
         fixture.x,
         fixture.y - FIXTURE_PANEL_HALF_HEIGHT - FIXTURE_EMITTER_CLEARANCE,
         fixture.z
       );
-      // Flicker changes energy, not component lifetime, so cached shadows survive grey/lit pulses.
-      light.enabled = group.state !== 'off';
+      // Participation is selected around the player on update; merely loading a Cell
+      // must never let the total realtime light count exceed the explicit cap.
+      light.enabled = false;
+
+      const mesh = entityByName(visual.root, `${group.id}:fixture:${fixtureIndex}`);
+      // The luminous diffuser is the source, not an occluder. Let architecture cast
+      // shadows while preventing the panel from shadowing its own near-field Omni.
+      if (mesh?.render) mesh.render.castShadows = false;
 
       state.fixtures.set(id, {
         id,
@@ -155,13 +176,13 @@ function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void 
         group,
         fixtureIndex,
         light,
-        mesh: entityByName(visual.root, `${group.id}:fixture:${fixtureIndex}`),
+        mesh,
         descriptor,
-        shadowDirty: true
+        shadowDirty: true,
+        selected: false
       });
     });
   }
-  // Only nearby retained fixtures can have this streamed Cell inside their light range.
   markFixtureShadowsDirtyNearCell(state, descriptor);
 }
 
@@ -174,33 +195,56 @@ function detachCellFixtures(renderer: WorldRenderer, cellId: string, descriptor?
   }
 }
 
-function updateFixtureLighting(renderer: WorldRenderer, elapsedSeconds: number, reducedFlicker: boolean): void {
+function updateFixtureLighting(
+  renderer: WorldRenderer,
+  elapsedSeconds: number,
+  reducedFlicker: boolean,
+  playerX: number,
+  playerZ: number
+): void {
   const state = stateFor(renderer);
+  const selectedIds = selectActiveFixtureIds(state, playerX, playerZ);
+  const groupPulses = new Map<string, number>();
+
+  const pulseFor = (group: LightGroupSpec): number => {
+    const existing = groupPulses.get(group.id);
+    if (existing !== undefined) return existing;
+    const pulse = fixturePulse(group, elapsedSeconds, reducedFlicker);
+    groupPulses.set(group.id, pulse);
+    return pulse;
+  };
+
   for (const runtime of state.fixtures.values()) {
-    const pulse = fixturePulse(runtime.group, elapsedSeconds, reducedFlicker);
+    // One canonical pulse is sampled once per light group per frame and then applied
+    // synchronously to both the visible M-F1 diffuser and its emitted Omni energy.
+    const pulse = pulseFor(runtime.group);
+    const selected = selectedIds.has(runtime.id);
+    if (selected && !runtime.selected) runtime.shadowDirty = true;
+    runtime.selected = selected;
+
     if (runtime.mesh?.render) {
       runtime.mesh.render.material = fixtureMaterial(state, runtime.descriptor, runtime.group, pulse);
     }
     if (!runtime.light.light) continue;
     runtime.light.light.color = lightColor(runtime.group);
-    runtime.light.light.intensity = runtime.group.intensity * pulse * FIXTURE_LIGHT_INTENSITY_MULTIPLIER;
-    runtime.light.enabled = runtime.group.state !== 'off';
-    if (runtime.group.state !== 'off' && pulse > 0.5 && runtime.shadowDirty) {
+    runtime.light.light.intensity = selected
+      ? runtime.group.intensity * pulse * FIXTURE_LIGHT_INTENSITY_MULTIPLIER
+      : 0;
+    runtime.light.enabled = selected && runtime.group.state !== 'off';
+    if (selected && runtime.group.state !== 'off' && pulse > 0.5 && runtime.shadowDirty) {
       runtime.light.light.shadowUpdateMode = pc.SHADOWUPDATE_THISFRAME;
       runtime.shadowDirty = false;
     }
   }
 }
 
-export function fixtureLightIntensity(group: LightGroupSpec, elapsedSeconds: number, reducedFlicker: boolean): number {
-  return group.intensity * fixturePulse(group, elapsedSeconds, reducedFlicker) * FIXTURE_LIGHT_INTENSITY_MULTIPLIER;
-}
-
 export const FIXTURE_LIGHTING_PROFILE = Object.freeze({
   type: 'omni',
   range: FIXTURE_LIGHT_RANGE,
   intensityMultiplier: FIXTURE_LIGHT_INTENSITY_MULTIPLIER,
+  maxActiveLights: MAX_ACTIVE_FIXTURE_LIGHTS,
   emitterDrop: FIXTURE_PANEL_HALF_HEIGHT + FIXTURE_EMITTER_CLEARANCE,
+  fixturePanelCastsShadows: false,
   castShadows: true,
   shadowResolution: FIXTURE_SHADOW_RESOLUTION,
   shadowBias: FIXTURE_SHADOW_BIAS,
@@ -210,17 +254,21 @@ export const FIXTURE_LIGHTING_PROFILE = Object.freeze({
 
 declare module './WorldRenderer.js' {
   interface WorldRenderer {
-    updateFixtureLighting(elapsedSeconds: number, reducedFlicker: boolean): void;
+    updateFixtureLighting(
+      elapsedSeconds: number,
+      reducedFlicker: boolean,
+      playerX: number,
+      playerZ: number
+    ): void;
     readonly realtimeFixtureLightCount: number;
     readonly activeRealtimeFixtureLightCount: number;
   }
 }
 
 /**
- * Every rendered fluorescent fixture owns one real shadowed omni emitter. Cells own
- * lifetime only; player position never allocates real lights. The same binary
- * deterministic pulse drives panel appearance and emitted energy, while cached
- * shadows refresh only when streamed geometry within the fixture range changes.
+ * Every rendered fluorescent fixture retains one stable real-light identity, while
+ * at most 128 nearest fixture Omnis participate in realtime lighting. The same
+ * canonical binary pulse drives panel appearance and Omni energy in one update.
  */
 export function installFixtureLighting(): void {
   if (installed) return;
@@ -245,9 +293,11 @@ export function installFixtureLighting(): void {
   WorldRenderer.prototype.updateFixtureLighting = function patchedFixtureUpdate(
     this: WorldRenderer,
     elapsedSeconds: number,
-    reducedFlicker: boolean
+    reducedFlicker: boolean,
+    playerX: number,
+    playerZ: number
   ): void {
-    updateFixtureLighting(this, elapsedSeconds, reducedFlicker);
+    updateFixtureLighting(this, elapsedSeconds, reducedFlicker, playerX, playerZ);
   };
 
   Object.defineProperty(WorldRenderer.prototype, 'realtimeFixtureLightCount', {
