@@ -140,3 +140,11 @@ Do not weaken timeline gates or deterministic tests simply to expose content or 
 ## Human escalation
 
 Surface a clear decision instead of guessing when work requires product-direction changes, paid infrastructure, account ownership, destructive production data changes, moderation/privacy policy, official content, or acceptance of material security/data-loss risk.
+
+## Vercel deployment hygiene
+
+- Keep LoopForge work on `agent/*` branches. Vercel intentionally does not auto-deploy those branches, so fine-grained protocol commits remain safe and cheap.
+- Continue running local and GitHub verification at the normal risk-appropriate boundaries.
+- When a coherent bundle needs a hosted exact-head preview, create or update `preview/<bundle>` to the candidate SHA only after the relevant checks pass. Do not advance a preview branch for protocol-only state or evidence commits.
+- Merge an approved candidate to `main`; that merge remains the normal production deployment.
+- For any other deploy-enabled branch, batch pushes at coherent verification boundaries and avoid protocol-only pushes.
