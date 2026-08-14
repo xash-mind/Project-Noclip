@@ -191,7 +191,7 @@ def main() -> None:
         qa_locate(driver, "ordinary-level-0", "nearest")
         # The long approach/pass/retreat capture is a visual gate, not a full-load benchmark.
         # Keep only the nearby streamed ring and sprint through the same collision path so
-        # SwiftShader tests spatial ownership rather than wall-clock software-render speed.
+        # SwiftShader tests spatial presentation rather than wall-clock software-render speed.
         radius_changed = driver.execute_script("""
           const element=document.querySelector('[data-lab="radius"]');
           if(!element)return false; element.value='1';
@@ -213,12 +213,19 @@ def main() -> None:
             sprint_event(driver, "keyUp")
         frames.extend(captured)
         if len(frames) != 9: raise AssertionError(f"Fixture spatial capture missed milestones: {frames}")
-        fixture_id = str(approach["fixtureId"])
         for frame in frames:
             snapshot = frame.get("snapshot") or {}
-            if fixture_id not in snapshot.get("sourceIds", []):
-                raise AssertionError(f"Fixture {fixture_id} lost stable physical-light ownership during traversal: {frame}")
-        report["lighting"] = {"approach": approach, "pointerLock": True, "frames": frames, "final": final_lighting}
+            legacy_sources = snapshot.get("sourceIds", [])
+            if legacy_sources:
+                raise AssertionError(f"Player-relative fixture-light ownership reappeared during traversal: {frame}")
+        report["lighting"] = {
+            "approach": approach,
+            "pointerLock": True,
+            "ownershipModel": "fixture-owned",
+            "legacySourceIdsAbsent": True,
+            "frames": frames,
+            "final": final_lighting,
+        }
 
         report["browserErrors"].extend(severe_errors(driver))
         if report["browserErrors"]: raise AssertionError(report["browserErrors"])
