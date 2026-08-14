@@ -40,6 +40,7 @@ Fixture spot profile for dev.7: 10.5 m range, 48° inner cone, 68° outer cone, 
 - Browser/runtime evidence recorded no severe browser errors and preserved schema-v2/gen3-v1 save identity and position across reload.
 - Flashlight remained independently effective in ordinary and Blackout scenes.
 - The visual traversal harness was corrected to stop asserting the deleted player-owned `sourceIds` model and to use reachable capture milestones; these were test-harness corrections, not runtime lighting changes.
+- Final branch CI, Renderer Regression and Production Profile completed successfully. Visual Coherence remained red in the pre-existing Arch-route traversal stage before its fixture-lighting capture: its artifact completed all Pillar captures and wrote `arch-route-before.png`, then left the Arch and lighting report sections empty. Treat that as an unresolved non-lighting visual-workflow signal rather than green lighting evidence.
 - Release discipline produced one useful PR preview and one production deployment; documentation/test-only follow-up pushes were skipped/canceled by the repository Vercel ignore policy.
 
 ## Preserved accepted direction
@@ -56,7 +57,8 @@ Fixture spot profile for dev.7: 10.5 m range, 48° inner cone, 68° outer cone, 
 
 - Physical Android/iOS GPU cost for one real spot per rendered fixture still requires real-device playtesting.
 - Fixture shadows remain disabled, so wall-light leakage must be judged in the player test before enabling costly shadowing or another occlusion strategy.
-- Dormant legacy spatial-light selection helpers remain source-level compatibility/test code, but the accepted runtime no longer calls them or gives them light ownership.
+- Dormant legacy spatial-light selection helpers and the old dev.6 Cell-surface field implementation remain source-level compatibility/presentation code, but the accepted runtime no longer calls the player-owned spatial-light wrapper that activates that field and gives neither path real-light ownership.
+- `WORLD.md` still contains one stale presentation sentence describing bounded realtime fixture slots/hysteresis; runtime and this STATUS are authoritative for dev.7 until that documentation sentence is surgically reconciled.
 - Hole Carver density/terminal-fall work, content variants and all other non-lighting expansion remain outside this correction.
 - Perceptual audio quality remains unverified unless actually listened to.
 
