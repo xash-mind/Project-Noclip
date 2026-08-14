@@ -191,7 +191,7 @@ def main() -> None:
         qa_locate(driver, "ordinary-level-0", "nearest")
         # The long approach/pass/retreat capture is a visual gate, not a full-load benchmark.
         # Keep only the nearby streamed ring and sprint through the same collision path so
-        # SwiftShader tests spatial ownership rather than wall-clock software-render speed.
+        # SwiftShader tests spatial presentation rather than wall-clock software-render speed.
         radius_changed = driver.execute_script("""
           const element=document.querySelector('[data-lab="radius"]');
           if(!element)return false; element.value='1';
@@ -205,7 +205,7 @@ def main() -> None:
         if not resume_input(driver): raise AssertionError("Pointer lock unavailable for required fixture traversal")
         frames = [{"file": "fixture-approach-00.png", "threshold": 0.0, "progress": 0.0, "snapshot": qa_snapshot(driver)}]
         capture_canvas(driver, ARTIFACT_DIR / "fixture-approach-00.png")
-        capture_targets = [(index / 8, f"fixture-approach-{index:02d}.png") for index in range(1, 9)]
+        capture_targets = [(index * 0.12, f"fixture-approach-{index:02d}.png") for index in range(1, 9)]
         sprint_event(driver, "keyDown")
         try:
             final_lighting, captured = drive_forward_to_progress(driver, approach["start"], approach["end"], 0.98, 90.0, capture_targets)
@@ -213,12 +213,19 @@ def main() -> None:
             sprint_event(driver, "keyUp")
         frames.extend(captured)
         if len(frames) != 9: raise AssertionError(f"Fixture spatial capture missed milestones: {frames}")
-        fixture_id = str(approach["fixtureId"])
         for frame in frames:
             snapshot = frame.get("snapshot") or {}
-            if fixture_id not in snapshot.get("sourceIds", []):
-                raise AssertionError(f"Fixture {fixture_id} lost stable physical-light ownership during traversal: {frame}")
-        report["lighting"] = {"approach": approach, "pointerLock": True, "frames": frames, "final": final_lighting}
+            legacy_sources = snapshot.get("sourceIds", [])
+            if legacy_sources:
+                raise AssertionError(f"Player-relative fixture-light ownership reappeared during traversal: {frame}")
+        report["lighting"] = {
+            "approach": approach,
+            "pointerLock": True,
+            "ownershipModel": "fixture-owned",
+            "legacySourceIdsAbsent": True,
+            "frames": frames,
+            "final": final_lighting,
+        }
 
         report["browserErrors"].extend(severe_errors(driver))
         if report["browserErrors"]: raise AssertionError(report["browserErrors"])
