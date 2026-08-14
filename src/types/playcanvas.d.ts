@@ -43,7 +43,7 @@ declare module 'playcanvas' {
     constructor(name?: string);
     name: string;
     enabled: boolean;
-    render?: { material: StandardMaterial };
+    render?: { material: StandardMaterial; castShadows: boolean };
     light?: { intensity: number; range: number; color: Color; shadowUpdateMode: number };
     addComponent(type: string, data?: Record<string, unknown>): void;
     addChild(child: Entity): void;
@@ -60,6 +60,7 @@ declare module 'playcanvas' {
     root: Entity;
     scene: {
       ambientLight: Color;
+      exposure: number;
       skyboxIntensity: number;
       fog?: string;
       fogColor?: Color;
