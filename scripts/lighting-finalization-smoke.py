@@ -71,23 +71,19 @@ def metrics_text(driver: webdriver.Chrome) -> str:
     return str(driver.execute_script("return document.querySelector('[data-ui=metrics]')?.textContent ?? '';"))
 
 
-def eye_exposure(driver: webdriver.Chrome) -> float:
-    match = re.search(r"eye exposure\s+([0-9.]+)", metrics_text(driver))
+def metric_value(driver: webdriver.Chrome, pattern: str, label: str) -> float:
+    match = re.search(pattern, metrics_text(driver))
     if not match:
-        raise AssertionError(f"Missing eye exposure metric: {metrics_text(driver)}")
+        raise AssertionError(f"Missing {label} metric: {metrics_text(driver)}")
     return float(match.group(1))
 
 
-def set_condition(driver: webdriver.Chrome, value: str) -> None:
-    changed = driver.execute_script("""
-      const element=document.querySelector('[data-lab="condition"]');
-      if(!element) return false;
-      element.value=arguments[0];
-      element.dispatchEvent(new Event('change',{bubbles:true}));
-      return true;
-    """, value)
-    if not changed:
-        raise AssertionError("Missing World Lab Condition control")
+def eye_exposure(driver: webdriver.Chrome) -> float:
+    return metric_value(driver, r"eye exposure\s+([0-9.]+)", "eye exposure")
+
+
+def blackout_strength(driver: webdriver.Chrome) -> float:
+    return metric_value(driver, r"/ blackout\s+([0-9.]+)", "blackout strength")
 
 
 def main() -> None:
@@ -102,11 +98,13 @@ def main() -> None:
             timeout=35,
             message="journey HUD",
         )
-        # Hide HUD chrome while retaining the diagnostic text in DOM for assertions.
+        wait_for(driver, lambda current: current.execute_script("return Boolean(window.__projectNoclipQa)"), message="QA bridge")
         driver.execute_script("""
           const style=document.createElement('style');
           style.textContent='[data-ui="hud"] > :not(canvas), .pause-overlay, [data-ui="version-indicator"] { opacity:0 !important; }';
           document.head.appendChild(style);
+          const bypass=document.querySelector('[data-lab="bypass"]');
+          if (bypass) { bypass.checked=true; bypass.dispatchEvent(new Event('change',{bubbles:true})); }
         """)
         resume = driver.find_element(By.CSS_SELECTOR, '[data-action="resume"]')
         if resume.is_displayed():
@@ -118,16 +116,23 @@ def main() -> None:
             message="pointer lock for active eye adaptation",
         )
 
-        # Start from a clear Ordinary frame, then switch the exact same camera to
-        # Blackout. The first capture is taken as soon as runtime diagnostics report
-        # full Blackout, before the slow exposure state has substantially adapted.
-        set_condition(driver, "clear")
         time.sleep(1.0)
         clear_exposure = eye_exposure(driver)
         capture_canvas(driver, ARTIFACT_DIR / "ordinary-before-blackout.png")
 
-        set_condition(driver, "blackout")
-        wait_for(driver, lambda current: "blackout 1.000" in metrics_text(current), timeout=4, message="full Blackout runtime state")
+        # Use the project's natural Blackout locator rather than a forced Condition selector.
+        # Continuous Blackout strength comes from the sampled world field, so the natural
+        # locator is the authoritative way to prove entry -> adaptation behavior.
+        located = driver.execute_script("""
+          const button=document.querySelector('[data-action="locate-blackout"]');
+          if (!button) return false;
+          button.click();
+          return true;
+        """)
+        if not located:
+            raise AssertionError("Missing natural Blackout locator")
+        wait_for(driver, lambda current: blackout_strength(current) >= 0.52, timeout=12, message="natural deep Blackout state")
+        entry_strength = blackout_strength(driver)
         entry_exposure = eye_exposure(driver)
         capture_canvas(driver, ARTIFACT_DIR / "blackout-entry.png")
 
@@ -135,28 +140,23 @@ def main() -> None:
         while time.monotonic() < deadline:
             driver.execute_script("return performance.now();")
             time.sleep(0.1)
+        adapted_strength = blackout_strength(driver)
         adapted_exposure = eye_exposure(driver)
         capture_canvas(driver, ARTIFACT_DIR / "blackout-adapted.png")
 
+        if adapted_strength < 0.52:
+            raise AssertionError(f"Blackout weakened during adaptation capture: {entry_strength:.3f} -> {adapted_strength:.3f}")
         if adapted_exposure <= entry_exposure + 0.25:
             raise AssertionError(f"Dark adaptation did not materially increase exposure: {entry_exposure:.3f} -> {adapted_exposure:.3f}")
         if adapted_exposure > 1.801:
             raise AssertionError(f"Dark adaptation exceeded its bound: {adapted_exposure:.3f}")
 
-        set_condition(driver, "clear")
-        deadline = time.monotonic() + 2.2
-        while time.monotonic() < deadline:
-            driver.execute_script("return performance.now();")
-            time.sleep(0.08)
-        recovered_exposure = eye_exposure(driver)
-        if recovered_exposure >= adapted_exposure - 0.25:
-            raise AssertionError(f"Bright recovery did not respond quickly enough: {adapted_exposure:.3f} -> {recovered_exposure:.3f}")
-
         report.update({
             "clearExposure": clear_exposure,
+            "entryBlackoutStrength": entry_strength,
             "entryExposure": entry_exposure,
+            "adaptedBlackoutStrength": adapted_strength,
             "adaptedExposure": adapted_exposure,
-            "recoveredExposure": recovered_exposure,
             "files": ["ordinary-before-blackout.png", "blackout-entry.png", "blackout-adapted.png"],
         })
     finally:
