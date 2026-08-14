@@ -20,7 +20,7 @@ jobs:
         run: python -m pip install --disable-pip-version-check selenium==4.46.0
       - name: Resolve deterministic visual targets
         run: |
-          mkdir -p artifacts/visual artifacts/fidelity artifacts/flashlight artifacts/lighting-finalization
+          mkdir -p artifacts/visual artifacts/fidelity artifacts/flashlight artifacts/lighting-finalization artifacts/fixture-finalization
           npx tsc -p tsconfig.test.json
           node scripts/visual-targets.mjs > artifacts/visual/targets.json
       - name: Capture close-range world, Region and flashlight evidence
@@ -40,10 +40,12 @@ jobs:
           python scripts/visual-smoke.py
           NOCLIP_FLASHLIGHT_ARTIFACTS="artifacts/flashlight" \
           python scripts/flashlight-smoke.py
-          NOCLIP_FIDELITY_ARTIFACTS="artifacts/fidelity" \
-          python scripts/fidelity-smoke.py
           NOCLIP_LIGHTING_FINALIZATION_ARTIFACTS="artifacts/lighting-finalization" \
           python scripts/lighting-finalization-smoke.py
+          NOCLIP_FIXTURE_FINALIZATION_ARTIFACTS="artifacts/fixture-finalization" \
+          python scripts/fixture-finalization-smoke.py
+          NOCLIP_FIDELITY_ARTIFACTS="artifacts/fidelity" \
+          python scripts/fidelity-smoke.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -53,4 +55,5 @@ jobs:
             artifacts/fidelity
             artifacts/flashlight
             artifacts/lighting-finalization
+            artifacts/fixture-finalization
           retention-days: 30
