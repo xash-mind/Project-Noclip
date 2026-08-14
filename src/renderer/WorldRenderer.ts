@@ -1,7 +1,7 @@
 import * as pc from 'playcanvas';
 import type { DroppedItemState, SaveData, SurfaceMark } from '../persistence/types.js';
 import { resolveCircleAgainstAabbs } from '../physics/collision.js';
-import { sampleLightField, selectSpatialFixtureLights, type LightFieldSample, type SpatialFixtureLight } from '../world/lighting.js';
+import { sampleLightField, type LightFieldSample } from '../world/lighting.js';
 import { CELL_SIZE, type CellDescriptor, type FloorPatchSpec } from '../world/types.js';
 import { ZONE_PROFILES } from '../world/zones.js';
 import { registerObjectCatalogShowcaseHost, type ObjectCatalogEntry } from './objectCatalog.js';
@@ -63,7 +63,7 @@ export class WorldRenderer {
   loadCell(descriptor: CellDescriptor): void {
     if (this.loaded.has(descriptor.id)) return;
     const visual = this.cellBuilder.buildCell(descriptor);
-    this.replaceFixtureLighting(visual);
+    this.replaceFixtureMeshes(visual);
     if (descriptor.floorPatches.some((patch) => patch.kind === 'hole')) this.replaceHoleFloor(visual);
     this.loaded.set(descriptor.id, visual);
     this.renderMarksForCell(descriptor.id);
@@ -139,7 +139,7 @@ export class WorldRenderer {
     return entries.length;
   }
 
-  private replaceFixtureLighting(visual: CellVisual): void {
+  private replaceFixtureMeshes(visual: CellVisual): void {
     const descriptor = visual.descriptor;
     const rootNode = visual.root as pc.Entity & { children?: pc.Entity[] };
     for (const child of [...(rootNode.children ?? [])]) {
@@ -229,10 +229,6 @@ export class WorldRenderer {
 
   updateLightField(playerX: number, playerZ: number, elapsedSeconds: number, reducedFlicker: boolean): LightFieldSample {
     return sampleLightField(this.lightSources(), playerX, playerZ, elapsedSeconds, reducedFlicker);
-  }
-
-  spatialFixtureLights(playerX: number, playerZ: number, elapsedSeconds: number, reducedFlicker: boolean, limit = 4, previousIds: readonly string[] = []): SpatialFixtureLight[] {
-    return selectSpatialFixtureLights(this.lightSources(), playerX, playerZ, elapsedSeconds, reducedFlicker, limit, previousIds);
   }
 
   private lightSources() {

@@ -19,12 +19,6 @@ export const LIGHT_FIELD_RADIUS = CELL_SIZE * 2.7;
 export const LIGHT_FIELD_UPDATE_INTERVAL = 0.1;
 export const BASELINE_OFF_CHANCE = 0.0005;
 export const BASELINE_FLICKER_CHANCE = 0.006;
-/** Must stay aligned with the bounded PlayCanvas omni range in ProjectNoclipGame. */
-export const FIXTURE_PHYSICAL_LIGHT_RANGE = 23.5;
-/** Pre-arm a source while its physical light is still outside visible contribution range. */
-export const FIXTURE_LIGHT_ACQUIRE_RADIUS = 30;
-/** Retain ownership farther out than acquisition to prevent threshold churn. */
-export const FIXTURE_LIGHT_RELEASE_RADIUS = 35;
 
 interface Bounds { minX: number; maxX: number; minZ: number; maxZ: number; }
 
@@ -41,16 +35,6 @@ export interface LightFieldSample {
   nearbyGroups: number;
   flickerPulse: number;
   temperature: number;
-}
-
-export interface SpatialFixtureLight {
-  id: string;
-  worldX: number;
-  worldY: number;
-  worldZ: number;
-  intensity: number;
-  temperature: number;
-  distance: number;
 }
 
 function wallBounds(wall: WallSpec): Bounds {
@@ -215,6 +199,10 @@ function groupDistance(source: LightFieldSource, playerX: number, playerZ: numbe
   return best;
 }
 
+/**
+ * Sample the deterministic fluorescent field for ambience and diagnostics. Real
+ * renderer lights are fixture-owned and are never allocated from this sample.
+ */
 export function sampleLightField(
   sources: readonly LightFieldSource[],
   playerX: number,
@@ -254,71 +242,6 @@ export function sampleLightField(
     flickerPulse: Math.max(0, Math.min(1, flickerPulse)),
     temperature: rawEnergy > 0.0001 ? weightedTemperature / rawEnergy : 0.94
   };
-}
-
-/**
- * Select a bounded set of real fixture positions for renderer lights. Unlike the
- * retired player-following omni, these sources illuminate continuously across
- * streaming Cell boundaries from their actual ceiling locations. Source energy
- * is deliberately independent of player distance; PlayCanvas owns physical
- * falloff. Acquisition happens at 30 m, safely outside the 23.5 m physical range,
- * and 35 m release hysteresis prevents ownership churn while the player passes a
- * visibly-on fixture.
- */
-export function selectSpatialFixtureLights(
-  sources: readonly LightFieldSource[],
-  playerX: number,
-  playerZ: number,
-  elapsedSeconds: number,
-  reducedFlicker: boolean,
-  limit = 4,
-  previousIds: readonly string[] = []
-): SpatialFixtureLight[] {
-  const boundedLimit = Math.max(0, limit);
-  if (boundedLimit === 0) return [];
-  const candidates = new Map<string, SpatialFixtureLight>();
-  for (const source of sources) {
-    if (source.group.state === 'off') continue;
-    const pulse = lightFlickerValue(source.group, elapsedSeconds, reducedFlicker);
-    for (let index = 0; index < source.group.fixtures.length; index += 1) {
-      const fixture = source.group.fixtures[index]!;
-      const worldX = source.cellX * CELL_SIZE + fixture.x;
-      const worldZ = source.cellZ * CELL_SIZE + fixture.z;
-      const distance = Math.hypot(worldX - playerX, worldZ - playerZ);
-      if (distance > FIXTURE_LIGHT_RELEASE_RADIUS) continue;
-      const id = `${source.group.id}:${index}`;
-      candidates.set(id, {
-        id,
-        worldX,
-        worldY: fixture.y - 0.18,
-        worldZ,
-        distance,
-        intensity: source.group.intensity * pulse * 0.82,
-        temperature: source.group.temperature
-      });
-    }
-  }
-
-  const selected: SpatialFixtureLight[] = [];
-  const selectedIds = new Set<string>();
-  // Stable owners always win while inside the wider release radius. We never
-  // evict a currently-contributing fixture merely because another became closer.
-  for (const id of previousIds) {
-    const candidate = candidates.get(id);
-    if (!candidate || selected.length >= boundedLimit) continue;
-    selected.push(candidate);
-    selectedIds.add(id);
-  }
-
-  const available = [...candidates.values()]
-    .filter((candidate) => candidate.distance <= FIXTURE_LIGHT_ACQUIRE_RADIUS && !selectedIds.has(candidate.id))
-    .sort((left, right) => left.distance - right.distance || left.id.localeCompare(right.id));
-  for (const candidate of available) {
-    if (selected.length >= boundedLimit) break;
-    selected.push(candidate);
-    selectedIds.add(candidate.id);
-  }
-  return selected;
 }
 
 export function validateLightClearance(groups: readonly LightGroupSpec[], walls: readonly WallSpec[], props: readonly PropSpec[]): string[] {

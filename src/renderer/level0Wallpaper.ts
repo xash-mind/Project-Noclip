@@ -7,7 +7,7 @@ import { CELL_SIZE, type WallSpec } from '../world/types.js';
  * fluorescent renderer supplies most of the sickly yellow cast.
  */
 export const LEVEL0_WALLPAPER_TILE_METERS = 0.52;
-export const DEV5_SEPARATE_BASE_TRIM = false;
+export const LEVEL0_SEPARATE_BASE_TRIM = false;
 export const LEVEL0_WALLPAPER_PALETTE = {
   paper: '#d8d2bd',
   paperWarm: '#cec5aa',

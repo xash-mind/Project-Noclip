@@ -1,310 +1,215 @@
 # Project Noclip Code Navigation Map
 
-Plain-text map for finding the part of the code that owns what you see. No Mermaid is used so this stays readable on a phone.
+Phone-friendly plain-text ownership map. Use this to find the authoritative file before editing; current implementation wins if this map is ever stale.
 
-## Start here
+## Runtime path
 
 ```text
-Browser starts
+browser
   -> src/main.ts
   -> src/app/ProjectNoclipGame.ts
-       owns main runtime loop, player/camera, streaming coordination,
-       renderer integration, save/runtime orchestration
+       runtime loop, player/camera, streaming, save/runtime coordination
 
-World requested
+world request
   -> src/world/generator.ts
-  -> Generation 3 path
+  -> Generation 3
        -> src/world/gen3.ts
        -> src/world/fields.ts
        -> src/world/gen3SpaceTopology.ts
        -> src/world/gen3SpaceTopologyDomain.ts
        -> src/world/gen3SpaceTopologyBuild.ts
+       -> src/world/gen3Architecture.ts
        -> src/world/gen3ArchitectureCore.ts
   -> CellDescriptor
   -> src/renderer/WorldRenderer.ts
   -> src/renderer/cellBuilder.ts
+  -> Level 0 presentation layers
   -> PlayCanvas scene
 ```
 
-## Canonical terminology and world truth
+## Canonical truth
 
 ```text
 WORLD.md
-  human-facing world laws/catalog
-
-src/world/terminology.ts
-  short conversation IDs
-  Architecture Pattern IDs
-  work modes / acceptance words
+  accepted human-facing world laws/content
 
 src/world/types.ts
-  canonical TypeScript world data shapes and stable runtime ID unions
+  canonical generated-data shapes and stable runtime IDs
 
-src/world/catalog.ts
-  World Lab/runtime semantic catalog
+src/world/terminology.ts
+  short human addresses and Architecture Pattern registry
 
 docs/TERMINOLOGY.md
-  complete code-facing glossary
+  canonical code-facing glossary + implementation owners
+
+docs/CODE_MAP.md
+  navigation only
 ```
 
-Use these before inventing a new name.
+Short addresses never replace save/runtime identity.
 
-## I want to change Ordinary Level 0 / O / O-A1
+## I want to change O-A1
 
 ```text
 O / ordinary-level-0
-  -> src/world/fields.ts
-       continuous Field values
-  -> src/world/gen3.ts
-       Region/environment resolution
-  -> src/world/gen3SpaceTopologyDomain.ts
-       world-space partition/topology decisions
-  -> src/world/gen3SpaceTopologyBuild.ts
-       walls, openings and final Cell fragments
-  -> src/world/gen3ArchitectureCore.ts
-       shared Gen3 architecture constants/helpers
+  Fields/Region resolution -> src/world/fields.ts + src/world/gen3.ts
+  topology ownership       -> src/world/gen3SpaceTopologyDomain.ts
+  walls/openings/fragments -> src/world/gen3SpaceTopologyBuild.ts
+  shared dimensions        -> src/world/gen3ArchitectureCore.ts
 
 O-A1 Default Wall
-  -> gen3SpaceTopologyDomain.ts
-  -> gen3SpaceTopologyBuild.ts
-  -> renderer/cellBuilder.ts
-  -> renderer/dev5Wallpaper.ts
+  semantic wall/opening -> src/world/gen3SpaceTopologyBuild.ts
+  base entity creation  -> src/renderer/cellBuilder.ts
+  wallpaper/UV/collision presentation rule -> src/renderer/level0Wallpaper.ts
+  visible surface presentation             -> src/renderer/level0SurfacePresentation.ts
 ```
 
-If the complaint is “rooms feel wrong”, begin with Space Topology. If the topology is correct and only the visible wall is wrong, begin with renderer/material presentation instead.
+If rooms feel architecturally wrong, start with Space Topology. If topology is right and only the visible surface is wrong, start in renderer presentation.
 
-## I want to change Pillar Field / P / P-A1
+## I want to change P-A1
 
 ```text
 P / pillar-field
-  -> src/world/fields.ts
-       pillarAffinity
-  -> src/world/gen3ArchitectureCore.ts
-       Pillar dimensions/lattice constants
-  -> src/world/gen3SpaceTopologyBuild.ts
-       Pillar placement + route clearance + Region-depth expression
-  -> src/renderer/dev5FidelityPresentation.ts
-       Pillar visible presentation
-  -> src/renderer/dev5Wallpaper.ts
-       Level 0 wallpaper mapping / world-space phase
+  affinity/depth       -> src/world/fields.ts
+  lattice dimensions  -> src/world/gen3ArchitectureCore.ts
+  placement/clearance -> src/world/gen3SpaceTopologyBuild.ts
 
 P-A1.pier
-  generation/collision -> gen3SpaceTopologyBuild.ts
-  visible finish       -> dev5FidelityPresentation.ts + dev5Wallpaper.ts
+  generation/collision -> src/world/gen3SpaceTopologyBuild.ts
+  visible finish       -> src/renderer/level0SurfacePresentation.ts
+  wallpaper phase      -> src/renderer/level0Wallpaper.ts
 ```
 
-## I want to change Arch Rooms / A / A-A1
+## I want to change A-A1 or A-A1.curve
 
 ```text
 A / arch-rooms
-  -> src/world/fields.ts
-       archAffinity
-  -> src/world/gen3ArchitectureCore.ts
-       shared Arch dimensions
-  -> src/world/gen3SpaceTopologyDomain.ts
-       divider/topology ownership
-  -> src/world/gen3SpaceTopologyBuild.ts
-       semantic divider walls, route openings, collision structure
-  -> src/renderer/dev6FollowupPresentation.ts
-       curved/render-only Arch presentation
-```
+  affinity             -> src/world/fields.ts
+  shared dimensions    -> src/world/gen3ArchitectureCore.ts
+  divider/topology     -> src/world/gen3SpaceTopologyDomain.ts
+  semantic walls/routes-> src/world/gen3SpaceTopologyBuild.ts
 
-Piece map:
+A-A1 pieces
+  .pier / .upper-mass / .lower-panel / .termination
+    semantic ownership -> src/world/gen3SpaceTopologyBuild.ts
 
-```text
-A-A1 Arch Divider
-  .pier
-  .upper-mass
   .curve
-  .lower-panel
-  .termination
+    render-only reconstruction -> src/renderer/level0RegionPresentation.ts
 
-Collision/route question
-  -> gen3SpaceTopologyBuild.ts first
-
-Silhouette/material/depth question
-  -> dev6FollowupPresentation.ts first
-
-Cell seam/floating-piece question
-  -> inspect both world-owned span/clipping in gen3SpaceTopologyBuild.ts
-     and reconstruction/bridging in dev6FollowupPresentation.ts
+Arch surface finish
+  -> src/renderer/level0SurfacePresentation.ts
+  -> src/renderer/level0Wallpaper.ts
 ```
 
-## I want to change hole clusters / CV-H1
+If a route exists visually but is blocked, inspect world-owned semantic collision before changing renderer-only curves.
+
+## I want to change CV-H1
 
 ```text
 CV-H1 / floor-hole-cluster
-  -> src/world/gen3.ts
-       environment/Carver decision path
-  -> src/world/gen3ArchitectureCore.ts or related Gen3 helpers
-       shared generation constraints where referenced
-  -> generated FloorPatchSpec(kind='hole')
-  -> src/renderer/cellBuilder.ts
-       base floor cutting/presentation
-  -> src/renderer/dev6FollowupPresentation.ts
-       upper/middle/deep hole interior bands and void presentation
+  Carver decision / generated FloorPatchSpec
+    -> src/world/gen3.ts
+    -> src/world/generator.ts
+
+  base segmented floor
+    -> src/renderer/WorldRenderer.ts
+    -> src/renderer/cellBuilder.ts
+
+  upper/middle/deep Hole presentation + void
+    -> src/renderer/level0RegionPresentation.ts
 ```
 
-If holes are in the wrong places, investigate generation. If they look flat, discolored, seamed, or depthless, investigate presentation first.
+Wrong location/density = generation. Flat/seamed/depthless appearance = presentation.
 
-## I want to change Blackout / C-B1
+## I want to change C-B1
 
 ```text
-C-B1 / blackout
-  -> src/world/fields.ts
-       blackoutPressure
-  -> src/world/gen3.ts
-       Condition resolution / escape cue
-  -> src/world/lighting.ts
-       fixture/light-state laws and light-field helpers
-  -> src/renderer/fixtureCentricLightingCorrection.ts
-       current dev.7 physical fixture-light ownership
-  -> src/app/ProjectNoclipGame.ts
-       flashlight/player runtime coordination
-  -> src/renderer/WorldRenderer.ts
-       scene-level lighting/fog presentation
+C-B1 / Blackout Condition
+  pressure/resolution  -> src/world/fields.ts + src/world/gen3.ts
+  local fixture laws  -> src/world/lighting.ts
+  real fixture lights -> src/renderer/fixtureLighting.ts
+  flashlight/runtime  -> src/app/ProjectNoclipGame.ts
+  ambience sample     -> src/renderer/WorldRenderer.ts -> src/world/lighting.ts
 ```
 
 Blackout is a Condition over recognizable Level 0 Geometry, not a Region.
 
-## I want to change fluorescent lighting / M-F1
+## I want to change fluorescent lighting
 
 ```text
-fixture generation/state
+fixture generation/state/flicker
   -> src/world/lighting.ts
 
-fixture mesh / Cell render creation
+fixture mesh creation
   -> src/renderer/cellBuilder.ts
 
-current accepted real fixture spots
-  -> src/renderer/fixtureCentricLightingCorrection.ts
+fixture mesh presentation
+  -> src/renderer/level0SurfacePresentation.ts
 
-world renderer integration
-  -> src/renderer/WorldRenderer.ts
+accepted physical light ownership
+  -> src/renderer/fixtureLighting.ts
 
-player/camera flashlight
+runtime update call / flashlight
   -> src/app/ProjectNoclipGame.ts
 ```
 
-Current production dev.7: each rendered active fluorescent fixture owns a real downward PlayCanvas spot; there is no player-nearest eight-light ownership pool.
+Current law: every rendered fluorescent fixture owns its real downward spot. The sampled light field is ambience/diagnostics only; no player-nearest realtime-light allocator exists.
 
-## I want to change carpet/wall/ceiling materials
+## I want to change materials
 
 ```text
-stable material vocabulary
-  -> src/world/types.ts
-  -> src/world/catalog.ts
-  -> WORLD.md
-
-base render materials
-  -> src/renderer/support.ts
-  -> src/renderer/cellBuilder.ts
-
-wallpaper phase/tiling
-  -> src/renderer/dev5Wallpaper.ts
-
-Region carpet profiles / hole presentation
-  -> src/renderer/dev6FollowupPresentation.ts
+stable Material vocabulary -> src/world/types.ts + src/world/catalog.ts + WORLD.md
+base renderer materials     -> src/renderer/support.ts + src/renderer/cellBuilder.ts
+Level 0 wallpaper phase     -> src/renderer/level0Wallpaper.ts
+base surfaces/pillar faces  -> src/renderer/level0SurfacePresentation.ts
+Region carpet/Hole finish   -> src/renderer/level0RegionPresentation.ts
 ```
 
-Do not confuse a Material change with topology or Region-generation work.
-
-## I want to change Regions or Fields
+## I want to change topology
 
 ```text
-src/world/fields.ts
-  deterministic multi-scale scalar Fields
+src/world/gen3SpaceTopology.ts
+  stable public topology surface
 
-src/world/gen3.ts
-  samples Fields and resolves semantic environment
+src/world/gen3SpaceTopologyDomain.ts
+  world-space domains, partitions, portals
+
+src/world/gen3SpaceTopologyBuild.ts
+  realizes topology into Cell wall/prop fragments
 
 src/world/gen3Architecture.ts
-  public Gen3 architecture surface/adapter
+  stable Generation 3 architecture public surface
 
 src/world/gen3ArchitectureCore.ts
-  shared architecture constants + helpers
-
-src/world/gen3ArchitectureV5.ts
-  accepted Generation 3 architecture implementation slice retained by current path
-
-src/world/gen3SpaceTopology*.ts
-  connectivity and partition architecture
+  shared Architecture Pattern dimensions/helpers
 ```
 
-After a durable world rule changes, update `WORLD.md` and the terminology surfaces when applicable.
+Do not start in renderer files for a topology problem.
 
-## I want to change a Structure
+## I want to change collision
 
 ```text
-Manila Room / S-M1
-  -> src/world/structures.ts
-  -> src/world/generator.ts
+generated wall/prop collision intent
+  -> src/world/gen3SpaceTopologyBuild.ts
 
-Exit Structure / S-E1
-  -> src/world/exits.ts
-  -> src/world/generator.ts
+renderer Cell collider registration
+  -> src/renderer/cellBuilder.ts
+  -> src/renderer/WorldRenderer.ts
 
-Red Rooms / S-R1
-  -> design required; do not implement Non-Euclidean behavior without approved deterministic design
+Arch floor-reaching presentation filter
+  -> src/renderer/level0Wallpaper.ts
+  -> src/renderer/level0SurfacePresentation.ts
+
+movement solver
+  -> src/physics/*
+  -> src/app/ProjectNoclipGame.ts
 ```
-
-## I want to change Transitions / exits
-
-```text
-src/world/exits.ts
-  destination registry + trigger rules
-
-src/world/generator.ts
-  attaches Transition/Structure data to generated world
-
-src/app/ProjectNoclipGame.ts
-  runtime trigger/journey handling
-```
-
-A registered destination is not automatically a playable Level.
-
-## I want to change items or inventory
-
-```text
-src/items/definitions.ts
-  stable Item definition IDs and metadata
-
-src/items/*
-  item-specific generation/use helpers
-
-src/inventory/*
-  carried Item state/operations
-
-src/renderer/objectCatalog.ts
-  developer visual showcase models
-
-src/app/ProjectNoclipGame.ts
-  runtime use/drop/interact behavior
-```
-
-## I want to change movement or collision
-
-```text
-src/input/PlayerIntent.ts
-  normalized keyboard/touch player intent
-
-src/physics/*
-  collision math / movement resolution
-
-src/app/ProjectNoclipGame.ts
-  player controller integration
-
-src/ui/mobile-controls.css
-  touch control presentation
-```
-
-If a route exists visually but cannot be crossed, compare generated collision geometry with renderer-only geometry before changing topology.
 
 ## I want to change saves
 
 ```text
 src/persistence/*
-  save schema, IndexedDB storage, migrations, recovery
+  schema, IndexedDB, migrations, corruption recovery
 
 src/world/types.ts
   generation identity carried by world data
@@ -313,223 +218,152 @@ src/app/ProjectNoclipGame.ts
   save/reload orchestration
 ```
 
-Rules:
-
 ```text
 old unversioned save -> frozen gen2
 new journey          -> gen3-v1
 current schema       -> v2
 ```
 
-Do not silently regenerate an old journey into Gen3.
+Never regenerate an old journey into Gen3 merely for cleanup.
 
-## I want to change timeline behavior
-
-```text
-src/simulation/*
-  World Day / Exposure progression and timeline state
-
-src/world/gen3.ts
-  Region/Condition gates using timeline inputs
-
-src/world/exits.ts
-  Transition gates
-
-src/world/structures.ts
-  Structure availability gates
-```
-
-## I want to change audio
-
-```text
-src/audio/*
-  ambience / fluorescent bed / lifecycle
-
-src/world/lighting.ts
-  deterministic light-state inputs that may affect electrical audio
-
-src/app/ProjectNoclipGame.ts
-  runtime audio integration
-```
-
-Never claim perceptual audio is verified unless it was actually listened to.
-
-## I want to change UI or World Lab
+## I want to change World Lab
 
 ```text
 src/ui/GameUI.ts
-  main DOM UI + World Lab controls + canonical vocabulary display
+  controls and canonical vocabulary display
 
 src/ui/regionDepthLab.ts
-  Region-depth / visual QA bridge and deterministic target helpers
-
-src/ui/*.css
-  UI/mobile/World Lab presentation
-
-src/renderer/objectCatalog.ts
-  disposable World Lab object showcase
+  deterministic Region-depth/visual QA bridge
 
 src/world/catalog.ts
-  canonical World Lab world-category registry
+  semantic catalog
+
+src/renderer/objectCatalog.ts
+  disposable visual showcase
 ```
 
-## Renderer map
+## I want to add a Region
+
+```text
+1. WORLD.md
+   define accepted world rule/status
+2. src/world/types.ts
+   stable runtime type/ID only if approved
+3. src/world/fields.ts
+   geography Field when applicable
+4. src/world/gen3.ts
+   semantic resolution
+5. src/world/gen3SpaceTopology*.ts / gen3ArchitectureCore.ts
+   architecture only if the Region owns it
+6. src/world/catalog.ts + src/world/terminology.ts
+   catalog/short address when useful
+7. docs/TERMINOLOGY.md + docs/CODE_MAP.md
+   navigation after ownership exists
+8. tests
+   deterministic geography/topology/navigation/regression coverage
+```
+
+Do not route new Regions through Gen2 `ZoneId`/district/archetype composition.
+
+## I want to add a Carver
+
+```text
+1. WORLD.md
+   define the Carver and allowed effects
+2. src/world/types.ts
+   stable generated representation if needed
+3. src/world/gen3.ts / generator path
+   deterministic placement/application
+4. renderer files only for presentation of generated output
+5. tests
+   deterministic placement + topology/collision/save invariants
+6. terminology/CODE_MAP only if the Carver deserves a durable human address
+```
+
+## Structures and Transitions
+
+```text
+Manila Room / S-M1 -> src/world/structures.ts + src/world/generator.ts
+Exit Structure / S-E1 -> src/world/exits.ts + src/world/generator.ts
+Transitions -> src/world/exits.ts + src/app/ProjectNoclipGame.ts
+```
+
+A registered destination is not automatically a playable Level.
+
+## Renderer ownership
 
 ```text
 src/renderer/WorldRenderer.ts
-  top-level streamed scene renderer
+  streamed scene ownership, collision registry, Hole floor segmentation,
+  sampled light-field bridge, interactions/marks/showcase
 
 src/renderer/cellBuilder.ts
-  CellDescriptor -> PlayCanvas entities
+  CellDescriptor -> base PlayCanvas entities
 
-src/renderer/support.ts
-  shared material/mesh/render helpers
+src/renderer/level0Wallpaper.ts
+  Level 0 wallpaper palette/tile/world phase + floor-reaching Gen3 wall rule
+
+src/renderer/level0SurfacePresentation.ts
+  Level 0 surfaces, pillar faces, fixture mesh presentation, Arch collider filter
+
+src/renderer/level0RegionPresentation.ts
+  Region carpet presentation, Hole depth bands, render-only Arch curves/bridges
+
+src/renderer/fixtureLighting.ts
+  fixture-owned real fluorescent spots and pulse synchronization
 
 src/renderer/StaticWorldBatching.ts
-  static render batching
+  installs Region presentation + fixture lighting, then batches static visuals
 
-src/renderer/dev5Wallpaper.ts
-  Level 0 wallpaper UV/phase
-
-src/renderer/dev5FidelityPresentation.ts
-  dev.5 Pillar/fixture presentation corrections
-
-src/renderer/dev6FollowupPresentation.ts
-  Region carpet + holes + Arch curve follow-up presentation
-
-src/renderer/fixtureCentricLightingCorrection.ts
-  current dev.7 fixture-owned physical lighting
+src/renderer/support.ts
+  shared renderer helpers
 
 src/renderer/objectCatalog.ts
-  developer showcase objects
+  developer-only World Lab showcase
 ```
 
-## World-generation map
+## World-generation ownership
 
 ```text
-src/world/types.ts
-  shared generated-data types
-
-src/world/hash.ts
-  deterministic hash/random helpers
-
-src/world/fields.ts
-  continuous Fields
-
-src/world/gen3.ts
-  Generation 3 environment/layout entry
-
-src/world/gen3Architecture*.ts
-  architecture helpers/accepted slices
-
-src/world/gen3SpaceTopology.ts
-  topology public surface
-
-src/world/gen3SpaceTopologyDomain.ts
-  world-space topology domains/walls/portals
-
-src/world/gen3SpaceTopologyBuild.ts
-  clips/builds topology into Cell wall/prop fragments
-
-src/world/generator.ts
-  main generation dispatcher; Gen3 + frozen Gen2 paths
-
-src/world/lighting.ts
-  deterministic fixture/light data
-
-src/world/exits.ts
-  Transitions
-
-src/world/structures.ts
-  special Structures
-
-src/world/catalog.ts
-  semantic World Lab catalog
-
-src/world/terminology.ts
-  human short-address registry
+src/world/hash.ts                 deterministic hashing
+src/world/types.ts                generated-data types / stable IDs
+src/world/fields.ts               continuous Fields
+src/world/gen3.ts                 Gen3 semantic environment resolution
+src/world/gen3Architecture.ts     stable architecture public surface
+src/world/gen3ArchitectureCore.ts shared architecture constants/helpers
+src/world/gen3SpaceTopology.ts    topology public surface
+src/world/gen3SpaceTopologyDomain.ts world-space topology decisions
+src/world/gen3SpaceTopologyBuild.ts  Cell realization / routes / Pillars / Arch semantic pieces
+src/world/generator.ts            Gen3 + frozen Gen2 dispatcher
+src/world/lighting.ts             deterministic fixture state + ambience light-field sampling
+src/world/exits.ts                Transitions
+src/world/structures.ts           Structures
+src/world/catalog.ts              semantic World Lab catalog
+src/world/terminology.ts          human short-address registry
 ```
 
-## Repository-level truth
-
-```text
-AGENTS.md
-  rules for agents working in this repo
-
-PROJECT.md
-  product purpose, scope and durable constraints
-
-STATUS.md
-  accepted production state only
-
-WORLD.md
-  canonical human-facing world bible
-
-docs/TERMINOLOGY.md
-  code-facing glossary and short IDs
-
-docs/CODE_MAP.md
-  this navigation map
-
-docs/references/level-0/REFERENCES.md
-  raw reference provenance ledger
-
-docs/adr/*
-  durable engineering decisions
-
-docs/audits/*
-  stored full audits
-```
+Stable generated IDs containing historical strings such as `gen3-v5-*` are deterministic identity and are intentionally not cosmetic-renamed.
 
 ## Verification map
 
 ```text
-npm run typecheck
-  TypeScript correctness
-
-npm test
-  deterministic/system tests
-
-npm run benchmark
-  10,000-Cell generation/performance/topology gates
-
-npm run build
-  production build
+npm run typecheck -> strict TypeScript
+npm test          -> all tests/*.test.mjs deterministic/system coverage
+npm run benchmark -> generation/performance/topology gates
+npm run build     -> production build
 
 .github/workflows/ci.yml
   primary CI
 
+.github/workflows/visual-coherence.yml
+  browser/mobile/visual coherence + benchmark/build
+
 .github/workflows/renderer-compare.yml
   renderer regression comparison
-
-.github/workflows/visual-coherence.yml
-  close-range player-facing visual evidence
 
 .github/workflows/production-smoke.yml
   production browser smoke
 
 .github/workflows/profile-production.yml
-  production profiling/evidence
-```
-
-## Fast conversation examples
-
-```text
-“A-A1.lower-panel is too thick.”
-  -> Arch visual geometry only.
-
-“P-A1 is blocking solved openings.”
-  -> Pillar placement / route reservation.
-
-“O-A1 rooms are too airy.”
-  -> Ordinary Space Topology, not wallpaper.
-
-“CV-H1 looks flat.”
-  -> Hole presentation before Carver placement.
-
-“C-B1 has no escape indication.”
-  -> Blackout Condition / escape cue / lighting presentation.
-
-“M-F1 turns on when I approach.”
-  -> fixture-light ownership/presentation, not room topology.
+  production profiling evidence
 ```

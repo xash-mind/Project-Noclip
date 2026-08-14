@@ -1,6 +1,5 @@
 import * as pc from 'playcanvas';
 import { ARCH_HEADER_HEIGHT, ARCH_LOWER_HEIGHT } from '../world/gen3ArchitectureCore.js';
-import type { SpatialFixtureLight } from '../world/lighting.js';
 import {
   CELL_SIZE,
   WALL_HEIGHT,
@@ -14,7 +13,7 @@ import { WorldRenderer } from './WorldRenderer.js';
 import { makeMaterial, type CellVisual } from './support.js';
 
 interface RendererAccess { app: pc.Application; }
-interface FollowupCache { materials: Map<string, pc.StandardMaterial>; }
+interface RegionPresentationCache { materials: Map<string, pc.StandardMaterial>; }
 interface CarpetProfile { key: 'ordinary' | 'pillar' | 'arch'; tint: readonly [number, number, number]; gloss?: number; }
 type Vec3Tuple = readonly [number, number, number];
 type Vec2Tuple = readonly [number, number];
@@ -51,7 +50,7 @@ export interface HoleDepthBand {
   tint: readonly [number, number, number];
 }
 
-const caches = new WeakMap<WorldRenderer, FollowupCache>();
+const caches = new WeakMap<WorldRenderer, RegionPresentationCache>();
 const carpetClones = new WeakMap<pc.StandardMaterial, Map<string, pc.StandardMaterial>>();
 let installed = false;
 const CARPET_REPEAT_METERS = CELL_SIZE / 5;
@@ -65,14 +64,14 @@ function childrenOf(entity: pc.Entity): pc.Entity[] {
 function entityByName(root: pc.Entity, name: string): pc.Entity | undefined {
   return childrenOf(root).find((child) => child.name === name);
 }
-function cacheFor(renderer: WorldRenderer): FollowupCache {
+function cacheFor(renderer: WorldRenderer): RegionPresentationCache {
   const existing = caches.get(renderer);
   if (existing) return existing;
   const created = { materials: new Map<string, pc.StandardMaterial>() };
   caches.set(renderer, created);
   return created;
 }
-function material(cache: FollowupCache, key: string, tint: readonly [number, number, number]): pc.StandardMaterial {
+function material(cache: RegionPresentationCache, key: string, tint: readonly [number, number, number]): pc.StandardMaterial {
   const existing = cache.materials.get(key);
   if (existing) return existing;
   const created = makeMaterial([tint[0], tint[1], tint[2]]);
@@ -172,10 +171,10 @@ function addHoleBand(
   const height = band.top - band.bottom;
   const y = (band.top + band.bottom) / 2;
   const edge = 0.05;
-  addBox(`${hole.id}:dev6:${band.key}:north`, root, [x, y, z - sz / 2], [sx, height, edge], value);
-  addBox(`${hole.id}:dev6:${band.key}:south`, root, [x, y, z + sz / 2], [sx, height, edge], value);
-  addBox(`${hole.id}:dev6:${band.key}:west`, root, [x - sx / 2, y, z], [edge, height, sz], value);
-  addBox(`${hole.id}:dev6:${band.key}:east`, root, [x + sx / 2, y, z], [edge, height, sz], value);
+  addBox(`${hole.id}:depth-band:${band.key}:north`, root, [x, y, z - sz / 2], [sx, height, edge], value);
+  addBox(`${hole.id}:depth-band:${band.key}:south`, root, [x, y, z + sz / 2], [sx, height, edge], value);
+  addBox(`${hole.id}:depth-band:${band.key}:west`, root, [x - sx / 2, y, z], [edge, height, sz], value);
+  addBox(`${hole.id}:depth-band:${band.key}:east`, root, [x + sx / 2, y, z], [edge, height, sz], value);
 }
 
 function replaceHoleDepth(renderer: WorldRenderer, visual: CellVisual): void {
@@ -186,10 +185,12 @@ function replaceHoleDepth(renderer: WorldRenderer, visual: CellVisual): void {
     for (const name of [
       `${hole.id}:depth`, `${hole.id}:north-side`, `${hole.id}:south-side`, `${hole.id}:west-side`, `${hole.id}:east-side`
     ]) entityByName(visual.root, name)?.destroy();
-    for (const child of childrenOf(visual.root)) if (child.name.startsWith(`${hole.id}:dev6:`)) child.destroy();
+    for (const child of childrenOf(visual.root)) {
+      if (child.name.startsWith(`${hole.id}:depth-band:`) || child.name === `${hole.id}:depth-void`) child.destroy();
+    }
     for (const band of holeDepthBands()) addHoleBand(visual.root, hole, band, material(cache, `hole:${band.key}`, band.tint));
     addBox(
-      `${hole.id}:dev6:void`,
+      `${hole.id}:depth-void`,
       visual.root,
       [hole.position.x, -4.52, hole.position.z],
       [hole.scale.x * 0.96, 0.04, hole.scale.z * 0.96],
@@ -272,7 +273,7 @@ function archCurveOpeningsForCell(descriptor: CellDescriptor): ArchCurveOpening[
         const width = opening[1] - opening[0];
         if (width < 1.7 || width > 6.4) continue;
         output.push({
-          id: `dev6-arch-curve:${lineKey}:${openingIndex++}`,
+          id: `arch-curve:${lineKey}:${openingIndex++}`,
           sourceWallId: header.id,
           orientation: line.orientation,
           fixed: line.fixed,
@@ -337,7 +338,7 @@ export function archHeaderBridgeSegmentsForCell(descriptor: CellDescriptor): Arc
       if (gap <= 0.035 || gap > ARCH_HEADER_BRIDGE_MAX_GAP) continue;
       const along = (previousInterval[1] + currentInterval[0]) / 2;
       output.push({
-        id: `dev6-arch-header-bridge:${lineKey}:${index}`,
+        id: `arch-header-bridge:${lineKey}:${index}`,
         sourceWallId: previous.id,
         position: line.orientation === 'z'
           ? [along, WALL_HEIGHT - ARCH_HEADER_HEIGHT / 2, line.fixed]
@@ -479,7 +480,7 @@ function addArchCurveMesh(
 
 function renderArchPresentation(renderer: WorldRenderer, visual: CellVisual): void {
   for (const child of childrenOf(visual.root)) {
-    if (child.name.startsWith('dev6-arch-curve:') || child.name.startsWith('dev6-arch-header-bridge:')) child.destroy();
+    if (child.name.startsWith('arch-curve:') || child.name.startsWith('arch-header-bridge:')) child.destroy();
   }
   for (const segment of archHeaderBridgeSegmentsForCell(visual.descriptor)) {
     const source = entityByName(visual.root, segment.sourceWallId);
@@ -493,34 +494,25 @@ function renderArchPresentation(renderer: WorldRenderer, visual: CellVisual): vo
   }
 }
 
-function applyFollowup(renderer: WorldRenderer, visual: CellVisual): void {
+function applyRegionPresentation(renderer: WorldRenderer, visual: CellVisual): void {
   if (visual.descriptor.world.generationVersion !== 'gen3-v1') return;
   replaceHoleDepth(renderer, visual);
   renderArchPresentation(renderer, visual);
   applyCarpetPresentation(visual);
 }
 
-export function installDev6FollowupPresentation(): void {
+/**
+ * Installs renderer-only Level 0 Region presentation. World descriptors keep
+ * authoritative topology/material identities; this layer owns Arch curve meshes,
+ * Hole depth visuals, and Region carpet finish/UV presentation.
+ */
+export function installLevel0RegionPresentation(): void {
   if (installed) return;
   installed = true;
   const originalLoadCell = WorldRenderer.prototype.loadCell;
-  WorldRenderer.prototype.loadCell = function patchedLoadCell(this: WorldRenderer, descriptor: CellDescriptor): void {
+  WorldRenderer.prototype.loadCell = function patchedRegionPresentationLoad(this: WorldRenderer, descriptor: CellDescriptor): void {
     originalLoadCell.call(this, descriptor);
     const visual = this.loaded.get(descriptor.id);
-    if (visual) applyFollowup(this, visual);
-  };
-  const originalSpatialFixtureLights = WorldRenderer.prototype.spatialFixtureLights;
-  WorldRenderer.prototype.spatialFixtureLights = function patchedSpatialFixtureLights(
-    this: WorldRenderer,
-    playerX: number,
-    playerZ: number,
-    elapsedSeconds: number,
-    reducedFlicker: boolean,
-    limit = 4,
-    previousIds: readonly string[] = []
-  ): SpatialFixtureLight[] {
-    const result = originalSpatialFixtureLights.call(this, playerX, playerZ, elapsedSeconds, reducedFlicker, limit, previousIds);
-    for (const visual of this.loaded.values()) applyCarpetPresentation(visual);
-    return result;
+    if (visual) applyRegionPresentation(this, visual);
   };
 }

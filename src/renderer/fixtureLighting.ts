@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import { lightFlickerValue, type LightFieldSource } from '../world/lighting.js';
+import { lightFlickerValue } from '../world/lighting.js';
 import type { CellDescriptor, LightGroupSpec } from '../world/types.js';
 import { WorldRenderer } from './WorldRenderer.js';
 import { makeMaterial, type CellVisual } from './support.js';
@@ -147,14 +147,6 @@ function updateFixtureLighting(renderer: WorldRenderer, elapsedSeconds: number, 
   }
 }
 
-function sourceList(renderer: WorldRenderer): LightFieldSource[] {
-  return [...renderer.loaded.values()].flatMap((visual) => visual.descriptor.lightGroups.map((group) => ({
-    cellX: visual.descriptor.address.cellX,
-    cellZ: visual.descriptor.address.cellZ,
-    group
-  })));
-}
-
 export function fixtureLightIntensity(group: LightGroupSpec, elapsedSeconds: number, reducedFlicker: boolean): number {
   return group.intensity * quantizedPulse(group, elapsedSeconds, reducedFlicker) * FIXTURE_SPOT_INTENSITY_MULTIPLIER;
 }
@@ -179,7 +171,7 @@ declare module './WorldRenderer.js' {
  * Cells own lifetime only. Player position never selects, acquires or releases a
  * light. The same deterministic fixture pulse drives mesh emission and light energy.
  */
-export function installFixtureCentricLightingCorrection(): void {
+export function installFixtureLighting(): void {
   if (installed) return;
   installed = true;
 
@@ -204,12 +196,6 @@ export function installFixtureCentricLightingCorrection(): void {
     updateFixtureLighting(this, elapsedSeconds, reducedFlicker);
   };
 
-  // The old player-nearest selector remains only as a compatibility method on the
-  // renderer type. The corrected runtime never gives it ownership of real lights.
-  WorldRenderer.prototype.spatialFixtureLights = function retiredSpatialFixtureLights(): [] {
-    return [];
-  };
-
   Object.defineProperty(WorldRenderer.prototype, 'realtimeFixtureLightCount', {
     configurable: true,
     get(this: WorldRenderer): number {
@@ -228,8 +214,4 @@ export function installFixtureCentricLightingCorrection(): void {
       return active;
     }
   });
-
-  // Keep the canonical sampler available for ambience/diagnostics. It has no
-  // authority over floor/ceiling materials or real-light ownership.
-  void sourceList;
 }

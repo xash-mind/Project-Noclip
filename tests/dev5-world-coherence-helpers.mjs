@@ -15,7 +15,6 @@ export const {
   gen3JunctionDiagnostic,
   sampleGen3RegionInfluence
 } = await import('../.test-dist/src/world/gen3Architecture.js');
-export const { selectSpatialFixtureLights } = await import('../.test-dist/src/world/lighting.js');
 export const { CELL_SIZE, DEFAULT_TUNING, WALL_HEIGHT } = await import('../.test-dist/src/world/types.js');
 
 export const clean = (regionOverride) => ({

@@ -1,7 +1,7 @@
 import * as pc from 'playcanvas';
 import { CELL_SIZE } from '../world/types.js';
-import { installDev6FollowupPresentation } from './dev6FollowupPresentation.js';
-import { installFixtureCentricLightingCorrection } from './fixtureCentricLightingCorrection.js';
+import { installFixtureLighting } from './fixtureLighting.js';
+import { installLevel0RegionPresentation } from './level0RegionPresentation.js';
 
 const STATIC_WORLD_BATCH_GROUP_ID = 1601;
 const STATIC_WORLD_BATCH_GROUP_NAME = 'level0-static-world';
@@ -51,16 +51,13 @@ function getRunningApplication(): BatchApplication | undefined {
 }
 
 /**
- * Installs one render-only batching layer over canonical streamed Level 0 cells.
- *
- * The installed PlayCanvas typings intentionally expose only the engine surface
- * already used by the game, so this file keeps the additional batching API behind
- * a narrow structural adapter. Collision, interaction and persistence data never
- * enter this layer.
+ * Installs renderer-owned Level 0 presentation/lighting and one render-only
+ * batching layer over canonical streamed Cells. Collision, interaction and
+ * persistence data never enter this layer.
  */
 export function installStaticWorldBatching(): void {
-  installDev6FollowupPresentation();
-  installFixtureCentricLightingCorrection();
+  installLevel0RegionPresentation();
+  installFixtureLighting();
   let currentApp: BatchApplication | undefined;
   let previousCellGuids = new Set<string>();
 

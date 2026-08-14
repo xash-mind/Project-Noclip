@@ -1,35 +1,25 @@
 import * as pc from 'playcanvas';
-import { CELL_SIZE, type CellDescriptor, type LightState, type PropSpec, type WallSpec } from '../world/types.js';
-import {
-  lightFlickerValue,
-  sampleLightField,
-  type LightFieldSource,
-  type SpatialFixtureLight
-} from '../world/lighting.js';
+import type { CellDescriptor, LightState, PropSpec, WallSpec } from '../world/types.js';
 import { WorldRenderer } from './WorldRenderer.js';
-import {
-  canvasTexture,
-  makeMaterial,
-  type CellVisual
-} from './support.js';
+import { canvasTexture, makeMaterial, type CellVisual } from './support.js';
 import {
   paintLevel0ChevronWallpaper,
   shouldGen3WallCollide,
   wallpaperUvForWall
-} from './dev5Wallpaper.js';
+} from './level0Wallpaper.js';
 
 interface RendererAccess {
   app: pc.Application;
 }
 
-interface PresentationCache {
+interface SurfacePresentationCache {
   wallpaper: pc.Texture;
   carpet: pc.Texture;
   ceiling: pc.Texture;
   materials: Map<string, pc.StandardMaterial>;
 }
 
-const caches = new WeakMap<WorldRenderer, PresentationCache>();
+const caches = new WeakMap<WorldRenderer, SurfacePresentationCache>();
 let installed = false;
 
 function childrenOf(entity: pc.Entity): pc.Entity[] {
@@ -56,11 +46,11 @@ function createWallpaperTexture(app: pc.Application): pc.Texture {
   return texture;
 }
 
-function cacheFor(renderer: WorldRenderer): PresentationCache {
+function cacheFor(renderer: WorldRenderer): SurfacePresentationCache {
   const existing = caches.get(renderer);
   if (existing) return existing;
   const app = (renderer as unknown as RendererAccess).app;
-  const created: PresentationCache = {
+  const created: SurfacePresentationCache = {
     wallpaper: createWallpaperTexture(app),
     carpet: canvasTexture(app, 'carpet', 0),
     ceiling: canvasTexture(app, 'ceiling', 0),
@@ -71,7 +61,7 @@ function cacheFor(renderer: WorldRenderer): PresentationCache {
 }
 
 function material(
-  cache: PresentationCache,
+  cache: SurfacePresentationCache,
   key: string,
   factory: () => pc.StandardMaterial
 ): pc.StandardMaterial {
@@ -103,7 +93,7 @@ function addBox(
 }
 
 function wallMaterial(
-  cache: PresentationCache,
+  cache: SurfacePresentationCache,
   descriptor: CellDescriptor,
   wall: WallSpec
 ): pc.StandardMaterial {
@@ -119,7 +109,7 @@ function wallMaterial(
   return material(cache, key, () => makeMaterial(tint, cache.wallpaper, uv.tiling, undefined, 1, uv.offset));
 }
 
-function floorMaterial(cache: PresentationCache, descriptor: CellDescriptor): pc.StandardMaterial {
+function floorMaterial(cache: SurfacePresentationCache, descriptor: CellDescriptor): pc.StandardMaterial {
   const arch = descriptor.world.regionId === 'arch-rooms';
   const key = `floor:${arch ? 'arch' : 'ordinary'}`;
   return material(cache, key, () => {
@@ -132,7 +122,7 @@ function floorMaterial(cache: PresentationCache, descriptor: CellDescriptor): pc
   });
 }
 
-function ceilingMaterial(cache: PresentationCache, descriptor: CellDescriptor): pc.StandardMaterial {
+function ceilingMaterial(cache: SurfacePresentationCache, descriptor: CellDescriptor): pc.StandardMaterial {
   const arch = descriptor.world.regionId === 'arch-rooms';
   const key = `ceiling:${arch ? 'arch' : 'ordinary'}`;
   return material(cache, key, () => makeMaterial(arch ? [0.98, 0.975, 0.91] : [0.93, 0.91, 0.81], cache.ceiling, [4, 4]));
@@ -144,7 +134,7 @@ function quantizedPulse(state: LightState, pulse: number): number {
 }
 
 function fixtureMaterial(
-  cache: PresentationCache,
+  cache: SurfacePresentationCache,
   descriptor: CellDescriptor,
   state: LightState,
   pulse: number
@@ -163,39 +153,6 @@ function fixtureMaterial(
     if (level <= 0.001) return makeMaterial(diffuse);
     const emissive: [number, number, number] = arch ? [1, 0.985, 0.78] : [1, 0.95, 0.68];
     return makeMaterial(diffuse, undefined, [1, 1], emissive, (arch ? 2.18 : 2.28) * level);
-  });
-}
-
-function surfaceFieldMaterial(
-  cache: PresentationCache,
-  descriptor: CellDescriptor,
-  kind: 'floor' | 'ceiling',
-  energy: number,
-  temperature: number
-): pc.StandardMaterial {
-  const arch = descriptor.world.regionId === 'arch-rooms';
-  const energyBucket = Math.max(0, Math.min(12, Math.round(energy * 12)));
-  if (energyBucket === 0) return kind === 'floor' ? floorMaterial(cache, descriptor) : ceilingMaterial(cache, descriptor);
-  const temperatureBucket = Math.max(0, Math.min(6, Math.round((temperature - 0.78) / 0.05)));
-  const normalizedEnergy = energyBucket / 12;
-  const normalizedTemperature = 0.78 + temperatureBucket * 0.05;
-  const key = `surface-field:${kind}:${arch ? 'arch' : 'ordinary'}:${energyBucket}:${temperatureBucket}`;
-  return material(cache, key, () => {
-    const diffuse: [number, number, number] = kind === 'floor'
-      ? (arch ? [0.67, 0.625, 0.51] : [0.79, 0.72, 0.55])
-      : (arch ? [0.98, 0.975, 0.91] : [0.93, 0.91, 0.81]);
-    const texture = kind === 'floor' ? cache.carpet : cache.ceiling;
-    const tiling: [number, number] = kind === 'floor' ? [5, 5] : [4, 4];
-    const emissive: [number, number, number] = [
-      Math.min(1, 0.82 * normalizedTemperature),
-      Math.min(1, 0.73 * normalizedTemperature),
-      Math.min(1, 0.34 * normalizedTemperature)
-    ];
-    const intensity = normalizedEnergy * (kind === 'floor' ? 0.46 : 0.34);
-    const result = makeMaterial(diffuse, texture, tiling, emissive, intensity);
-    if (arch && kind === 'floor') result.gloss = 0.11;
-    result.update();
-    return result;
   });
 }
 
@@ -235,7 +192,7 @@ function pillarFaceWall(
 }
 
 function replacePillarPresentation(
-  cache: PresentationCache,
+  cache: SurfacePresentationCache,
   descriptor: CellDescriptor,
   root: pc.Entity,
   prop: PropSpec
@@ -280,12 +237,14 @@ function setSurfaceMaterial(root: pc.Entity, kind: 'floor' | 'ceiling', value: p
   }
 }
 
-function applyGen3Presentation(renderer: WorldRenderer, visual: CellVisual): void {
+function applyGen3SurfacePresentation(renderer: WorldRenderer, visual: CellVisual): void {
   const descriptor = visual.descriptor;
   if (descriptor.world.generationVersion !== 'gen3-v1') return;
   const cache = cacheFor(renderer);
   const root = visual.root;
 
+  // Upper Arch pieces are presentation geometry. The 2D movement solver may only
+  // keep wall colliders that reach the floor.
   const wallSpecs = new Map(descriptor.walls.map((wall) => [wall.id, wall]));
   visual.colliders = visual.colliders.filter((collider) => {
     const wall = wallSpecs.get(collider.id);
@@ -313,91 +272,23 @@ function applyGen3Presentation(renderer: WorldRenderer, visual: CellVisual): voi
   }
 }
 
-function lightSources(renderer: WorldRenderer): LightFieldSource[] {
-  return [...renderer.loaded.values()].flatMap((visual) => visual.descriptor.lightGroups.map((group) => ({
-    cellX: visual.descriptor.address.cellX,
-    cellZ: visual.descriptor.address.cellZ,
-    group
-  })));
-}
-
-function syncGen3Lighting(
-  renderer: WorldRenderer,
-  elapsedSeconds: number,
-  reducedFlicker: boolean
-): void {
-  const cache = cacheFor(renderer);
-  const sources = lightSources(renderer);
-
-  for (const visual of renderer.loaded.values()) {
-    const descriptor = visual.descriptor;
-    if (descriptor.world.generationVersion !== 'gen3-v1') continue;
-
-    for (const group of descriptor.lightGroups) {
-      const pulse = lightFlickerValue(group, elapsedSeconds, reducedFlicker);
-      const value = fixtureMaterial(cache, descriptor, group.state, pulse);
-      group.fixtures.forEach((_position, index) => {
-        setMaterial(entityByName(visual.root, `${group.id}:fixture:${index}`), value);
-      });
-    }
-
-    const centerX = descriptor.address.cellX * CELL_SIZE;
-    const centerZ = descriptor.address.cellZ * CELL_SIZE;
-    const sampled = sampleLightField(sources, centerX, centerZ, elapsedSeconds, reducedFlicker);
-    const blackoutSuppression = Math.pow(Math.max(0, 1 - descriptor.world.blackoutStrength), 1.7);
-    const fixedFieldEnergy = sampled.energy * blackoutSuppression;
-    setSurfaceMaterial(
-      visual.root,
-      'floor',
-      surfaceFieldMaterial(cache, descriptor, 'floor', fixedFieldEnergy, sampled.temperature)
-    );
-    setSurfaceMaterial(
-      visual.root,
-      'ceiling',
-      surfaceFieldMaterial(cache, descriptor, 'ceiling', fixedFieldEnergy, sampled.temperature)
-    );
-  }
-}
-
 /**
- * Install the bounded dev.6 presentation correction without changing geography or
- * dev.5 Space Topology. Rendered fixtures and the fixed Cell-surface light field
- * are driven from the same deterministic LightGroup pulse used by the bounded
- * realtime source pool.
+ * Installs Generation 3 Level 0 surface presentation only. Deterministic world
+ * descriptors remain renderer-independent; this layer owns wallpaper, base
+ * carpet/ceiling materials, pillar faces, fixture mesh appearance, and the
+ * floor-reaching collider filter required by the current 2D movement solver.
  */
-export function installDev5FidelityPresentation(): void {
+export function installLevel0SurfacePresentation(): void {
   if (installed) return;
   installed = true;
 
   const originalLoadCell = WorldRenderer.prototype.loadCell;
-  WorldRenderer.prototype.loadCell = function patchedLoadCell(
+  WorldRenderer.prototype.loadCell = function patchedSurfaceLoad(
     this: WorldRenderer,
     descriptor: CellDescriptor
   ): void {
     originalLoadCell.call(this, descriptor);
     const visual = this.loaded.get(descriptor.id);
-    if (visual) applyGen3Presentation(this, visual);
-  };
-
-  const originalSpatialFixtureLights = WorldRenderer.prototype.spatialFixtureLights;
-  WorldRenderer.prototype.spatialFixtureLights = function patchedSpatialFixtureLights(
-    this: WorldRenderer,
-    playerX: number,
-    playerZ: number,
-    elapsedSeconds: number,
-    reducedFlicker: boolean,
-    limit = 4,
-    previousIds: readonly string[] = []
-  ): SpatialFixtureLight[] {
-    syncGen3Lighting(this, elapsedSeconds, reducedFlicker);
-    return originalSpatialFixtureLights.call(
-      this,
-      playerX,
-      playerZ,
-      elapsedSeconds,
-      reducedFlicker,
-      limit,
-      previousIds
-    );
+    if (visual) applyGen3SurfacePresentation(this, visual);
   };
 }

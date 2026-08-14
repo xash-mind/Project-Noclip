@@ -1,7 +1,7 @@
 import * as pc from 'playcanvas';
 import './styles.css';
 import { ProjectNoclipGame } from './app/ProjectNoclipGame.js';
-import { installDev5FidelityPresentation } from './renderer/dev5FidelityPresentation.js';
+import { installLevel0SurfacePresentation } from './renderer/level0SurfacePresentation.js';
 import { installStaticWorldBatching } from './renderer/StaticWorldBatching.js';
 import { mountDevelopmentVersionIndicator } from './ui/DevelopmentVersionIndicator.js';
 import { installRegionDepthLab } from './ui/regionDepthLab.js';
@@ -63,7 +63,7 @@ function installPlayCanvasFogCompatibility(): void {
 }
 
 installPlayCanvasFogCompatibility();
-installDev5FidelityPresentation();
+installLevel0SurfacePresentation();
 installStaticWorldBatching();
 mountDevelopmentVersionIndicator();
 

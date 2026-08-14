@@ -1,69 +1,23 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-const {
-  FIXTURE_LIGHT_ACQUIRE_RADIUS,
-  FIXTURE_LIGHT_RELEASE_RADIUS,
-  FIXTURE_PHYSICAL_LIGHT_RANGE,
-  selectSpatialFixtureLights
-} = await import('../.test-dist/src/world/lighting.js');
 const { locateRegionAtDepth, regionDepthTargetSupported } = await import('../.test-dist/src/world/regionInspection.js');
 const {
-  DEV5_SEPARATE_BASE_TRIM,
+  LEVEL0_SEPARATE_BASE_TRIM,
   LEVEL0_WALLPAPER_PALETTE,
   LEVEL0_WALLPAPER_TILE_METERS,
   shouldGen3WallCollide,
   wallpaperUvForWall
-} = await import('../.test-dist/src/renderer/dev5Wallpaper.js');
+} = await import('../.test-dist/src/renderer/level0Wallpaper.js');
 const { generateCell } = await import('../.test-dist/src/world/generator.js');
 const { CELL_SIZE, DEFAULT_TUNING } = await import('../.test-dist/src/world/types.js');
 
 function wrap(value) { return ((value % 1) + 1) % 1; }
 function almostEqual(left, right, epsilon = 1e-6) { return Math.abs(left - right) <= epsilon; }
 
-function lightSource(state = 'on') {
-  return [{
-    cellX: 0,
-    cellZ: 0,
-    group: {
-      id: 'fixture-regression',
-      fixtures: [{ x: 0, y: 3.12, z: 0 }],
-      rotationY: 0,
-      state,
-      intensity: 1,
-      temperature: 0.94,
-      flickerRate: 3,
-      phase: 0.25
-    }
-  }];
-}
-
-test('fixture physical lights pre-arm outside their visible range and retain stable ownership', () => {
-  assert.equal(FIXTURE_PHYSICAL_LIGHT_RANGE, 23.5);
-  assert.ok(FIXTURE_LIGHT_ACQUIRE_RADIUS >= FIXTURE_PHYSICAL_LIGHT_RANGE + 5);
-  assert.ok(FIXTURE_LIGHT_RELEASE_RADIUS > FIXTURE_LIGHT_ACQUIRE_RADIUS);
-
-  const sources = lightSource('on');
-  assert.equal(selectSpatialFixtureLights(sources, 31, 0, 2, false, 8).length, 0);
-  const acquired = selectSpatialFixtureLights(sources, 29.5, 0, 2, false, 8);
-  assert.equal(acquired.length, 1);
-  assert.ok(acquired[0].distance > FIXTURE_PHYSICAL_LIGHT_RANGE, 'fixture should be owned before physical falloff can become visible');
-  const sourceIntensity = acquired[0].intensity;
-
-  let owners = acquired.map((source) => source.id);
-  for (const playerX of [24, 20, 12, 3, -3, -12, -20, -24, -29, -34.5]) {
-    const selected = selectSpatialFixtureLights(sources, playerX, 0, 2, false, 8, owners);
-    assert.deepEqual(selected.map((source) => source.id), owners);
-    assert.equal(selected[0].intensity, sourceIntensity, 'source energy must not be multiplied by player approach distance');
-    owners = selected.map((source) => source.id);
-  }
-  assert.equal(selectSpatialFixtureLights(sources, -35.1, 0, 2, false, 8, owners).length, 0);
-  assert.equal(selectSpatialFixtureLights(lightSource('off'), 0, 0, 2, false, 8).length, 0);
-});
-
 test('wallpaper is world-phased across Cell and vertical split boundaries', () => {
   assert.ok(LEVEL0_WALLPAPER_TILE_METERS > 0.35 && LEVEL0_WALLPAPER_TILE_METERS < 0.8);
-  assert.equal(DEV5_SEPARATE_BASE_TRIM, false, 'tiny base detail must not remain a separate protruding geometry motif');
+  assert.equal(LEVEL0_SEPARATE_BASE_TRIM, false, 'tiny base detail must not remain a separate protruding geometry motif');
   assert.notEqual(LEVEL0_WALLPAPER_PALETTE.paper, '#ffff00');
 
   const left = { id: 'left', cx: 3.5, cy: 1.6, cz: 0, sx: 7, sy: 3.2, sz: 0.18, orientation: 'z', drawable: true };
@@ -88,7 +42,7 @@ const clean = (regionOverride) => ({
   gateBypass: true
 });
 
-function generationOptions(x, z, tuning, seed = 'dev5-fidelity-arch') {
+function generationOptions(x, z, tuning, seed = 'level0-fidelity-arch') {
   return { seed, x, z, worldDay: 40, exposure: 10, shiftEpoch: 0, generationVersion: 'gen3-v1', tuning };
 }
 
@@ -163,7 +117,7 @@ test('Arch route bays are floor-open in the 2D collider model while decorative l
 async function locateAcrossSeeds(regionId, targetDepth) {
   for (let index = 0; index < 5; index += 1) {
     const result = locateRegionAtDepth({
-      seed: `dev5-depth-inspection-${index}`,
+      seed: `region-depth-inspection-${index}`,
       originX: 0,
       originZ: 0,
       targetRegion: regionId,

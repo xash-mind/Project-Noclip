@@ -5,7 +5,7 @@ import type { ItemInstance } from '../items/types.js';
 import type { SaveData } from '../persistence/types.js';
 import { CELL_SIZE, WALL_HEIGHT, type CellDescriptor, type FloorPatchSpec, type PropSpec, type WallSpec } from '../world/types.js';
 import { ZONE_PROFILES, type ZoneProfile } from '../world/zones.js';
-import { DEV5_SEPARATE_BASE_TRIM } from './dev5Wallpaper.js';
+import { LEVEL0_SEPARATE_BASE_TRIM } from './level0Wallpaper.js';
 import type { ObjectCatalogEntry } from './objectCatalog.js';
 import { color, type CellVisual, type ExitVisual, type InteractionVisual, type NoteVisual, type SeatVisual, type TextureKind, type WorldCollider, type WorldItemVisual } from './support.js';
 
@@ -80,7 +80,7 @@ export class RendererCellBuilder {
       this.box(wallSpec.id, root, [wallSpec.cx, wallSpec.cy, wallSpec.cz], [wallSpec.sx, wallSpec.sy, wallSpec.sz], wallMat);
       const collider = this.toWorldCollider(descriptor, wallSpec);
       colliders.push(collider); this.walls.set(collider.id, collider);
-      if ((!gen3 || DEV5_SEPARATE_BASE_TRIM) && wallSpec.cy - wallSpec.sy / 2 < 0.04) {
+      if ((!gen3 || LEVEL0_SEPARATE_BASE_TRIM) && wallSpec.cy - wallSpec.sy / 2 < 0.04) {
         const horizontal = wallSpec.orientation === 'z';
         this.box(`${wallSpec.id}:skirting`, root, [wallSpec.cx, 0.11, wallSpec.cz], [horizontal ? wallSpec.sx : wallSpec.sx + 0.012, 0.22, horizontal ? wallSpec.sz + 0.012 : wallSpec.sz], trimMat);
       }
@@ -115,6 +115,7 @@ export class RendererCellBuilder {
   }
 
   private addHolePatch(root: pc.Entity, patch: FloorPatchSpec, profile: ZoneProfile): void {
+    void profile;
     const voidMat = this.getMaterial('hole:void', [0.003, 0.003, 0.002], undefined);
     const x = patch.position.x; const z = patch.position.z; const sx = patch.scale.x; const sz = patch.scale.z;
     this.box(`${patch.id}:void`, root, [x, -0.08, z], [sx, 0.18, sz], voidMat);
