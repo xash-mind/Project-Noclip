@@ -93,8 +93,9 @@ function lightColor(group: LightGroupSpec): pc.Color {
   );
 }
 
-function fixtureWorldPosition(runtime: FixtureRuntime): { x: number; z: number } {
+function fixtureWorldPosition(runtime: FixtureRuntime): { x: number; z: number } | undefined {
   const fixture = runtime.group.fixtures[runtime.fixtureIndex];
+  if (!fixture) return undefined;
   return {
     x: runtime.descriptor.address.cellX * CELL_SIZE + fixture.x,
     z: runtime.descriptor.address.cellZ * CELL_SIZE + fixture.z
@@ -103,6 +104,7 @@ function fixtureWorldPosition(runtime: FixtureRuntime): { x: number; z: number }
 
 function fixtureRangeTouchesCell(runtime: FixtureRuntime, descriptor: CellDescriptor): boolean {
   const fixture = fixtureWorldPosition(runtime);
+  if (!fixture) return false;
   const centerX = descriptor.address.cellX * CELL_SIZE;
   const centerZ = descriptor.address.cellZ * CELL_SIZE;
   const half = CELL_SIZE / 2;
