@@ -29,6 +29,7 @@ const CROUCH_SPEED = 1.8;
 const SAVE_INTERVAL = 1.5;
 const TOUCH_LOOK_MULTIPLIER = 2.25;
 const EMPTY_LIGHT_FIELD: LightFieldSample = { energy: 0, activeGroups: 0, flickerGroups: 0, nearbyGroups: 0, flickerPulse: 0, temperature: 0.94 };
+const LEVEL0_AMBIENT = { r: 0.085, g: 0.08, b: 0.045 } as const;
 const REGION_LABELS: Record<RegionId, string> = {
   'ordinary-level-0': 'Ordinary Level 0',
   'pillar-field': 'Pillar Field',
@@ -53,8 +54,6 @@ export class ProjectNoclipGame {
   private app?: pc.Application;
   private camera?: pc.Entity;
   private cameraFrame?: CameraFrame;
-  private fixtureLights: pc.Entity[] = [];
-  private fixtureLightSourceIds: string[] = [];
   private blackoutGuideLight?: pc.Entity;
   private flashlight?: pc.Entity;
   private renderer?: WorldRenderer;
@@ -129,7 +128,7 @@ export class ProjectNoclipGame {
 
   private async launch(save: SaveData): Promise<void> {
     this.save = save; this.yaw = save.position.yaw; this.pitch = save.position.pitch; this.tuning = { ...DEFAULT_TUNING };
-    this.lightField = { ...EMPTY_LIGHT_FIELD }; this.journeyElapsed = 0; this.lightFieldAccumulator = 0; this.regionExtent = undefined; this.regionExtentKey = ''; this.fixtureLightSourceIds = [];
+    this.lightField = { ...EMPTY_LIGHT_FIELD }; this.journeyElapsed = 0; this.lightFieldAccumulator = 0; this.regionExtent = undefined; this.regionExtentKey = '';
     this.markerMode = false; this.ui.setMarkerMode(false); this.setupEngine();
     if (!this.app || !this.camera) throw new Error('Engine did not initialize');
     this.renderer = new WorldRenderer(this.app, save);
@@ -138,7 +137,6 @@ export class ProjectNoclipGame {
     const startupRadius = Math.min(2, Math.max(1, Math.min(4, Math.round(this.tuning.activeRadius))));
     this.updateStreaming(true, startupRadius); this.updateCameraRotation(); this.started = true; this.paused = true;
     this.ui.showGame(); this.ui.updateInventory(save.inventory, save.selectedItemId); this.ui.setPaused(true);
-    // Publish the first useful HUD state before the outer cache ring is submitted to PlayCanvas.
     this.updateUI(); this.scheduleStreamingWarmup();
     await this.ambience.start(save.settings.masterVolume); this.ambience.setLightField(this.lightField); this.resumeInput();
   }
@@ -147,7 +145,7 @@ export class ProjectNoclipGame {
     if (this.app) { for (const id of [...(this.renderer?.loaded.keys() ?? [])]) this.renderer?.unloadCell(id); return; }
     const app = new pc.Application(this.canvas);
     app.setCanvasResolution(pc.RESOLUTION_AUTO); app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
-    app.scene.ambientLight = new pc.Color(0.26, 0.245, 0.135); app.scene.skyboxIntensity = 0;
+    app.scene.ambientLight = new pc.Color(LEVEL0_AMBIENT.r, LEVEL0_AMBIENT.g, LEVEL0_AMBIENT.b); app.scene.skyboxIntensity = 0;
     app.scene.fog = pc.FOG_LINEAR; app.scene.fogColor = new pc.Color(0.15, 0.135, 0.075); app.scene.fogStart = LEVEL0_FOG_START; app.scene.fogEnd = LEVEL0_FOG_END;
     const camera = new pc.Entity('player-camera');
     camera.addComponent('camera', { clearColor: new pc.Color(0.15, 0.135, 0.075), nearClip: 0.05, farClip: 125, fov: 73 }); app.root.addChild(camera);
@@ -163,11 +161,6 @@ export class ProjectNoclipGame {
       cameraFrame.update();
       this.cameraFrame = cameraFrame;
     }
-    this.fixtureLights = Array.from({ length: 8 }, (_, index) => {
-      const light = new pc.Entity(`spatial-fluorescent-light:${index}`);
-      light.addComponent('light', { type: 'omni', color: new pc.Color(0.95, 0.91, 0.62), range: 23.5, intensity: 0, castShadows: false });
-      light.enabled = false; app.root.addChild(light); return light;
-    });
     const blackoutGuideLight = new pc.Entity('blackout-external-glimmer');
     blackoutGuideLight.addComponent('light', { type: 'omni', color: new pc.Color(0.88, 0.84, 0.56), range: 22, intensity: 0, castShadows: false });
     blackoutGuideLight.enabled = false; app.root.addChild(blackoutGuideLight);
@@ -225,8 +218,6 @@ export class ProjectNoclipGame {
     if (open) {
       this.paused = true;
       this.ui.setPaused(false);
-      // World Lab is an inspection surface. Keep one current frame behind it,
-      // but do not burn CPU/GPU rendering an obscured paused journey.
       if (this.app) {
         const rendering = renderControl(this.app);
         rendering.renderNextFrame = true;
@@ -366,9 +357,6 @@ export class ProjectNoclipGame {
     const targetRadius = Math.max(1, Math.min(4, Math.round(this.tuning.activeRadius)));
     if (targetRadius <= 2) return;
     const token = ++this.streamWarmupToken;
-    // Two animation frames guarantee one painted, responsive radius-2 world before
-    // the fog-hidden outer cache ring is built. Movement/tuning changes invalidate
-    // the token and fall back to the normal immediate streaming path.
     requestAnimationFrame(() => requestAnimationFrame(() => {
       if (token !== this.streamWarmupToken || !this.started || !this.save || !this.renderer) return;
       this.updateStreaming(false, targetRadius);
@@ -411,18 +399,11 @@ export class ProjectNoclipGame {
     const worldDay = this.tuning.worldDayOverride ?? calculateWorldDay(Date.now());
     const exposure = this.tuning.exposureOverride ?? calculateExposureDay(this.save.exposure);
     const position = this.camera.getPosition();
-    const occurrence = locateNearestRegion({
-      seed: this.save.seed, originX: position.x, originZ: position.z, target: regionId,
-      worldDay, exposure, tuning: this.tuning
-    });
-    if (!occurrence) {
-      this.ui.toast(`${REGION_LABELS[regionId]} was not found within 12 km. Check timeline gates or enable the local bypass.`, 5600);
-      return;
-    }
+    const occurrence = locateNearestRegion({ seed: this.save.seed, originX: position.x, originZ: position.z, target: regionId, worldDay, exposure, tuning: this.tuning });
+    if (!occurrence) { this.ui.toast(`${REGION_LABELS[regionId]} was not found within 12 km. Check timeline gates or enable the local bypass.`, 5600); return; }
     this.camera.setPosition(occurrence.worldX, position.y, occurrence.worldZ);
     this.currentCellX = worldToCell(occurrence.worldX); this.currentCellZ = worldToCell(occurrence.worldZ);
-    this.regionExtentKey = '';
-    this.updateStreaming(true);
+    this.regionExtentKey = ''; this.updateStreaming(true);
     const walkingMinutes = occurrence.distanceMeters / WALK_SPEED / 60;
     this.ui.toast(`Located ${REGION_LABELS[regionId]} ${occurrence.distanceMeters.toFixed(0)} m away (about ${walkingMinutes.toFixed(1)} walking minutes).`, 6200);
     void this.persist();
@@ -482,30 +463,19 @@ export class ProjectNoclipGame {
     this.ambience.setLightField(this.lightField);
     const worldDay = this.tuning.worldDayOverride ?? calculateWorldDay(Date.now());
     const exposure = this.tuning.exposureOverride ?? calculateExposureDay(this.save.exposure);
-    const sampled = this.save.generationVersion === 'gen3-v1'
-      ? sampleGen3Environment(this.save.seed, position.x, position.z, worldDay, exposure, this.tuning)
-      : undefined;
+    const sampled = this.save.generationVersion === 'gen3-v1' ? sampleGen3Environment(this.save.seed, position.x, position.z, worldDay, exposure, this.tuning) : undefined;
     const blackoutStrength = sampled?.blackoutStrength ?? this.currentCell.world.blackoutStrength;
     const blackoutEscapeCue = sampled?.blackoutEscapeCue ?? this.currentCell.world.blackoutEscapeCue;
     this.ambience.setEnvironment(blackoutStrength, blackoutEscapeCue);
 
-    const spatial = this.renderer.spatialFixtureLights(position.x, position.z, this.journeyElapsed, this.save.settings.reducedFlicker, this.fixtureLights.length, this.fixtureLightSourceIds);
-    this.fixtureLightSourceIds = spatial.map((source) => source.id);
-    this.fixtureLights.forEach((entity, index) => {
-      const source = spatial[index];
-      if (!source || !entity.light) { entity.enabled = false; return; }
-      entity.enabled = true;
-      entity.setPosition(source.worldX, source.worldY, source.worldZ);
-      entity.light.intensity = source.intensity * (1 - blackoutStrength);
-      entity.light.color = new pc.Color(Math.min(1, 0.98 * source.temperature), Math.min(1, 0.93 * source.temperature), 0.62);
-    });
+    this.renderer.updateFixtureLighting(this.journeyElapsed, this.save.settings.reducedFlicker);
 
     const visibleAmbient = Math.pow(1 - blackoutStrength, 1.7);
     const atmosphericCue = Math.pow(blackoutStrength, 2.1);
     this.app.scene.ambientLight = new pc.Color(
-      0.26 * visibleAmbient + 0.002 + 0.004 * atmosphericCue,
-      0.245 * visibleAmbient + 0.002 + 0.004 * atmosphericCue,
-      0.135 * visibleAmbient + 0.001 + 0.003 * atmosphericCue
+      LEVEL0_AMBIENT.r * visibleAmbient + 0.002 + 0.004 * atmosphericCue,
+      LEVEL0_AMBIENT.g * visibleAmbient + 0.002 + 0.004 * atmosphericCue,
+      LEVEL0_AMBIENT.b * visibleAmbient + 0.001 + 0.003 * atmosphericCue
     );
     const fogR = 0.15 * visibleAmbient + 0.018 * atmosphericCue;
     const fogG = 0.135 * visibleAmbient + 0.017 * atmosphericCue;
@@ -682,6 +652,7 @@ export class ProjectNoclipGame {
       `colliders      ${this.renderer.wallCount}`,
       `interactions   ${this.renderer.interactionCount}`,
       `light groups   ${this.renderer.lightGroupCount} / fixtures ${this.renderer.lightFixtureCount}`,
+      `fixture lights ${this.renderer.activeRealtimeFixtureLightCount}/${this.renderer.realtimeFixtureLightCount} active/real`,
       `light field    ${this.lightField.energy.toFixed(3)} / active ${this.lightField.activeGroups} / flicker ${this.lightField.flickerGroups} / nearby ${this.lightField.nearbyGroups}`,
       `draw calls     ${drawCalls}`,
       `position       ${position.x.toFixed(1)}, ${position.z.toFixed(1)}`,

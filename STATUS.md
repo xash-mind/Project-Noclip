@@ -1,107 +1,64 @@
 # Project Status
 
-**Last verified runtime:** 2026-08-13 (Asia/Kolkata)  
+**Last reconciled:** 2026-08-14 (Asia/Kolkata)  
 **Canonical production:** https://project-noclip.vercel.app  
-**Production release commit:** `e6f5c7246d2d574e62c2ef4ec2738d1b3822f4e1`  
-**Visible deployed version:** `v0.3.0-dev.5`  
-**Product change source:** PR #49 / merge commit `e6f5c7246d2d574e62c2ef4ec2738d1b3822f4e1`  
+**Accepted production baseline before PR #54:** `v0.3.0-dev.6` / `d3c32d146a1b05a9d64555d102749111abddc75d`  
+**Current bounded correction:** GitHub Issue #53 / PR #54 — fixture-owned fluorescent lighting  
 **Save schema:** `v2`  
 **New-journey generation:** `gen3-v1`  
-**Current architecture direction:** Generation 3 — GitHub Issue #31  
-**Current bounded player-facing objective:** GitHub Issue #50 — dev.6 lighting/Pillar/Arch correction  
+**Architecture direction:** Generation 3 — GitHub Issue #31  
 **World vocabulary/catalog:** `WORLD.md`
 
-## Health
+## Current release correction
 
-Canonical production serves `v0.3.0-dev.5`. The dev.5 Space Topology direction is accepted and must be preserved: Ordinary Level 0 reads as intentional spaces rather than an airy wall network, Pillar territory has continuous edge→core depth, Ordinary walls use the accepted chevron presentation, the separate protruding brown skirting geometry is gone, and World Lab can inspect Region depth.
+Dev.6 is the accepted topology/Pillar/Arch/flashlight baseline, but its fluorescent lighting architecture is rejected as the final lighting model. It used a fixed player-nearest realtime-light pool while a Cell-center sampled light field changed floor/ceiling emission, which made illumination ownership player-relative and could expose Cell-scale brightness patches.
 
-Dev.6 is implemented on PR #52 and is the current release candidate. It keeps the accepted dev.5 topology while correcting fixture-state lighting, Pillar finish/clearance, curved Arch openings, Blackout visibility and the existing flashlight item behavior. The current candidate passes strict TypeScript, deterministic/system tests and the 10,000-Cell benchmark. Hosted Visual Coherence is still unreliable at the long software-rendered fixture traversal, so release acceptance must distinguish product failures from harness/runtime timing failures rather than blocking indefinitely on SwiftShader wall-clock movement.
+PR #54 is the bounded dev.7 lighting correction. It does not change Generation 3 topology, Region placement, Pillar/Arch geometry, holes, props, saves, movement, inventory or timeline laws.
 
-The current corrective objective remains [Issue #50](https://github.com/xash-mind/Project-Noclip/issues/50), under Generation 3 #31 and Level 0 fidelity #37. Issue #46 is closed after its dev.4→dev.5 topology/Pillar-depth objective was delivered; unresolved Arch fidelity was explicitly carried into #50. Legacy Alpha-era Issue #11 is closed as superseded.
+The corrected runtime law is:
 
-## Accepted dev.5 direction that must be preserved
+- every rendered fluorescent fixture owns one real broad downward PlayCanvas spot for the lifetime of its streamed Cell;
+- there is no app-level fixed eight-light pool and no player-nearest light ownership loop;
+- fixture `off` means zero mesh emission and zero emitted light;
+- fixture `flicker` uses the same deterministic pulse for the visible panel and its real spot;
+- Reduced Flicker makes that pulse steady through the existing `lightFlickerValue` law;
+- Blackout cores still generate no local fluorescent groups;
+- the camera flashlight remains an independent spot light;
+- ambient Level 0 light is reduced so real fixture falloff carries more of the room illumination;
+- the existing sampled light field remains available for ambience/diagnostics but no longer owns visible surface illumination in the corrected runtime path.
 
-Generation 3 remains world-first:
+Fixture spot profile for dev.7: 10.5 m range, 48° inner cone, 68° outer cone, shadows disabled initially. No arbitrary realtime fixture cap is introduced.
 
-```text
-seed + generation version
-  -> kilometre-scale Region / Condition affinity Fields
-  -> deterministic world-space Space Topology / walkable substrate
-  -> architecture + continuous Region modifiers
-  -> Euclidean Geometry + Materials + Conditions
-  -> Carvers
-  -> Structures
-  -> Features / Items / Transitions
-  -> runtime mutations + save deltas
-  -> Cells as streaming/cache ownership only
-```
+## Verification gate
 
-Preserve:
+Before dev.7 is declared released, PR #54 must pass the repository TypeScript/system checks and a real Vercel preview must demonstrate that rendered fixture count and real fixture-light count track together without the old fixed pool. After merge, canonical production must independently be checked for visible `v0.3.0-dev.7`; merge state alone is not release proof.
+
+## Preserved accepted direction
 
 - `gen3-v1` and schema-v2 save compatibility;
-- Euclidean Geometry until explicitly scoped otherwise;
-- stable semantic identities where possible and independent seed domains;
-- the player-approved Space Topology architecture and its controlled small/one-entry spaces;
-- Pillar continuous Region depth and the 7.2 m lattice;
-- the accepted Ordinary chevron wall direction and removal of separate protruding brown skirting geometry;
-- Region-depth QA tooling;
-- Manila/Transition laws, renderer budgets and frozen Gen2 old-save isolation.
-
-Do **not** solve dev.6 by returning to wall-probability tuning, Cell-authored rooms, fixed room templates, globally reducing pillar density, or widening into unsupported content.
-
-## Current verification reality
-
-For accepted production main commit `e6f5c7246d2d574e62c2ef4ec2738d1b3822f4e1`:
-
-- main CI: **PASS**;
-- Renderer Regression: **PASS**;
-- Production Profile: **PASS**;
-- canonical Production Smoke desktop Chromium journey: **PASS**;
-- canonical Production Smoke landscape-touch journey: **PASS**;
-- dev.5 Visual Coherence: **FAIL at the dedicated close-range fidelity capture step**, which correctly motivated #50.
-
-For dev.6 PR #52:
-
-- strict TypeScript/system tests: **PASS**;
-- deterministic/system suite: **65/65 PASS** on the latest verified candidate;
-- 10,000-Cell benchmark: **PASS**, including 0 placement errors and 0 sealed spaces;
-- Pillar route/opening reservations: **PASS across multiple seeds**;
-- curved Arch representation and route clearance regressions: **PASS**;
-- bounded room light-field and fixture pulse synchronization regressions: **PASS**;
-- Visual Coherence currently reaches the final long fixture traversal before failing to attain an exact 0.98 path-progress threshold under headless SwiftShader; this is treated as a harness/performance limitation unless reproduced as an actual gameplay collision;
-- Renderer Regression on the prior candidate failed because this file still declared dev.4 as production. This STATUS reconciliation restores the correct dev.5 comparison baseline;
-- perceptual audio quality remains **unverified** unless actually listened to;
-- physical Android/iOS performance remains unmeasured.
-
-## Current ready work
-
-**Issue #50 — dev.6 fixture-state lighting, Pillar finish/clearance, true Arch openings and flashlight usability.**
-
-The candidate implements:
-
-1. coherent illumination from already-on visible fluorescent fixtures while retaining a bounded realtime-light budget;
-2. synchronized off/on/flicker panel emission and emitted illumination, including truly non-emissive off fixtures;
-3. Gen3 Pillars through the accepted Level 0 wallpaper grammar/scale;
-4. one shared route/opening/landing reservation envelope so route-bearing openings cannot be obstructed by Pillars;
-5. genuine curved Arch silhouettes while preserving continuous pale divider structure, lower panels where source-backed, headers, bay rhythm and complete ends;
-6. route-bearing Arch collision clearance;
-7. a functioning camera-mounted light for the existing flashlight item, preserving battery/charge behavior and Blackout use.
+- player-approved dev.5 Space Topology and intentional small/one-entry spaces;
+- continuous Pillar Region depth and accepted Arch correction from dev.6;
+- Euclidean Geometry unless explicitly scoped otherwise;
+- deterministic stable identities and world laws;
+- Cells as streaming/cache units only, never player-visible room or illumination units;
+- Manila/Transition laws, frozen Gen2 save isolation and existing flashlight behavior.
 
 ## Remaining known gaps
 
-- Hole Carver border→core density and terminal-fall behavior remain separate work and are not part of dev.6.
-- Perceptual fluorescent/HVAC/footstep/reverb quality remains unverified; no claim is made that audio fidelity is complete.
-- Physical Android/iOS FPS, thermals, battery use and native-browser ergonomics remain unmeasured.
-- Long-session memory growth remains unmeasured.
-- Automated long-path visual capture under SwiftShader remains slower and less reliable than the product implementation itself; do not confuse harness wall-clock timeouts with proven gameplay regressions.
+- Physical Android/iOS GPU cost for one real spot per rendered fixture still requires real-device playtesting.
+- Fixture shadows remain disabled, so wall-light leakage must be judged in the player test before enabling costly shadowing or another occlusion strategy.
+- Hole Carver density/terminal-fall work, content variants and all other non-lighting expansion remain outside this correction.
+- Perceptual audio quality remains unverified unless actually listened to.
 
-## Decisions needed from Sash
+## Player acceptance checklist
 
-**None for this release.** The user explicitly requested continuation and production deployment of dev.6, with testing kept proportional to implementation risk rather than waiting indefinitely for flaky hosted visual traversal.
-
-## Version policy
-
-Project Noclip remains opted into the manual-project version indicator policy. Canonical production is currently `v0.3.0-dev.5` at `e6f5c7246d2d574e62c2ef4ec2738d1b3822f4e1`. PR #52 carries `v0.3.0-dev.6`; after merge and verified canonical production deployment, STATUS should advance its production release commit to the merged dev.6 SHA.
+1. Visible active fixtures illuminate their surroundings before the player approaches.
+2. Walking through ordinary Level 0 produces smooth falloff rather than room-wide slot pops.
+3. Carpet/ceiling illumination does not reveal 14 m Cell squares.
+4. Dead fixtures are genuinely dark with no panel/light disagreement.
+5. Flickering panels and surrounding illumination pulse together; Reduced Flicker is steady.
+6. Blackout cores have no local fluorescent contribution and the flashlight remains useful independently.
+7. Watch specifically for wall bleed and sustained frame-time degradation while Cells load/unload.
 
 ## Important links
 
@@ -109,7 +66,6 @@ Project Noclip remains opted into the manual-project version indicator policy. C
 - Production: https://project-noclip.vercel.app
 - Generation 3 architecture: https://github.com/xash-mind/Project-Noclip/issues/31
 - Level 0 fidelity: https://github.com/xash-mind/Project-Noclip/issues/37
-- Dev.6 player-facing objective: https://github.com/xash-mind/Project-Noclip/issues/50
-- Dev.6 implementation: https://github.com/xash-mind/Project-Noclip/pull/52
-- Dev.5 Space Topology release: https://github.com/xash-mind/Project-Noclip/pull/49
-- World vocabulary/catalog: `WORLD.md`
+- Dev.6 baseline correction: https://github.com/xash-mind/Project-Noclip/issues/50
+- Fixture lighting correction: https://github.com/xash-mind/Project-Noclip/issues/53
+- Fixture lighting PR: https://github.com/xash-mind/Project-Noclip/pull/54

@@ -1,6 +1,7 @@
 import * as pc from 'playcanvas';
 import { CELL_SIZE } from '../world/types.js';
 import { installDev6FollowupPresentation } from './dev6FollowupPresentation.js';
+import { installFixtureCentricLightingCorrection } from './fixtureCentricLightingCorrection.js';
 
 const STATIC_WORLD_BATCH_GROUP_ID = 1601;
 const STATIC_WORLD_BATCH_GROUP_NAME = 'level0-static-world';
@@ -59,6 +60,7 @@ function getRunningApplication(): BatchApplication | undefined {
  */
 export function installStaticWorldBatching(): void {
   installDev6FollowupPresentation();
+  installFixtureCentricLightingCorrection();
   let currentApp: BatchApplication | undefined;
   let previousCellGuids = new Set<string>();
 
