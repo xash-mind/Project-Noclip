@@ -59,7 +59,7 @@ Project Noclip is a living, persistent browser-first recreation of the Backrooms
 
 ## World vocabulary and catalog
 
-`WORLD.md` is the canonical human-facing world bible.
+`WORLD.md` is the canonical human-facing world bible. `docs/TERMINOLOGY.md` is the code-facing glossary and `src/world/terminology.ts` is the typed short-address registry.
 
 Preferred everyday design vocabulary:
 
@@ -77,6 +77,18 @@ Preferred everyday design vocabulary:
 - **Item**
 - **Transition**
 
+**Architecture Pattern** is subordinate vocabulary beneath Region: a named reusable architectural grammar made from geometry pieces, Materials, and traversal/collision rules. It does not become a peer World Lab category and must not be confused with a standalone `Structure`.
+
+Current high-frequency Architecture Patterns:
+
+- `O-A1` — Default Wall (`ordinary-a1-default-wall`) owned by Ordinary Level 0.
+- `P-A1` — Pillar Pier (`pillar-a1-pier`) owned by Pillar Field.
+- `A-A1` — Arch Divider (`arch-a1-divider`) owned by Arch Rooms.
+
+Conceptual subpieces use dot addresses such as `A-A1.pier`, `A-A1.upper-mass`, `A-A1.curve`, `A-A1.lower-panel`, and `A-A1.termination`.
+
+High-frequency short addresses such as `L0`, `O`, `P`, `A`, `C-B1`, `CV-H1`, and the Architecture Pattern IDs exist only to make human conversation/issues/prompts precise. Stable runtime IDs remain authoritative for generation, persistence, and semantic identity.
+
 `Field`, `Cell`, seed domains, cache radius, and generation version are engine vocabulary. `District`, `ZoneId`, room archetype, spatial profile, component, and generic Prop are Gen2 compatibility vocabulary rather than peer design categories.
 
 Simplification rules:
@@ -86,11 +98,19 @@ Simplification rules:
 - use `Material` rather than `Material Family` in ordinary product language;
 - use `Condition` rather than separate fixture/object-state world categories;
 - `rare` is a Structure property, not a separate Structure type;
-- purely spatial impossibility belongs under Non-Euclidean Geometry, not a duplicate Anomaly category.
+- purely spatial impossibility belongs under Non-Euclidean Geometry, not a duplicate Anomaly category;
+- short addresses are aliases, never save/runtime identity;
+- do not assign permanent IDs to every render primitive; use an Architecture Pattern piece address only when humans need to refer to that conceptual part independently.
 
-Any accepted world-content or worldgen change that materially changes the catalog must update `WORLD.md` in the same pull request.
+Any accepted world-content or worldgen change that materially changes the catalog must update `WORLD.md` in the same pull request. Durable short-address or Architecture Pattern changes must also update `src/world/terminology.ts` and `docs/TERMINOLOGY.md`.
 
 Generation 3 migration direction lives in GitHub Issue #31. `WORLD.md` is the catalog; Issue #31 is the implementation roadmap.
+
+## Work communication
+
+Noclip work uses four bounded modes: `LOOK`, `AUDIT`, `CHANGE`, and `RELEASE`. A normal request names `TARGET`, optional `OBSERVATIONS`, `CHANGE` when applicable, `PRESERVE`, and `VERIFY`. Everything outside the named target is preserved by default. Acceptance uses `PASS`, `PASS WITH GAP`, `FAIL`, and `UNVERIFIED`.
+
+This keeps design conversation small while repository instructions carry the permanent engineering/release rules. See `AGENTS.md` and `docs/TERMINOLOGY.md`.
 
 ## Durable constraints
 
@@ -112,5 +132,8 @@ Generation 3 migration direction lives in GitHub Issue #31. `WORLD.md` is the ca
 - Production target: https://project-noclip.vercel.app
 - Generation 3 architecture issue: https://github.com/xash-mind/Project-Noclip/issues/31
 - World vocabulary/catalog: `WORLD.md`
+- Code-facing terminology: `docs/TERMINOLOGY.md`
+- Code navigation: `docs/CODE_MAP.md`
+- Typed short-address registry: `src/world/terminology.ts`
 - Shared operations: https://github.com/xash-mind/project-operations
 - Vision details: `docs/VISION.md`

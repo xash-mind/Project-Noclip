@@ -4,13 +4,14 @@ This is the canonical human-facing vocabulary and world-content catalog for Proj
 
 ## Maintenance contract
 
-When accepted work adds, removes, renames, reclassifies, or materially changes a Level, Region, Variant, Geometry, Material, Condition, Feature, Structure, Carver, Anomaly, Entity, Item, or Transition, update this file in the same pull request.
+When accepted work adds, removes, renames, reclassifies, or materially changes a Level, Region, Architecture Pattern, Variant, Geometry, Material, Condition, Feature, Structure, Carver, Anomaly, Entity, Item, or Transition, update this file in the same pull request.
 
 - Never present planned content as implemented.
 - A `Cell` is a streaming/cache unit, never a room or geographic boundary.
 - New journeys use `gen3-v1`; old saves without an explicit generation version remain frozen on `gen2`.
 - Generation 3 architecture is tracked by [Issue #31](https://github.com/xash-mind/Project-Noclip/issues/31). Level 0 fidelity corrections are tracked by [Issue #37](https://github.com/xash-mind/Project-Noclip/issues/37).
 - Raw reference provenance stays in `docs/references/level-0/REFERENCES.md`; ordinary implementation runs should use the promoted rules here.
+- Human short addresses and Architecture Pattern IDs are registered in `src/world/terminology.ts` and explained in `docs/TERMINOLOGY.md`; they never replace stable runtime/save IDs.
 
 ## Status vocabulary
 
@@ -31,6 +32,7 @@ When accepted work adds, removes, renames, reclassifies, or materially changes a
 |---|---|---|
 | **Level** | A major Backrooms world/destination. | Level 0 is the only playable Level. |
 | **Region** | Large coherent geography inside a Level. | Derived from continuous kilometre-scale affinity Fields, never hard streaming districts. |
+| **Architecture Pattern** | A named reusable architectural grammar owned by a Region. | Subordinate to Region; names recurring architecture such as the Default Wall, Pillar Pier, or Arch Divider without misclassifying it as a Structure or Geometry category. |
 | **Variant** | A named subtype of a Region. | Use only when a subtype deserves a stable identity. |
 | **Geometry** | The spatial law. | Only **Euclidean** and **Non-Euclidean** are canonical. |
 | **Material** | A semantic construction/finish. | Wallpaper, carpet, ceiling, and fixture finish are named content. |
@@ -43,7 +45,27 @@ When accepted work adds, removes, renames, reclassifies, or materially changes a
 | **Item** | A collectible/useful object. | Implemented registry with independent deterministic placement. |
 | **Transition** | A route or trigger toward another destination. | Exit architecture belongs to a Transition and optional local Structure, never Threshold geography. |
 
+Architecture Pattern is intentionally **not** a new peer World Lab category. It sits under Region so humans can address recurring Region architecture precisely. Conceptual pieces use dot notation when useful, for example `A-A1.lower-panel`.
+
 `Field`, `Cell`, seed domain, cache radius, and generation version are engine terms. `District`, `ZoneId`, room archetype, spatial profile, component, and generic Prop are `gen2` compatibility vocabulary only.
+
+## Conversation/address aliases
+
+Short addresses are compact human aliases for conversation, issues, and bounded prompts. Stable runtime IDs remain authoritative.
+
+| Short address | Stable meaning |
+|---|---|
+| `L0` | Level 0 / `level-0` |
+| `O` | Ordinary Level 0 / `ordinary-level-0` |
+| `P` | Pillar Field / `pillar-field` |
+| `A` | Arch Rooms / `arch-rooms` |
+| `O-A1` | Default Wall / `ordinary-a1-default-wall` |
+| `P-A1` | Pillar Pier / `pillar-a1-pier` |
+| `A-A1` | Arch Divider / `arch-a1-divider` |
+| `C-B1` | Blackout / `blackout` |
+| `CV-H1` | Floor-hole cluster / `floor-hole-cluster` |
+
+Use `docs/TERMINOLOGY.md` for the complete map. Never persist these aliases in place of stable semantic/world addresses.
 
 ## Geometry
 
@@ -59,6 +81,7 @@ WORLD SEED + GENERATION VERSION
   -> KILOMETRE-SCALE REGION/CONDITION AFFINITY FIELDS
   -> WORLD-SPACE WALKABLE / CONNECTIVITY SUBSTRATE
   -> LOCAL PARTITION SEGMENT SOLVER + CONTINUOUS REGION MODIFIERS
+  -> REGION ARCHITECTURE PATTERNS
   -> EUCLIDEAN GEOMETRY + MATERIALS + CONDITIONS
   -> CARVERS
   -> STRUCTURES
@@ -75,6 +98,7 @@ Durable laws:
 - Generation 3 reserves a deterministic world-space connectivity graph before accepting blocking partitions. Candidate wall/opening segments then make stable local decisions from world coordinates, continuous Fields, neighboring segment state, room-scale pressure and the reserved route network.
 - Small and medium rooms, narrow connectors and interrupted sightlines are the normal Ordinary texture. Larger rooms remain occasional and very large spaces require an explicit rare high-openness/high-room-scale conjunction.
 - Regions are continuous modifiers of the same Level 0 substrate. A Region affinity may change partition acceptance, pillar frequency, divider grammar, Materials and Conditions locally, but never swaps a whole Cell to a separate generator.
+- Architecture Pattern IDs name recurring Region grammar for humans; they do not create a separate generator or change stable save identity.
 - Streaming Cell edges do not place walls, reset architecture cadence, choose Region grammar, change Arch dimensions, or reset texture phase. Cells own streaming fragments only.
 - Ordinary-looking geometry is the default. Intentional instability, hallucination anchors, fixture failure/flicker and irregular Arch geometry each have explicit sparse budgets; rendering seams, clipping, broken UVs and light-source swaps are always defects.
 - Stable semantic IDs and world addresses include the generation version.
@@ -113,6 +137,29 @@ Registered Transition destinations are not playable Levels: Level 1, Level 2, Le
 | **Pillar Field** | `pillar-field` | **Implemented** | A continuous modifier of Ordinary Level 0. Common Pillar territory retains ordinary wall/room networks while partial/interrupted rows of rectangular wallpaper-clad piers become more frequent and medium open sections appear. Pier spacing remains 7.2 m and generated width is exactly 90% of the dev.3 distribution (`1.395–2.07 m`). Rare deep-field cores suppress most ordinary partitions and intensify the regular lattice, preserving very large near-pure fields as an exceptional deterministic extreme rather than the median experience. |
 | **Arch Rooms** | `arch-rooms` | **Implemented** | A continuous modifier of the common Level 0 network. Pale finishes and world-owned divider spans emerge with affinity while ordinary enclosure walls remain connected through the transition. Each divider chooses one stable bay scale before Cell clipping; normal repeated bays are symmetrical with continuous lower panels/headers and solid terminations. Explicit irregular/asymmetrical dividers use a bounded rare gate; malformed Cell-clipped openings and overlapping pieces are forbidden defects. |
 
+## Architecture Patterns
+
+| Pattern | Stable ID | Owner | Status | Meaning |
+|---|---|---|---|---|
+| **O-A1 — Default Wall** | `ordinary-a1-default-wall` | Ordinary Level 0 | **Implemented** | Normal solved Level 0 partition wall and its topology-owned openings. |
+| **P-A1 — Pillar Pier** | `pillar-a1-pier` | Pillar Field | **Implemented** | Canonical rectangular wallpaper-clad floor-to-ceiling pier on the persistent 7.2 m lattice. |
+| **A-A1 — Arch Divider** | `arch-a1-divider` | Arch Rooms | **Implemented** | Repeated Region divider grammar composed conceptually from piers, upper mass/curve, lower panel where applicable, and complete terminations. |
+
+Current conceptual piece addresses:
+
+```text
+O-A1.wall-span
+O-A1.solved-opening
+P-A1.pier
+A-A1.pier
+A-A1.upper-mass
+A-A1.curve
+A-A1.lower-panel
+A-A1.termination
+```
+
+A renderer may construct one conceptual piece from multiple mesh segments/vertices. Those are implementation primitives, not additional Architecture Patterns.
+
 ## Variants
 
 | Variant | Status | Notes |
@@ -147,7 +194,7 @@ The yellow photographic cast comes primarily from harsh fluorescent lighting. Do
 | Feature | Status | Rule |
 |---|---|---|
 | Sparse furniture | **Implemented** | Rare tables, chairs, or cabinets from an independent seed domain. Most space remains empty. |
-| Occasional ordinary pillar | **Implemented** | Rare rectangular wallpaper-clad floor-to-ceiling support; not an Arch or alcove motif. |
+| Occasional ordinary pillar | **Implemented** | Rare rectangular wallpaper-clad floor-to-ceiling support; not an Arch or alcove motif and not the Region-owned `P-A1` pattern. |
 
 ## Structures
 
@@ -211,9 +258,11 @@ Still images do not establish audio. Audio rules above come from verified author
 
 # 5. World Lab contract
 
-World Lab uses the same canonical registry as runtime diagnostics:
+World Lab uses the same canonical peer registry as runtime diagnostics:
 
 `Levels`, `Regions`, `Variants`, `Geometry`, `Materials`, `Conditions`, `Features`, `Structures`, `Carvers`, `Anomalies`, `Entities`, `Items`, `Transitions`.
+
+Architecture Patterns remain subordinate to Regions and therefore do not add another top-level World Lab category.
 
 - Regions and natural Blackouts are located, not spawned.
 - Fields and Conditions are sampled.
@@ -238,4 +287,4 @@ Forbidden World Lab geography labels: `Procedural districts`, `Room variation`, 
 - Generation 3 tests must not reward legacy archetype/component diversity.
 - Legacy files may be deleted only after an explicit save-retention decision permits it.
 
-Future implementation requests should use the everyday vocabulary above. Agents may translate it into Fields, Cells, and seed domains internally without asking the user to speak in engine terms.
+Future implementation requests should use the everyday vocabulary and short addresses above. Agents may translate them into Fields, Cells, seed domains, stable IDs, and implementation files internally without asking the user to speak in engine terms.
