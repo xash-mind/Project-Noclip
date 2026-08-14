@@ -24,22 +24,27 @@ test('every rendered fixture is wired to one Cell-owned downward shadowed spot',
   assert.ok(correctionSource.includes('const FIXTURE_SPOT_OUTER_CONE = 68'));
   assert.ok(correctionSource.includes('castShadows: true'));
   assert.ok(correctionSource.includes('const FIXTURE_SHADOW_RESOLUTION = 128'));
+  assert.ok(correctionSource.includes('shadowUpdateMode: pc.SHADOWUPDATE_NONE'));
   assert.ok(correctionSource.includes('pc.SHADOWUPDATE_THISFRAME'));
   assert.ok(correctionSource.includes('visual.root.addChild(light)'));
   assert.ok(correctionSource.includes('group.fixtures.forEach'));
   assert.ok(correctionSource.includes('light.setLocalEulerAngles(0, 0, 0)'));
   assert.equal(correctionSource.includes('light.setLocalEulerAngles(90, 0, 0)'), false);
+  assert.ok(correctionSource.includes('markFixtureShadowsDirtyNearCell'));
+  assert.equal(correctionSource.includes('markFixtureShadowsDirty(state)'), false);
   assert.ok(batchingSource.includes('installFixtureCentricLightingCorrection()'));
 });
 
-test('fixture mesh and emitted light share the same binary grey/lit flicker pulse', () => {
+test('fixture mesh and emitted light share the same binary grey/lit flicker pulse without rebuilding shadow lifetime', () => {
   assert.ok(correctionSource.includes('const pulse = fixturePulse(runtime.group, elapsedSeconds, reducedFlicker)'));
   assert.ok(correctionSource.includes('fixtureMaterial(state, runtime.descriptor, runtime.group, pulse)'));
   assert.ok(correctionSource.includes('runtime.group.intensity * pulse * FIXTURE_SPOT_INTENSITY_MULTIPLIER'));
   assert.ok(correctionSource.includes("if (group.state === 'off') return 0"));
   assert.ok(correctionSource.includes('lightFlickerValue(group, elapsedSeconds, reducedFlicker)'));
   assert.ok(correctionSource.includes('raw >= FIXTURE_FLICKER_LIT_THRESHOLD ? 1 : 0'));
-  assert.ok(correctionSource.includes('const lit = pulse > 0.5'));
+  assert.ok(correctionSource.includes("runtime.light.enabled = runtime.group.state !== 'off'"));
+  assert.equal(correctionSource.includes('runtime.light.enabled = lit'), false);
+  assert.ok(correctionSource.includes("runtime.group.state !== 'off' && pulse > 0.5 && runtime.shadowDirty"));
 });
 
 test('Blackout core generates no local fluorescent fixtures', () => {

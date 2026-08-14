@@ -1,6 +1,6 @@
 import * as pc from 'playcanvas';
 import { lightFlickerValue, type LightFieldSource } from '../world/lighting.js';
-import type { CellDescriptor, LightGroupSpec } from '../world/types.js';
+import { CELL_SIZE, type CellDescriptor, type LightGroupSpec } from '../world/types.js';
 import { WorldRenderer } from './WorldRenderer.js';
 import { makeMaterial, type CellVisual } from './support.js';
 
@@ -93,8 +93,28 @@ function lightColor(group: LightGroupSpec): pc.Color {
   );
 }
 
-function markFixtureShadowsDirty(state: RendererFixtureState): void {
-  for (const runtime of state.fixtures.values()) runtime.shadowDirty = true;
+function fixtureWorldPosition(runtime: FixtureRuntime): { x: number; z: number } {
+  const fixture = runtime.group.fixtures[runtime.fixtureIndex];
+  return {
+    x: runtime.descriptor.address.cellX * CELL_SIZE + fixture.x,
+    z: runtime.descriptor.address.cellZ * CELL_SIZE + fixture.z
+  };
+}
+
+function fixtureRangeTouchesCell(runtime: FixtureRuntime, descriptor: CellDescriptor): boolean {
+  const fixture = fixtureWorldPosition(runtime);
+  const centerX = descriptor.address.cellX * CELL_SIZE;
+  const centerZ = descriptor.address.cellZ * CELL_SIZE;
+  const half = CELL_SIZE / 2;
+  const dx = Math.max(0, Math.abs(fixture.x - centerX) - half);
+  const dz = Math.max(0, Math.abs(fixture.z - centerZ) - half);
+  return Math.hypot(dx, dz) <= FIXTURE_SPOT_RANGE;
+}
+
+function markFixtureShadowsDirtyNearCell(state: RendererFixtureState, descriptor: CellDescriptor): void {
+  for (const runtime of state.fixtures.values()) {
+    if (fixtureRangeTouchesCell(runtime, descriptor)) runtime.shadowDirty = true;
+  }
 }
 
 function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void {
@@ -114,13 +134,15 @@ function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void 
         innerConeAngle: FIXTURE_SPOT_INNER_CONE,
         outerConeAngle: FIXTURE_SPOT_OUTER_CONE,
         castShadows: true,
-        shadowResolution: FIXTURE_SHADOW_RESOLUTION
+        shadowResolution: FIXTURE_SHADOW_RESOLUTION,
+        shadowUpdateMode: pc.SHADOWUPDATE_NONE
       });
       visual.root.addChild(light);
       light.setLocalPosition(fixture.x, fixture.y - 0.12, fixture.z);
       // PlayCanvas spot cones are centered on local -Y. Identity rotation therefore points straight down.
       light.setLocalEulerAngles(0, 0, 0);
-      light.enabled = false;
+      // Flicker changes energy, not component lifetime, so cached static shadows survive grey/lit pulses.
+      light.enabled = group.state !== 'off';
 
       state.fixtures.set(id, {
         id,
@@ -134,18 +156,17 @@ function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void 
       });
     });
   }
-  // A newly streamed Cell can add occluding walls inside an already-loaded fixture's cone.
-  markFixtureShadowsDirty(state);
+  // Only nearby retained fixtures can have this streamed Cell inside their spot range.
+  markFixtureShadowsDirtyNearCell(state, descriptor);
 }
 
-function detachCellFixtures(renderer: WorldRenderer, cellId: string): void {
+function detachCellFixtures(renderer: WorldRenderer, cellId: string, descriptor?: CellDescriptor): void {
   const state = states.get(renderer);
   if (!state) return;
+  if (descriptor) markFixtureShadowsDirtyNearCell(state, descriptor);
   for (const [id, runtime] of state.fixtures) {
     if (runtime.cellId === cellId) state.fixtures.delete(id);
   }
-  // Removing streamed geometry can also invalidate a retained fixture's static shadow map.
-  markFixtureShadowsDirty(state);
 }
 
 function updateFixtureLighting(renderer: WorldRenderer, elapsedSeconds: number, reducedFlicker: boolean): void {
@@ -156,11 +177,10 @@ function updateFixtureLighting(renderer: WorldRenderer, elapsedSeconds: number, 
       runtime.mesh.render.material = fixtureMaterial(state, runtime.descriptor, runtime.group, pulse);
     }
     if (!runtime.light.light) continue;
-    const lit = pulse > 0.5;
     runtime.light.light.color = lightColor(runtime.group);
     runtime.light.light.intensity = runtime.group.intensity * pulse * FIXTURE_SPOT_INTENSITY_MULTIPLIER;
-    runtime.light.enabled = lit;
-    if (lit && runtime.shadowDirty) {
+    runtime.light.enabled = runtime.group.state !== 'off';
+    if (runtime.group.state !== 'off' && pulse > 0.5 && runtime.shadowDirty) {
       runtime.light.light.shadowUpdateMode = pc.SHADOWUPDATE_THISFRAME;
       runtime.shadowDirty = false;
     }
@@ -185,7 +205,7 @@ export const FIXTURE_LIGHTING_PROFILE = Object.freeze({
   outerConeAngle: FIXTURE_SPOT_OUTER_CONE,
   castShadows: true,
   shadowResolution: FIXTURE_SHADOW_RESOLUTION,
-  shadowUpdateMode: 'streaming-dirty-this-frame'
+  shadowUpdateMode: 'cell-local-this-frame'
 });
 
 declare module './WorldRenderer.js' {
@@ -200,7 +220,8 @@ declare module './WorldRenderer.js' {
  * Render law: every rendered fluorescent fixture owns its own real downward spot.
  * Cells own lifetime only. Player position never selects, acquires or releases a
  * light. The same deterministic binary fixture pulse drives mesh appearance and
- * light energy, while static shadow maps refresh only when streamed geometry changes.
+ * light energy. Cached static shadows survive flicker and refresh only when nearby
+ * streamed geometry can affect the fixture cone.
  */
 export function installFixtureCentricLightingCorrection(): void {
   if (installed) return;
@@ -208,14 +229,17 @@ export function installFixtureCentricLightingCorrection(): void {
 
   const originalLoadCell = WorldRenderer.prototype.loadCell;
   WorldRenderer.prototype.loadCell = function patchedFixtureLoad(this: WorldRenderer, descriptor: CellDescriptor): void {
+    const alreadyLoaded = this.loaded.has(descriptor.id);
     originalLoadCell.call(this, descriptor);
+    if (alreadyLoaded) return;
     const visual = this.loaded.get(descriptor.id);
     if (visual) attachFixtureLights(this, visual);
   };
 
   const originalUnloadCell = WorldRenderer.prototype.unloadCell;
   WorldRenderer.prototype.unloadCell = function patchedFixtureUnload(this: WorldRenderer, cellId: string): void {
-    detachCellFixtures(this, cellId);
+    const descriptor = this.loaded.get(cellId)?.descriptor;
+    detachCellFixtures(this, cellId, descriptor);
     originalUnloadCell.call(this, cellId);
   };
 
