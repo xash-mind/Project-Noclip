@@ -29,7 +29,12 @@ const CROUCH_SPEED = 1.8;
 const SAVE_INTERVAL = 1.5;
 const TOUCH_LOOK_MULTIPLIER = 2.25;
 const EMPTY_LIGHT_FIELD: LightFieldSample = { energy: 0, activeGroups: 0, flickerGroups: 0, nearbyGroups: 0, flickerPulse: 0, temperature: 0.94 };
-const LEVEL0_AMBIENT = { r: 0.085, g: 0.08, b: 0.045 } as const;
+const LEVEL0_AMBIENT = { r: 0.09, g: 0.084, b: 0.048 } as const;
+const BLACKOUT_AMBIENT_FLOOR = { r: 0.009, g: 0.0085, b: 0.005 } as const;
+const BASE_SCENE_EXPOSURE = 1;
+const MAX_DARK_ADAPTED_EXPOSURE = 1.8;
+const DARK_ADAPT_SECONDS = 8;
+const LIGHT_ADAPT_SECONDS = 0.85;
 const REGION_LABELS: Record<RegionId, string> = {
   'ordinary-level-0': 'Ordinary Level 0',
   'pillar-field': 'Pillar Field',
@@ -43,6 +48,23 @@ interface PlayCanvasRenderControl {
 
 function renderControl(app: pc.Application): PlayCanvasRenderControl {
   return app as unknown as PlayCanvasRenderControl;
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+export function targetEyeExposure(lightEnergy: number, blackoutStrength: number): number {
+  const darkness = Math.pow(1 - clamp01(lightEnergy), 1.6);
+  const blackoutWeight = Math.pow(clamp01(blackoutStrength), 1.35);
+  const gain = darkness * (0.42 + 0.38 * blackoutWeight);
+  return Math.min(MAX_DARK_ADAPTED_EXPOSURE, BASE_SCENE_EXPOSURE + gain);
+}
+
+export function stepEyeExposure(current: number, target: number, dt: number): number {
+  const timeConstant = target > current ? DARK_ADAPT_SECONDS : LIGHT_ADAPT_SECONDS;
+  const alpha = 1 - Math.exp(-Math.max(0, dt) / timeConstant);
+  return current + (target - current) * alpha;
 }
 
 export class ProjectNoclipGame {
@@ -78,6 +100,8 @@ export class ProjectNoclipGame {
   private lightField: LightFieldSample = { ...EMPTY_LIGHT_FIELD };
   private journeyElapsed = 0;
   private lightFieldAccumulator = 0;
+  private blackoutStrength = 0;
+  private eyeExposure = BASE_SCENE_EXPOSURE;
   private regionExtent?: RegionExtentEstimate;
   private regionExtentKey = '';
   private streamWarmupToken = 0;
@@ -128,9 +152,10 @@ export class ProjectNoclipGame {
 
   private async launch(save: SaveData): Promise<void> {
     this.save = save; this.yaw = save.position.yaw; this.pitch = save.position.pitch; this.tuning = { ...DEFAULT_TUNING };
-    this.lightField = { ...EMPTY_LIGHT_FIELD }; this.journeyElapsed = 0; this.lightFieldAccumulator = 0; this.regionExtent = undefined; this.regionExtentKey = '';
+    this.lightField = { ...EMPTY_LIGHT_FIELD }; this.journeyElapsed = 0; this.lightFieldAccumulator = 0; this.blackoutStrength = 0; this.eyeExposure = BASE_SCENE_EXPOSURE; this.regionExtent = undefined; this.regionExtentKey = '';
     this.markerMode = false; this.ui.setMarkerMode(false); this.setupEngine();
     if (!this.app || !this.camera) throw new Error('Engine did not initialize');
+    this.app.scene.exposure = BASE_SCENE_EXPOSURE;
     this.renderer = new WorldRenderer(this.app, save);
     this.camera.setPosition(save.position.x, save.position.y, save.position.z);
     this.currentCellX = worldToCell(save.position.x); this.currentCellZ = worldToCell(save.position.z);
@@ -145,7 +170,7 @@ export class ProjectNoclipGame {
     if (this.app) { for (const id of [...(this.renderer?.loaded.keys() ?? [])]) this.renderer?.unloadCell(id); return; }
     const app = new pc.Application(this.canvas);
     app.setCanvasResolution(pc.RESOLUTION_AUTO); app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
-    app.scene.ambientLight = new pc.Color(LEVEL0_AMBIENT.r, LEVEL0_AMBIENT.g, LEVEL0_AMBIENT.b); app.scene.skyboxIntensity = 0;
+    app.scene.ambientLight = new pc.Color(LEVEL0_AMBIENT.r, LEVEL0_AMBIENT.g, LEVEL0_AMBIENT.b); app.scene.exposure = BASE_SCENE_EXPOSURE; app.scene.skyboxIntensity = 0;
     app.scene.fog = pc.FOG_LINEAR; app.scene.fogColor = new pc.Color(0.15, 0.135, 0.075); app.scene.fogStart = LEVEL0_FOG_START; app.scene.fogEnd = LEVEL0_FOG_END;
     const camera = new pc.Entity('player-camera');
     camera.addComponent('camera', { clearColor: new pc.Color(0.15, 0.135, 0.075), nearClip: 0.05, farClip: 125, fov: 73 }); app.root.addChild(camera);
@@ -292,10 +317,20 @@ export class ProjectNoclipGame {
         this.refreshLightField();
       }
     }
+    const position = this.camera.getPosition();
+    this.renderer.updateFixtureLighting(this.journeyElapsed, this.save.settings.reducedFlicker, position.x, position.z);
+    this.updateEyeAdaptation(activeJourney ? dt : 0);
     this.updateSimulation(dt); this.updateInteraction(); this.renderer.updateDynamicItems(Date.now());
     this.saveAccumulator += dt; this.metricsAccumulator += dt;
     if (this.saveAccumulator >= SAVE_INTERVAL) { this.saveAccumulator = 0; void this.persist(); }
     if (this.metricsAccumulator >= 0.25) { this.metricsAccumulator = 0; this.updateUI(); }
+  }
+
+  private updateEyeAdaptation(dt: number): void {
+    if (!this.app || dt <= 0) return;
+    const target = targetEyeExposure(this.lightField.energy, this.blackoutStrength);
+    this.eyeExposure = stepEyeExposure(this.eyeExposure, target, dt);
+    this.app.scene.exposure = this.eyeExposure;
   }
 
   private updateMovement(dt: number): void {
@@ -466,16 +501,15 @@ export class ProjectNoclipGame {
     const sampled = this.save.generationVersion === 'gen3-v1' ? sampleGen3Environment(this.save.seed, position.x, position.z, worldDay, exposure, this.tuning) : undefined;
     const blackoutStrength = sampled?.blackoutStrength ?? this.currentCell.world.blackoutStrength;
     const blackoutEscapeCue = sampled?.blackoutEscapeCue ?? this.currentCell.world.blackoutEscapeCue;
+    this.blackoutStrength = blackoutStrength;
     this.ambience.setEnvironment(blackoutStrength, blackoutEscapeCue);
-
-    this.renderer.updateFixtureLighting(this.journeyElapsed, this.save.settings.reducedFlicker);
 
     const visibleAmbient = Math.pow(1 - blackoutStrength, 1.7);
     const atmosphericCue = Math.pow(blackoutStrength, 2.1);
     this.app.scene.ambientLight = new pc.Color(
-      LEVEL0_AMBIENT.r * visibleAmbient + 0.002 + 0.004 * atmosphericCue,
-      LEVEL0_AMBIENT.g * visibleAmbient + 0.002 + 0.004 * atmosphericCue,
-      LEVEL0_AMBIENT.b * visibleAmbient + 0.001 + 0.003 * atmosphericCue
+      LEVEL0_AMBIENT.r * visibleAmbient + BLACKOUT_AMBIENT_FLOOR.r,
+      LEVEL0_AMBIENT.g * visibleAmbient + BLACKOUT_AMBIENT_FLOOR.g,
+      LEVEL0_AMBIENT.b * visibleAmbient + BLACKOUT_AMBIENT_FLOOR.b
     );
     const fogR = 0.15 * visibleAmbient + 0.018 * atmosphericCue;
     const fogG = 0.135 * visibleAmbient + 0.017 * atmosphericCue;
@@ -654,6 +688,7 @@ export class ProjectNoclipGame {
       `light groups   ${this.renderer.lightGroupCount} / fixtures ${this.renderer.lightFixtureCount}`,
       `fixture lights ${this.renderer.activeRealtimeFixtureLightCount}/${this.renderer.realtimeFixtureLightCount} active/real`,
       `light field    ${this.lightField.energy.toFixed(3)} / active ${this.lightField.activeGroups} / flicker ${this.lightField.flickerGroups} / nearby ${this.lightField.nearbyGroups}`,
+      `eye exposure   ${this.eyeExposure.toFixed(3)} / blackout ${this.blackoutStrength.toFixed(3)}`,
       `draw calls     ${drawCalls}`,
       `position       ${position.x.toFixed(1)}, ${position.z.toFixed(1)}`,
       `inventory      ${this.save.inventory.length}/${INVENTORY_CAPACITY}`,
