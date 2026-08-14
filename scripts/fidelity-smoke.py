@@ -116,10 +116,6 @@ def key_event(driver: webdriver.Chrome, event_type: str) -> None:
     movement_key(driver, event_type, "w", "KeyW", 87)
 
 
-def sprint_event(driver: webdriver.Chrome, event_type: str) -> None:
-    movement_key(driver, event_type, "Shift", "ShiftLeft", 16)
-
-
 def qa_snapshot(driver: webdriver.Chrome) -> dict[str, Any] | None:
     return driver.execute_script("return window.__projectNoclipQa?.snapshot?.() ?? null;")
 
@@ -137,29 +133,57 @@ def drive_forward_to_progress(
     end: dict[str, float],
     target_progress: float,
     timeout: float,
-    captures: list[tuple[float, str]] | None = None,
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    pending = list(captures or [])
-    captured: list[dict[str, Any]] = []
+) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
     key_event(driver, "keyDown")
     try:
         while time.monotonic() < deadline:
             driver.execute_script("return performance.now();")
             snapshot = qa_snapshot(driver)
-            if snapshot:
-                progress = path_progress(snapshot, start, end)
-                while pending and progress >= pending[0][0]:
-                    threshold, file_name = pending.pop(0)
-                    capture_canvas(driver, ARTIFACT_DIR / file_name)
-                    captured.append({"file": file_name, "threshold": threshold, "progress": progress, "snapshot": snapshot})
-                if progress >= target_progress:
-                    return snapshot, captured
+            if snapshot and path_progress(snapshot, start, end) >= target_progress:
+                return snapshot
             time.sleep(0.08)
     finally:
         key_event(driver, "keyUp")
     final_snapshot = qa_snapshot(driver)
     raise AssertionError(f"Player did not reach path progress {target_progress:.2f}; final={final_snapshot}, start={start}, end={end}")
+
+
+def fixture_state_evidence(driver: webdriver.Chrome, state: str) -> dict[str, Any]:
+    evidence = driver.execute_script("return window.__projectNoclipQa?.placeAtFixtureState?.(arguments[0]) ?? null;", state)
+    if not evidence:
+        raise AssertionError(f"Could not resolve a deterministic {state} fixture")
+    time.sleep(0.7)
+    snapshot = qa_snapshot(driver)
+    if not snapshot:
+        raise AssertionError(f"Missing runtime snapshot for {state} fixture")
+    if snapshot.get("sourceIds"):
+        raise AssertionError(f"Player-relative fixture-light ownership reappeared for {state}: {snapshot}")
+    fixture_snapshot = driver.execute_script(
+        "return window.__projectNoclipQa?.fixtureStateSnapshot?.(arguments[0]) ?? null;",
+        evidence["groupId"],
+    )
+    if not fixture_snapshot:
+        raise AssertionError(f"Missing fixture state snapshot for {state}: {evidence}")
+    if fixture_snapshot.get("state") != state:
+        raise AssertionError(f"Fixture state changed during {state} capture: {fixture_snapshot}")
+    if fixture_snapshot.get("sourceOwned"):
+        raise AssertionError(f"Retired player-relative source ownership reappeared for {state}: {fixture_snapshot}")
+    pulse = float(fixture_snapshot.get("pulse", -1))
+    if state == "on" and abs(pulse - 1) > 1e-9:
+        raise AssertionError(f"On fixture pulse was not 1: {fixture_snapshot}")
+    if state == "off" and abs(pulse) > 1e-9:
+        raise AssertionError(f"Off fixture pulse was not 0: {fixture_snapshot}")
+    if state == "flicker" and not (0 <= pulse <= 1):
+        raise AssertionError(f"Flicker pulse escaped [0,1]: {fixture_snapshot}")
+    file_name = f"fixture-{state}.png"
+    capture_canvas(driver, ARTIFACT_DIR / file_name)
+    return {
+        "file": file_name,
+        "placement": evidence,
+        "runtime": snapshot,
+        "fixture": fixture_snapshot,
+    }
 
 
 def main() -> None:
@@ -185,50 +209,25 @@ def main() -> None:
         # The semantic gate below requires the player to clear the divider by 0.7 m.
         # 0.71 progress reaches that margin; the old 0.80 wait redundantly demanded
         # extra corridor travel after the route had already been proven traversable.
-        after, _ = drive_forward_to_progress(driver, route["start"], route["end"], ARCH_ROUTE_CROSSING_PROGRESS, 24.0)
+        after = drive_forward_to_progress(driver, route["start"], route["end"], ARCH_ROUTE_CROSSING_PROGRESS, 24.0)
         capture_canvas(driver, ARTIFACT_DIR / "arch-route-after.png")
         fixed, axis = float(route["fixed"]), "z" if route["orientation"] == "z" else "x"
         if not before or not (float(before[axis]) < fixed - 0.7 and float(after[axis]) > fixed + 0.7):
             raise AssertionError(f"Player did not traverse the selected Arch route bay: {before} -> {after}, route={route}")
         report["arch"] = {"message": arch_message, "route": route, "before": before, "after": after, "pointerLock": True}
 
+        # Fixture-specific visual evidence belongs here; the primary CI journey owns
+        # long movement/collision traversal. Sample deterministic fixture states directly
+        # so this suite verifies presentation and ownership without duplicating navigation.
         qa_locate(driver, "ordinary-level-0", "nearest")
-        # This is a visual fixture approach/pass/retreat gate, not the long-traversal benchmark.
-        # Radius 2 keeps the validated ~30 m path inside the streamed collider set while still
-        # avoiding the heavier full World Lab inspection radius under SwiftShader.
-        radius_changed = driver.execute_script("""
-          const element=document.querySelector('[data-lab="radius"]');
-          if(!element)return false; element.value='2';
-          element.dispatchEvent(new Event('change',{bubbles:true})); return true;
-        """)
-        if not radius_changed: raise AssertionError("Could not set the visual-capture stream radius")
-        time.sleep(0.8)
-        approach = driver.execute_script("return window.__projectNoclipQa?.placeAtFixtureApproach?.() ?? null;")
-        if not approach: raise AssertionError("Could not resolve a freshly streamed clear fixture approach/pass/retreat path")
-        time.sleep(0.6)
-        if not resume_input(driver): raise AssertionError("Pointer lock unavailable for required fixture traversal")
-        frames = [{"file": "fixture-approach-00.png", "threshold": 0.0, "progress": 0.0, "snapshot": qa_snapshot(driver)}]
-        capture_canvas(driver, ARTIFACT_DIR / "fixture-approach-00.png")
-        capture_targets = [(index * 0.12, f"fixture-approach-{index:02d}.png") for index in range(1, 9)]
-        sprint_event(driver, "keyDown")
-        try:
-            final_lighting, captured = drive_forward_to_progress(driver, approach["start"], approach["end"], 0.98, 90.0, capture_targets)
-        finally:
-            sprint_event(driver, "keyUp")
-        frames.extend(captured)
-        if len(frames) != 9: raise AssertionError(f"Fixture spatial capture missed milestones: {frames}")
-        for frame in frames:
-            snapshot = frame.get("snapshot") or {}
-            legacy_sources = snapshot.get("sourceIds", [])
-            if legacy_sources:
-                raise AssertionError(f"Player-relative fixture-light ownership reappeared during traversal: {frame}")
+        fixture_states = {
+            state: fixture_state_evidence(driver, state)
+            for state in ("on", "flicker", "off")
+        }
         report["lighting"] = {
-            "approach": approach,
-            "pointerLock": True,
             "ownershipModel": "fixture-owned",
             "legacySourceIdsAbsent": True,
-            "frames": frames,
-            "final": final_lighting,
+            "states": fixture_states,
         }
 
         report["browserErrors"].extend(severe_errors(driver))
