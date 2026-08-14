@@ -1,13 +1,21 @@
 import * as pc from 'playcanvas';
 import { lightFlickerValue } from '../world/lighting.js';
-import type { CellDescriptor, LightGroupSpec } from '../world/types.js';
+import { CELL_SIZE, type CellDescriptor, type LightGroupSpec } from '../world/types.js';
 import { WorldRenderer } from './WorldRenderer.js';
 import { makeMaterial, type CellVisual } from './support.js';
 
-const FIXTURE_SPOT_RANGE = 10.5;
-const FIXTURE_SPOT_INNER_CONE = 48;
-const FIXTURE_SPOT_OUTER_CONE = 68;
-const FIXTURE_SPOT_INTENSITY_MULTIPLIER = 1.55;
+// Fluorescent panels are broad ceiling emitters rather than theatrical spotlights.
+// The cone remains a downward hemisphere approximation while walls provide real occlusion.
+const FIXTURE_SPOT_RANGE = 12.5;
+const FIXTURE_SPOT_INNER_CONE = 64;
+const FIXTURE_SPOT_OUTER_CONE = 84;
+const FIXTURE_SPOT_INTENSITY_MULTIPLIER = 2.9;
+const FIXTURE_PANEL_HALF_HEIGHT = 0.04;
+const FIXTURE_EMITTER_CLEARANCE = 0.03;
+const FIXTURE_SHADOW_RESOLUTION = 512;
+const FIXTURE_SHADOW_BIAS = 0.08;
+const FIXTURE_SHADOW_NORMAL_OFFSET = 0.03;
+const FIXTURE_FLICKER_LIT_THRESHOLD = 0.5;
 
 interface FixtureRuntime {
   id: string;
@@ -17,6 +25,7 @@ interface FixtureRuntime {
   light: pc.Entity;
   mesh?: pc.Entity;
   descriptor: CellDescriptor;
+  shadowDirty: boolean;
 }
 
 interface RendererFixtureState {
@@ -43,10 +52,11 @@ function entityByName(root: pc.Entity, name: string): pc.Entity | undefined {
   return childrenOf(root).find((child) => child.name === name);
 }
 
-function quantizedPulse(group: LightGroupSpec, elapsedSeconds: number, reducedFlicker: boolean): number {
-  const raw = lightFlickerValue(group, elapsedSeconds, reducedFlicker);
+function fixturePulse(group: LightGroupSpec, elapsedSeconds: number, reducedFlicker: boolean): number {
   if (group.state === 'off') return 0;
-  return Math.max(0, Math.min(1, Math.round(raw * 16) / 16));
+  const raw = lightFlickerValue(group, elapsedSeconds, reducedFlicker);
+  if (group.state === 'flicker' && !reducedFlicker) return raw >= FIXTURE_FLICKER_LIT_THRESHOLD ? 1 : 0;
+  return 1;
 }
 
 function fixtureMaterial(
@@ -62,12 +72,7 @@ function fixtureMaterial(
 
   const activeDiffuse: [number, number, number] = arch ? [0.99, 0.985, 0.83] : [0.98, 0.955, 0.76];
   const offDiffuse: [number, number, number] = [0.31, 0.31, 0.27];
-  const diffuse: [number, number, number] = [
-    offDiffuse[0] + (activeDiffuse[0] - offDiffuse[0]) * pulse,
-    offDiffuse[1] + (activeDiffuse[1] - offDiffuse[1]) * pulse,
-    offDiffuse[2] + (activeDiffuse[2] - offDiffuse[2]) * pulse
-  ];
-
+  const diffuse: [number, number, number] = pulse > 0.5 ? activeDiffuse : offDiffuse;
   const created = pulse <= 0.001
     ? makeMaterial(diffuse)
     : makeMaterial(
@@ -75,7 +80,7 @@ function fixtureMaterial(
       undefined,
       [1, 1],
       arch ? [1, 0.985, 0.78] : [1, 0.95, 0.68],
-      (arch ? 2.18 : 2.28) * pulse
+      arch ? 2.18 : 2.28
     );
   state.materials.set(key, created);
   return created;
@@ -87,6 +92,32 @@ function lightColor(group: LightGroupSpec): pc.Color {
     Math.min(1, 0.93 * group.temperature),
     0.62
   );
+}
+
+function fixtureWorldPosition(runtime: FixtureRuntime): { x: number; z: number } | undefined {
+  const fixture = runtime.group.fixtures[runtime.fixtureIndex];
+  if (!fixture) return undefined;
+  return {
+    x: runtime.descriptor.address.cellX * CELL_SIZE + fixture.x,
+    z: runtime.descriptor.address.cellZ * CELL_SIZE + fixture.z
+  };
+}
+
+function fixtureRangeTouchesCell(runtime: FixtureRuntime, descriptor: CellDescriptor): boolean {
+  const fixture = fixtureWorldPosition(runtime);
+  if (!fixture) return false;
+  const centerX = descriptor.address.cellX * CELL_SIZE;
+  const centerZ = descriptor.address.cellZ * CELL_SIZE;
+  const half = CELL_SIZE / 2;
+  const dx = Math.max(0, Math.abs(fixture.x - centerX) - half);
+  const dz = Math.max(0, Math.abs(fixture.z - centerZ) - half);
+  return Math.hypot(dx, dz) <= FIXTURE_SPOT_RANGE;
+}
+
+function markFixtureShadowsDirtyNearCell(state: RendererFixtureState, descriptor: CellDescriptor): void {
+  for (const runtime of state.fixtures.values()) {
+    if (fixtureRangeTouchesCell(runtime, descriptor)) runtime.shadowDirty = true;
+  }
 }
 
 function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void {
@@ -105,12 +136,24 @@ function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void 
         intensity: 0,
         innerConeAngle: FIXTURE_SPOT_INNER_CONE,
         outerConeAngle: FIXTURE_SPOT_OUTER_CONE,
-        castShadows: false
+        castShadows: true,
+        shadowResolution: FIXTURE_SHADOW_RESOLUTION,
+        shadowBias: FIXTURE_SHADOW_BIAS,
+        normalOffsetBias: FIXTURE_SHADOW_NORMAL_OFFSET,
+        shadowUpdateMode: pc.SHADOWUPDATE_NONE
       });
       visual.root.addChild(light);
-      light.setLocalPosition(fixture.x, fixture.y - 0.12, fixture.z);
-      light.setLocalEulerAngles(90, 0, 0);
-      light.enabled = false;
+      // Generated fixture.y is the panel centre. The visible panel is 0.08 m tall,
+      // so place the emitter just below its lower face rather than inside the mesh.
+      light.setLocalPosition(
+        fixture.x,
+        fixture.y - FIXTURE_PANEL_HALF_HEIGHT - FIXTURE_EMITTER_CLEARANCE,
+        fixture.z
+      );
+      // PlayCanvas spot cones are centered on local -Y. Identity rotation points straight down.
+      light.setLocalEulerAngles(0, 0, 0);
+      // Flicker changes energy, not component lifetime, so cached shadows survive grey/lit pulses.
+      light.enabled = group.state !== 'off';
 
       state.fixtures.set(id, {
         id,
@@ -119,15 +162,19 @@ function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void 
         fixtureIndex,
         light,
         mesh: entityByName(visual.root, `${group.id}:fixture:${fixtureIndex}`),
-        descriptor
+        descriptor,
+        shadowDirty: true
       });
     });
   }
+  // Only nearby retained fixtures can have this streamed Cell inside their spot range.
+  markFixtureShadowsDirtyNearCell(state, descriptor);
 }
 
-function detachCellFixtures(renderer: WorldRenderer, cellId: string): void {
+function detachCellFixtures(renderer: WorldRenderer, cellId: string, descriptor?: CellDescriptor): void {
   const state = states.get(renderer);
   if (!state) return;
+  if (descriptor) markFixtureShadowsDirtyNearCell(state, descriptor);
   for (const [id, runtime] of state.fixtures) {
     if (runtime.cellId === cellId) state.fixtures.delete(id);
   }
@@ -136,26 +183,36 @@ function detachCellFixtures(renderer: WorldRenderer, cellId: string): void {
 function updateFixtureLighting(renderer: WorldRenderer, elapsedSeconds: number, reducedFlicker: boolean): void {
   const state = stateFor(renderer);
   for (const runtime of state.fixtures.values()) {
-    const pulse = quantizedPulse(runtime.group, elapsedSeconds, reducedFlicker);
+    const pulse = fixturePulse(runtime.group, elapsedSeconds, reducedFlicker);
     if (runtime.mesh?.render) {
       runtime.mesh.render.material = fixtureMaterial(state, runtime.descriptor, runtime.group, pulse);
     }
     if (!runtime.light.light) continue;
     runtime.light.light.color = lightColor(runtime.group);
     runtime.light.light.intensity = runtime.group.intensity * pulse * FIXTURE_SPOT_INTENSITY_MULTIPLIER;
-    runtime.light.enabled = pulse > 0.001;
+    runtime.light.enabled = runtime.group.state !== 'off';
+    if (runtime.group.state !== 'off' && pulse > 0.5 && runtime.shadowDirty) {
+      runtime.light.light.shadowUpdateMode = pc.SHADOWUPDATE_THISFRAME;
+      runtime.shadowDirty = false;
+    }
   }
 }
 
 export function fixtureLightIntensity(group: LightGroupSpec, elapsedSeconds: number, reducedFlicker: boolean): number {
-  return group.intensity * quantizedPulse(group, elapsedSeconds, reducedFlicker) * FIXTURE_SPOT_INTENSITY_MULTIPLIER;
+  return group.intensity * fixturePulse(group, elapsedSeconds, reducedFlicker) * FIXTURE_SPOT_INTENSITY_MULTIPLIER;
 }
 
 export const FIXTURE_LIGHTING_PROFILE = Object.freeze({
   range: FIXTURE_SPOT_RANGE,
   innerConeAngle: FIXTURE_SPOT_INNER_CONE,
   outerConeAngle: FIXTURE_SPOT_OUTER_CONE,
-  castShadows: false
+  intensityMultiplier: FIXTURE_SPOT_INTENSITY_MULTIPLIER,
+  emitterDrop: FIXTURE_PANEL_HALF_HEIGHT + FIXTURE_EMITTER_CLEARANCE,
+  castShadows: true,
+  shadowResolution: FIXTURE_SHADOW_RESOLUTION,
+  shadowBias: FIXTURE_SHADOW_BIAS,
+  normalOffsetBias: FIXTURE_SHADOW_NORMAL_OFFSET,
+  shadowUpdateMode: 'cell-local-this-frame'
 });
 
 declare module './WorldRenderer.js' {
@@ -167,9 +224,10 @@ declare module './WorldRenderer.js' {
 }
 
 /**
- * Render law: every rendered fluorescent fixture owns its own real downward spot.
- * Cells own lifetime only. Player position never selects, acquires or releases a
- * light. The same deterministic fixture pulse drives mesh emission and light energy.
+ * Every rendered fluorescent fixture owns one real broad downward spot. Cells own
+ * lifetime only; player position never allocates real lights. The same binary
+ * deterministic pulse drives panel appearance and emitted energy, while cached
+ * shadows refresh only when streamed geometry within the fixture range changes.
  */
 export function installFixtureLighting(): void {
   if (installed) return;
@@ -177,14 +235,17 @@ export function installFixtureLighting(): void {
 
   const originalLoadCell = WorldRenderer.prototype.loadCell;
   WorldRenderer.prototype.loadCell = function patchedFixtureLoad(this: WorldRenderer, descriptor: CellDescriptor): void {
+    const alreadyLoaded = this.loaded.has(descriptor.id);
     originalLoadCell.call(this, descriptor);
+    if (alreadyLoaded) return;
     const visual = this.loaded.get(descriptor.id);
     if (visual) attachFixtureLights(this, visual);
   };
 
   const originalUnloadCell = WorldRenderer.prototype.unloadCell;
   WorldRenderer.prototype.unloadCell = function patchedFixtureUnload(this: WorldRenderer, cellId: string): void {
-    detachCellFixtures(this, cellId);
+    const descriptor = this.loaded.get(cellId)?.descriptor;
+    detachCellFixtures(this, cellId, descriptor);
     originalUnloadCell.call(this, cellId);
   };
 

@@ -160,14 +160,15 @@ function pillarFaceWall(
   prop: PropSpec,
   face: 'north' | 'south' | 'west' | 'east'
 ): WallSpec {
-  const thickness = 0.035;
+  const thickness = 0.04;
+  const cornerOverlap = thickness;
   if (face === 'north' || face === 'south') {
     return {
       id: `${prop.id}:wallpaper:${face}`,
       cx: prop.position.x,
       cy: prop.position.y,
       cz: prop.position.z + (face === 'north' ? -prop.scale.z / 2 : prop.scale.z / 2),
-      sx: prop.scale.x,
+      sx: prop.scale.x + cornerOverlap * 2,
       sy: prop.scale.y,
       sz: thickness,
       orientation: 'z',
@@ -183,7 +184,7 @@ function pillarFaceWall(
     cz: prop.position.z,
     sx: thickness,
     sy: prop.scale.y,
-    sz: prop.scale.z,
+    sz: prop.scale.z + cornerOverlap * 2,
     orientation: 'x',
     drawable: true,
     materialId: 'level-0-wallpaper',
@@ -199,30 +200,26 @@ function replacePillarPresentation(
 ): void {
   const container = entityByName(root, prop.id);
   if (!container) return;
-  entityByName(container, `${prop.id}:body`)?.destroy();
 
-  const thickness = 0.035;
+  const northWall = pillarFaceWall(prop, 'north');
+  const core = entityByName(container, `${prop.id}:body`);
+  setMaterial(core, wallMaterial(cache, descriptor, northWall));
+
   const faces = ['north', 'south', 'west', 'east'] as const;
   for (const face of faces) {
-    const wall = pillarFaceWall(prop, face);
+    const wall = face === 'north' ? northWall : pillarFaceWall(prop, face);
     const value = wallMaterial(cache, descriptor, wall);
-    if (face === 'north' || face === 'south') {
-      addBox(
-        `${prop.id}:wallpaper:${face}`,
-        container,
-        [0, 0, face === 'north' ? -prop.scale.z / 2 : prop.scale.z / 2],
-        [prop.scale.x, prop.scale.y, thickness],
-        value
-      );
-    } else {
-      addBox(
-        `${prop.id}:wallpaper:${face}`,
-        container,
-        [face === 'west' ? -prop.scale.x / 2 : prop.scale.x / 2, 0, 0],
-        [thickness, prop.scale.y, prop.scale.z],
-        value
-      );
-    }
+    addBox(
+      `${prop.id}:wallpaper:${face}`,
+      container,
+      [
+        face === 'west' ? -prop.scale.x / 2 : face === 'east' ? prop.scale.x / 2 : 0,
+        0,
+        face === 'north' ? -prop.scale.z / 2 : face === 'south' ? prop.scale.z / 2 : 0
+      ],
+      [wall.sx, wall.sy, wall.sz],
+      value
+    );
   }
 }
 
