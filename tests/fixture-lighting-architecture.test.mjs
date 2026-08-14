@@ -17,12 +17,13 @@ test('runtime owns no fixed player-nearest fluorescent light pool', () => {
   assert.ok(appSource.includes('renderer.updateFixtureLighting('));
 });
 
-test('every rendered fixture owns one broad downward shadowed spot', () => {
-  assert.ok(fixtureLightingSource.includes("type: 'spot'"));
-  assert.ok(fixtureLightingSource.includes('const FIXTURE_SPOT_RANGE = 12.5'));
-  assert.ok(fixtureLightingSource.includes('const FIXTURE_SPOT_INNER_CONE = 78'));
-  assert.ok(fixtureLightingSource.includes('const FIXTURE_SPOT_OUTER_CONE = 84'));
-  assert.ok(fixtureLightingSource.includes('const FIXTURE_SPOT_INTENSITY_MULTIPLIER = 2.9'));
+test('every rendered fixture owns one shadowed omni emitter', () => {
+  assert.ok(fixtureLightingSource.includes("type: 'omni'"));
+  assert.equal(fixtureLightingSource.includes("type: 'spot'"), false);
+  assert.ok(fixtureLightingSource.includes('const FIXTURE_LIGHT_RANGE = 12.5'));
+  assert.ok(fixtureLightingSource.includes('const FIXTURE_LIGHT_INTENSITY_MULTIPLIER = 2.9'));
+  assert.equal(fixtureLightingSource.includes('innerConeAngle:'), false);
+  assert.equal(fixtureLightingSource.includes('outerConeAngle:'), false);
   assert.ok(fixtureLightingSource.includes('castShadows: true'));
   assert.ok(fixtureLightingSource.includes('const FIXTURE_SHADOW_RESOLUTION = 512'));
   assert.ok(fixtureLightingSource.includes('const FIXTURE_SHADOW_BIAS = 0.08'));
@@ -31,8 +32,7 @@ test('every rendered fixture owns one broad downward shadowed spot', () => {
   assert.ok(fixtureLightingSource.includes('pc.SHADOWUPDATE_THISFRAME'));
   assert.ok(fixtureLightingSource.includes('visual.root.addChild(light)'));
   assert.ok(fixtureLightingSource.includes('group.fixtures.forEach'));
-  assert.ok(fixtureLightingSource.includes('light.setLocalEulerAngles(0, 0, 0)'));
-  assert.equal(fixtureLightingSource.includes('light.setLocalEulerAngles(90, 0, 0)'), false);
+  assert.equal(fixtureLightingSource.includes('light.setLocalEulerAngles('), false);
   assert.ok(fixtureLightingSource.includes('FIXTURE_PANEL_HALF_HEIGHT'));
   assert.ok(fixtureLightingSource.includes('FIXTURE_EMITTER_CLEARANCE'));
   assert.ok(fixtureLightingSource.includes('markFixtureShadowsDirtyNearCell'));
@@ -43,7 +43,7 @@ test('every rendered fixture owns one broad downward shadowed spot', () => {
 test('fixture mesh and emitted light share one binary grey/lit pulse without rebuilding light lifetime', () => {
   assert.ok(fixtureLightingSource.includes('const pulse = fixturePulse(runtime.group, elapsedSeconds, reducedFlicker)'));
   assert.ok(fixtureLightingSource.includes('fixtureMaterial(state, runtime.descriptor, runtime.group, pulse)'));
-  assert.ok(fixtureLightingSource.includes('runtime.group.intensity * pulse * FIXTURE_SPOT_INTENSITY_MULTIPLIER'));
+  assert.ok(fixtureLightingSource.includes('runtime.group.intensity * pulse * FIXTURE_LIGHT_INTENSITY_MULTIPLIER'));
   assert.ok(fixtureLightingSource.includes("if (group.state === 'off') return 0"));
   assert.ok(fixtureLightingSource.includes('lightFlickerValue(group, elapsedSeconds, reducedFlicker)'));
   assert.ok(fixtureLightingSource.includes('raw >= FIXTURE_FLICKER_LIT_THRESHOLD ? 1 : 0'));
