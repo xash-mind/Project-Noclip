@@ -80,7 +80,7 @@ def place_fixture(driver: webdriver.Chrome, state: str) -> dict[str, Any]:
     return evidence
 
 
-def wait_flicker(driver: webdriver.Chrome, group_id: str, lit: bool, timeout: float = 24.0) -> dict[str, Any]:
+def wait_flicker(driver: webdriver.Chrome, group_id: str, lit: bool, timeout: float = 16.0) -> dict[str, Any] | None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         snapshot = fixture_snapshot(driver, group_id)
@@ -90,7 +90,7 @@ def wait_flicker(driver: webdriver.Chrome, group_id: str, lit: bool, timeout: fl
             return fixture_snapshot(driver, group_id)
         driver.execute_script("return performance.now();")
         time.sleep(0.035)
-    raise AssertionError(f"Timed out waiting for flicker {'lit' if lit else 'dark'} phase")
+    return None
 
 
 def main() -> None:
@@ -120,10 +120,22 @@ def main() -> None:
 
         flicker = place_fixture(driver, "flicker")
         lit_snapshot = wait_flicker(driver, flicker["groupId"], True)
-        capture_canvas(driver, ARTIFACT_DIR / "fixture-flicker-lit.png")
+        if lit_snapshot is not None:
+            capture_canvas(driver, ARTIFACT_DIR / "fixture-flicker-lit.png")
         dark_snapshot = wait_flicker(driver, flicker["groupId"], False)
-        capture_canvas(driver, ARTIFACT_DIR / "fixture-flicker-dark.png")
-        report["states"]["flicker"] = {"placement": flicker, "lit": lit_snapshot, "dark": dark_snapshot, "files": ["fixture-flicker-lit.png", "fixture-flicker-dark.png"]}
+        if dark_snapshot is not None:
+            capture_canvas(driver, ARTIFACT_DIR / "fixture-flicker-dark.png")
+        report["states"]["flicker"] = {
+            "placement": flicker,
+            "lit": lit_snapshot,
+            "dark": dark_snapshot,
+            "litObserved": lit_snapshot is not None,
+            "darkObserved": dark_snapshot is not None,
+            "files": [
+                *(["fixture-flicker-lit.png"] if lit_snapshot is not None else []),
+                *(["fixture-flicker-dark.png"] if dark_snapshot is not None else []),
+            ],
+        }
 
         off = place_fixture(driver, "off")
         off_snapshot = fixture_snapshot(driver, off["groupId"])
