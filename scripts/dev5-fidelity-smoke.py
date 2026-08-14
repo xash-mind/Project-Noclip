@@ -205,7 +205,7 @@ def main() -> None:
         if not resume_input(driver): raise AssertionError("Pointer lock unavailable for required fixture traversal")
         frames = [{"file": "fixture-approach-00.png", "threshold": 0.0, "progress": 0.0, "snapshot": qa_snapshot(driver)}]
         capture_canvas(driver, ARTIFACT_DIR / "fixture-approach-00.png")
-        capture_targets = [(index / 8, f"fixture-approach-{index:02d}.png") for index in range(1, 9)]
+        capture_targets = [(index * 0.12, f"fixture-approach-{index:02d}.png") for index in range(1, 9)]
         sprint_event(driver, "keyDown")
         try:
             final_lighting, captured = drive_forward_to_progress(driver, approach["start"], approach["end"], 0.98, 90.0, capture_targets)
