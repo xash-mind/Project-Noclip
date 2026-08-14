@@ -2,6 +2,8 @@
 
 **Last reconciled:** 2026-08-14 (Asia/Kolkata)  
 **Canonical production:** https://project-noclip.vercel.app  
+**Production release commit:** `d3c32d146a1b05a9d64555d102749111abddc75d`  
+**Visible deployed version:** `v0.3.0-dev.6`  
 **Accepted production baseline before PR #54:** `v0.3.0-dev.6` / `d3c32d146a1b05a9d64555d102749111abddc75d`  
 **Current bounded correction:** GitHub Issue #53 / PR #54 — fixture-owned fluorescent lighting  
 **Save schema:** `v2`  
