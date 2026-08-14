@@ -7,14 +7,14 @@ import { makeMaterial, type CellVisual } from './support.js';
 // Fluorescent panels are broad ceiling emitters rather than theatrical spotlights.
 // The cone remains a downward hemisphere approximation while walls provide real occlusion.
 const FIXTURE_SPOT_RANGE = 12.5;
-const FIXTURE_SPOT_INNER_CONE = 64;
+const FIXTURE_SPOT_INNER_CONE = 78;
 const FIXTURE_SPOT_OUTER_CONE = 84;
 const FIXTURE_SPOT_INTENSITY_MULTIPLIER = 2.9;
 const FIXTURE_PANEL_HALF_HEIGHT = 0.04;
 const FIXTURE_EMITTER_CLEARANCE = 0.03;
 const FIXTURE_SHADOW_RESOLUTION = 512;
 const FIXTURE_SHADOW_BIAS = 0.08;
-const FIXTURE_SHADOW_NORMAL_OFFSET = 0.03;
+const FIXTURE_SHADOW_NORMAL_OFFSET = 0.12;
 const FIXTURE_FLICKER_LIT_THRESHOLD = 0.5;
 
 interface FixtureRuntime {

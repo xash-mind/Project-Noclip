@@ -20,13 +20,13 @@ test('runtime owns no fixed player-nearest fluorescent light pool', () => {
 test('every rendered fixture owns one broad downward shadowed spot', () => {
   assert.ok(fixtureLightingSource.includes("type: 'spot'"));
   assert.ok(fixtureLightingSource.includes('const FIXTURE_SPOT_RANGE = 12.5'));
-  assert.ok(fixtureLightingSource.includes('const FIXTURE_SPOT_INNER_CONE = 64'));
+  assert.ok(fixtureLightingSource.includes('const FIXTURE_SPOT_INNER_CONE = 78'));
   assert.ok(fixtureLightingSource.includes('const FIXTURE_SPOT_OUTER_CONE = 84'));
   assert.ok(fixtureLightingSource.includes('const FIXTURE_SPOT_INTENSITY_MULTIPLIER = 2.9'));
   assert.ok(fixtureLightingSource.includes('castShadows: true'));
   assert.ok(fixtureLightingSource.includes('const FIXTURE_SHADOW_RESOLUTION = 512'));
   assert.ok(fixtureLightingSource.includes('const FIXTURE_SHADOW_BIAS = 0.08'));
-  assert.ok(fixtureLightingSource.includes('const FIXTURE_SHADOW_NORMAL_OFFSET = 0.03'));
+  assert.ok(fixtureLightingSource.includes('const FIXTURE_SHADOW_NORMAL_OFFSET = 0.12'));
   assert.ok(fixtureLightingSource.includes('shadowUpdateMode: pc.SHADOWUPDATE_NONE'));
   assert.ok(fixtureLightingSource.includes('pc.SHADOWUPDATE_THISFRAME'));
   assert.ok(fixtureLightingSource.includes('visual.root.addChild(light)'));
