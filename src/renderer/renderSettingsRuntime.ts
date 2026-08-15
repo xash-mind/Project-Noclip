@@ -333,10 +333,15 @@ function refreshLightField(this: ProjectNoclipGame): void {
 
 export function applyRenderSettingsToGame(game: ProjectNoclipGame, settings = getRenderSettings()): void {
   const state = access(game);
-  state.tuning = { ...state.tuning, activeRadius: renderDistanceProfile(settings).loadRadius };
+  const nextActiveRadius = renderDistanceProfile(settings).loadRadius;
+  const renderDistanceChanged = state.tuning.activeRadius !== nextActiveRadius;
+  state.tuning = { ...state.tuning, activeRadius: nextActiveRadius };
   applyRenderQuality(game, settings);
   applyLevel0Atmosphere(game, settings);
-  if (state.save && state.renderer) state.updateStreaming(true);
+  // Image-quality controls must never rebuild/reseed streamed Cells. Only an
+  // actual Render Distance change is allowed to reconcile the Cell envelope,
+  // and it uses the non-forced path so already-loaded descriptors stay intact.
+  if (renderDistanceChanged && state.save && state.renderer) state.updateStreaming(false);
   if (state.app) renderControl(state.app).renderNextFrame = true;
 }
 
