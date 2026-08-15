@@ -51,6 +51,19 @@ export function installRenderSettingsLab(game: ProjectNoclipGame): void {
   if (legacyRadius && legacyRadiusLabel) {
     legacyRadius.disabled = true;
     legacyRadiusLabel.hidden = true;
+    // Existing browser/profile tooling still dispatches this hidden control.
+    // Translate that QA-only signal into the canonical Render Distance setting
+    // rather than reviving a second streaming architecture or user-facing knob.
+    const qaRadiusToDistance: Record<string, RenderDistanceLevel> = {
+      '1': 'low',
+      '2': 'medium',
+      '3': 'high',
+      '4': 'ultra'
+    };
+    legacyRadius.addEventListener('change', () => {
+      const renderDistance = qaRadiusToDistance[legacyRadius.value];
+      if (renderDistance) patchRenderSettings({ renderDistance });
+    });
   }
 
   const worldSections = [...lab.querySelectorAll<HTMLElement>(':scope > .lab-section, :scope > .metrics')];
