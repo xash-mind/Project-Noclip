@@ -26,7 +26,7 @@ jobs:
       - name: Capture close-range world, Region, render-settings and flashlight evidence
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           npm run preview > /tmp/project-noclip-preview.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true; cat /tmp/project-noclip-preview.log || true' EXIT
@@ -35,19 +35,36 @@ jobs:
             if [ "$attempt" -eq 30 ]; then exit 1; fi
             sleep 1
           done
-          NOCLIP_RENDER_SETTINGS_ARTIFACTS="artifacts/render-settings" \
-          python scripts/profile-render-settings.py
-          NOCLIP_FIXTURE_FINALIZATION_ARTIFACTS="artifacts/fixture-finalization" \
-          python scripts/fixture-finalization-smoke.py
-          NOCLIP_LIGHTING_FINALIZATION_ARTIFACTS="artifacts/lighting-finalization" \
-          python scripts/lighting-finalization-smoke.py
-          NOCLIP_VISUAL_TARGETS="artifacts/visual/targets.json" \
-          NOCLIP_VISUAL_ARTIFACTS="artifacts/visual" \
-          python scripts/visual-smoke.py
-          NOCLIP_FLASHLIGHT_ARTIFACTS="artifacts/flashlight" \
-          python scripts/flashlight-smoke.py
-          NOCLIP_FIDELITY_ARTIFACTS="artifacts/fidelity" \
-          python scripts/fidelity-smoke.py
+
+          STATUS=0
+          run_evidence() {
+            echo "::group::$1"
+            shift
+            "$@" || STATUS=1
+            echo "::endgroup::"
+          }
+
+          run_evidence "Render settings profile" env \
+            NOCLIP_RENDER_SETTINGS_ARTIFACTS="artifacts/render-settings" \
+            python scripts/profile-render-settings.py
+          run_evidence "Fixture finalization" env \
+            NOCLIP_FIXTURE_FINALIZATION_ARTIFACTS="artifacts/fixture-finalization" \
+            python scripts/fixture-finalization-smoke.py
+          run_evidence "World/Region visual smoke" env \
+            NOCLIP_VISUAL_TARGETS="artifacts/visual/targets.json" \
+            NOCLIP_VISUAL_ARTIFACTS="artifacts/visual" \
+            python scripts/visual-smoke.py
+          run_evidence "Flashlight smoke" env \
+            NOCLIP_FLASHLIGHT_ARTIFACTS="artifacts/flashlight" \
+            python scripts/flashlight-smoke.py
+          run_evidence "Fidelity smoke" env \
+            NOCLIP_FIDELITY_ARTIFACTS="artifacts/fidelity" \
+            python scripts/fidelity-smoke.py
+          run_evidence "Legacy lighting finalization" env \
+            NOCLIP_LIGHTING_FINALIZATION_ARTIFACTS="artifacts/lighting-finalization" \
+            python scripts/lighting-finalization-smoke.py
+
+          exit "$STATUS"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

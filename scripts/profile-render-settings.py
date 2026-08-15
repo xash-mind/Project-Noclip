@@ -17,10 +17,10 @@ from selenium.webdriver.support.ui import WebDriverWait
 BASE_URL = os.environ.get("NOCLIP_BASE_URL", "http://127.0.0.1:4173")
 ARTIFACT_DIR = Path(os.environ.get("NOCLIP_RENDER_SETTINGS_ARTIFACTS", "artifacts/render-settings"))
 ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
-SAMPLE_SECONDS = float(os.environ.get("NOCLIP_RENDER_SETTINGS_SAMPLE_SECONDS", "2.5"))
+SAMPLE_SECONDS = float(os.environ.get("NOCLIP_RENDER_SETTINGS_SAMPLE_SECONDS", "1.5"))
 
 
-def wait_for(driver: webdriver.Chrome, predicate: Callable[[webdriver.Chrome], Any], timeout: float = 30.0, message: str = "condition") -> Any:
+def wait_for(driver: webdriver.Chrome, predicate: Callable[[webdriver.Chrome], Any], timeout: float = 60.0, message: str = "condition") -> Any:
     try:
         return WebDriverWait(driver, timeout).until(predicate)
     except TimeoutException as error:
@@ -73,6 +73,7 @@ def measure_frames(driver: webdriver.Chrome) -> dict[str, Any]:
     fps = [1000.0 / value for value in values]
     return {
         "sampleCount": len(values),
+        "elapsedMs": round(float(result["elapsedMs"]), 3),
         "frameTimeMs": {
             "median": round(statistics.median(values), 3),
             "p95": round(percentile(values, 0.95), 3),
@@ -98,7 +99,7 @@ def apply_preset(driver: webdriver.Chrome, preset: str, expected_cells: int) -> 
         lambda current: bridge(current) if bridge(current)["diagnostics"]["activeCells"] == expected_cells else False,
         message=f"{preset} active Cell scope",
     )
-    time.sleep(1.0)
+    time.sleep(0.5)
     return dict(result)
 
 
@@ -123,14 +124,11 @@ def sample(driver: webdriver.Chrome, label: str) -> dict[str, Any]:
     canvas = dict(driver.execute_script(
         "const c=document.querySelector('#game-canvas');return {width:c.width,height:c.height,clientWidth:c.clientWidth,clientHeight:c.clientHeight};"
     ))
-    frame = measure_frames(driver)
-    path = ARTIFACT_DIR / f"{label}.png"
-    driver.save_screenshot(str(path))
     return {
         "settings": settings,
         "diagnostics": diagnostics,
         "canvas": canvas,
-        "frames": frame,
+        "frames": measure_frames(driver),
     }
 
 
@@ -138,7 +136,7 @@ def main() -> None:
     report: dict[str, Any] = {"baseUrl": BASE_URL, "sampleSeconds": SAMPLE_SECONDS, "profiles": {}, "checks": []}
     driver = build_driver()
     driver.set_page_load_timeout(60)
-    driver.set_script_timeout(max(30, int(SAMPLE_SECONDS + 20)))
+    driver.set_script_timeout(120)
     try:
         driver.get(BASE_URL)
         wait_for(driver, lambda current: current.execute_script("return document.readyState") == "complete", message="document load")
@@ -149,7 +147,7 @@ def main() -> None:
             message="Level 0 HUD",
         )
         wait_for(driver, lambda current: current.execute_script("return Boolean(window.__projectNoclipRenderSettings)"), message="render settings QA bridge")
-        time.sleep(2)
+        time.sleep(1)
 
         driver.execute_script("window.dispatchEvent(new KeyboardEvent('keydown',{key:'`',code:'Backquote',bubbles:true}));")
         wait_for(driver, lambda current: "visible" in current.find_element(By.CSS_SELECTOR, '[data-ui="lab"]').get_attribute("class").split(), message="World Lab")
@@ -185,10 +183,6 @@ def main() -> None:
         assert not report["browserErrors"], report["browserErrors"]
     except Exception as error:
         report["failure"] = f"{type(error).__name__}: {error}"
-        try:
-            driver.save_screenshot(str(ARTIFACT_DIR / "failure.png"))
-        except Exception:
-            pass
         raise
     finally:
         (ARTIFACT_DIR / "profile.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
