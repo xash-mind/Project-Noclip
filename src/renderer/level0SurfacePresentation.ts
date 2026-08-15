@@ -161,6 +161,10 @@ function pillarFaceWall(
   face: 'north' | 'south' | 'west' | 'east'
 ): WallSpec {
   const thickness = 0.04;
+  // Each skin is centered on the structural face and therefore already extends
+  // half its thickness beyond the core. One total thickness of longitudinal
+  // allowance makes adjacent outer edges meet exactly; two caused the rejected
+  // tic-tac-toe-style protrusion beyond the rectangular silhouette.
   const cornerOverlap = thickness;
   if (face === 'north' || face === 'south') {
     return {
@@ -168,7 +172,7 @@ function pillarFaceWall(
       cx: prop.position.x,
       cy: prop.position.y,
       cz: prop.position.z + (face === 'north' ? -prop.scale.z / 2 : prop.scale.z / 2),
-      sx: prop.scale.x + cornerOverlap * 2,
+      sx: prop.scale.x + cornerOverlap,
       sy: prop.scale.y,
       sz: thickness,
       orientation: 'z',
@@ -184,7 +188,7 @@ function pillarFaceWall(
     cz: prop.position.z,
     sx: thickness,
     sy: prop.scale.y,
-    sz: prop.scale.z + cornerOverlap * 2,
+    sz: prop.scale.z + cornerOverlap,
     orientation: 'x',
     drawable: true,
     materialId: 'level-0-wallpaper',

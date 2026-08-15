@@ -1,74 +1,20 @@
-import * as pc from 'playcanvas';
 import './styles.css';
 import { ProjectNoclipGame } from './app/ProjectNoclipGame.js';
 import { installLevel0SurfacePresentation } from './renderer/level0SurfacePresentation.js';
+import { installRenderSettingsRuntime } from './renderer/renderSettingsRuntime.js';
 import { installStaticWorldBatching } from './renderer/StaticWorldBatching.js';
 import { mountDevelopmentVersionIndicator } from './ui/DevelopmentVersionIndicator.js';
 import { installRegionDepthLab } from './ui/regionDepthLab.js';
+import { installRenderSettingsLab } from './ui/renderSettingsLab.js';
 
-type FogParamsLike = {
-  type: string;
-  color: { copy?: (value: unknown) => unknown };
-  start: number;
-  end: number;
-};
-
-function installPlayCanvasFogCompatibility(): void {
-  const sceneClass = (pc as unknown as { Scene?: { prototype: object } }).Scene;
-  if (!sceneClass) return;
-
-  const prototype = sceneClass.prototype;
-  const fogDescriptor = Object.getOwnPropertyDescriptor(prototype, 'fog');
-  if (!fogDescriptor?.get) return;
-
-  const getFog = fogDescriptor.get;
-  if (!fogDescriptor.set && fogDescriptor.configurable !== false) {
-    Object.defineProperty(prototype, 'fog', {
-      configurable: true,
-      enumerable: fogDescriptor.enumerable ?? false,
-      get: getFog,
-      set(this: object, value: string) {
-        (getFog.call(this) as FogParamsLike).type = value;
-      }
-    });
-  }
-
-  const defineAlias = (
-    property: 'fogColor' | 'fogStart' | 'fogEnd',
-    read: (fog: FogParamsLike) => unknown,
-    write: (fog: FogParamsLike, value: unknown) => void
-  ) => {
-    if (Object.getOwnPropertyDescriptor(prototype, property)) return;
-    Object.defineProperty(prototype, property, {
-      configurable: true,
-      enumerable: false,
-      get(this: object) {
-        return read(getFog.call(this) as FogParamsLike);
-      },
-      set(this: object, value: unknown) {
-        write(getFog.call(this) as FogParamsLike, value);
-      }
-    });
-  };
-
-  defineAlias('fogColor', (fog) => fog.color, (fog, value) => {
-    if (fog.color.copy) fog.color.copy(value);
-  });
-  defineAlias('fogStart', (fog) => fog.start, (fog, value) => {
-    fog.start = Number(value);
-  });
-  defineAlias('fogEnd', (fog) => fog.end, (fog, value) => {
-    fog.end = Number(value);
-  });
-}
-
-installPlayCanvasFogCompatibility();
 installLevel0SurfacePresentation();
+installRenderSettingsRuntime();
 installStaticWorldBatching();
 mountDevelopmentVersionIndicator();
 
 const game = new ProjectNoclipGame();
 installRegionDepthLab(game);
+installRenderSettingsLab(game);
 void game.initialize().then(() => {
   const params = new URLSearchParams(window.location.search);
   if (params.has('autostart')) (document.querySelector('[data-action="new"]') as HTMLButtonElement | null)?.click();

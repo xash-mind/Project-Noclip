@@ -1,21 +1,28 @@
 import * as pc from 'playcanvas';
 import { lightFlickerValue } from '../world/lighting.js';
 import { CELL_SIZE, type CellDescriptor, type LightGroupSpec } from '../world/types.js';
+import { cellIsInsideActiveRenderScope, getRenderSettings } from './renderSettings.js';
 import { WorldRenderer } from './WorldRenderer.js';
 import { makeMaterial, type CellVisual } from './support.js';
 
-// M-F1 fluorescent panels own omnidirectional emitters so one real fixture light
-// can illuminate carpet, walls and nearby ceiling. All fixture identities remain
-// rendered, while realtime shadowed participation is bounded around the player.
-const FIXTURE_LIGHT_RANGE = 12.5;
-const FIXTURE_LIGHT_INTENSITY_MULTIPLIER = 2.9;
+const FIXTURE_LIGHT_RANGE = 12.0;
+const FIXTURE_LIGHT_INTENSITY_MULTIPLIER = 2.0;
 const MAX_ACTIVE_FIXTURE_LIGHTS = 128;
 const FIXTURE_PANEL_HALF_HEIGHT = 0.04;
 const FIXTURE_EMITTER_CLEARANCE = 0.03;
-const FIXTURE_SHADOW_RESOLUTION = 512;
-const FIXTURE_SHADOW_BIAS = 0.04;
+const FIXTURE_SHADOW_BIAS = 0.4;
 const FIXTURE_SHADOW_NORMAL_OFFSET = 0.04;
-const FIXTURE_FLICKER_LIT_THRESHOLD = 0.5;
+
+interface FixtureLightComponent {
+  intensity: number;
+  range: number;
+  color: pc.Color;
+  castShadows: boolean;
+  shadowResolution: number;
+  shadowBias: number;
+  normalOffsetBias: number;
+  shadowUpdateMode: number;
+}
 
 interface FixtureRuntime {
   id: string;
@@ -55,9 +62,7 @@ function entityByName(root: pc.Entity, name: string): pc.Entity | undefined {
 
 function fixturePulse(group: LightGroupSpec, elapsedSeconds: number, reducedFlicker: boolean): number {
   if (group.state === 'off') return 0;
-  const raw = lightFlickerValue(group, elapsedSeconds, reducedFlicker);
-  if (group.state === 'flicker' && !reducedFlicker) return raw >= FIXTURE_FLICKER_LIT_THRESHOLD ? 1 : 0;
-  return 1;
+  return lightFlickerValue(group, elapsedSeconds, reducedFlicker);
 }
 
 function fixtureMaterial(
@@ -67,21 +72,26 @@ function fixtureMaterial(
   pulse: number
 ): pc.StandardMaterial {
   const arch = descriptor.world.regionId === 'arch-rooms';
-  const key = `fixture-owned:${arch ? 'arch' : 'ordinary'}:${group.state}:${pulse.toFixed(4)}`;
+  const level = Math.max(0, Math.min(1, Math.round(pulse * 16) / 16));
+  const key = `fixture-owned:${arch ? 'arch' : 'ordinary'}:${group.state}:${level.toFixed(4)}`;
   const existing = state.materials.get(key);
   if (existing) return existing;
 
   const activeDiffuse: [number, number, number] = arch ? [0.99, 0.985, 0.83] : [0.98, 0.955, 0.76];
   const offDiffuse: [number, number, number] = [0.31, 0.31, 0.27];
-  const diffuse: [number, number, number] = pulse > 0.5 ? activeDiffuse : offDiffuse;
-  const created = pulse <= 0.001
+  const diffuse: [number, number, number] = [
+    offDiffuse[0] + (activeDiffuse[0] - offDiffuse[0]) * level,
+    offDiffuse[1] + (activeDiffuse[1] - offDiffuse[1]) * level,
+    offDiffuse[2] + (activeDiffuse[2] - offDiffuse[2]) * level
+  ];
+  const created = level <= 0.001
     ? makeMaterial(diffuse)
     : makeMaterial(
       diffuse,
       undefined,
       [1, 1],
       arch ? [1, 0.985, 0.78] : [1, 0.95, 0.68],
-      arch ? 2.18 : 2.28
+      (arch ? 2.18 : 2.28) * level
     );
   state.materials.set(key, created);
   return created;
@@ -109,9 +119,14 @@ function fixtureDistanceTo(runtime: FixtureRuntime, playerX: number, playerZ: nu
   return position ? Math.hypot(position.x - playerX, position.z - playerZ) : Number.POSITIVE_INFINITY;
 }
 
-function selectActiveFixtureIds(state: RendererFixtureState, playerX: number, playerZ: number): Set<string> {
+function selectActiveFixtureIds(
+  renderer: WorldRenderer,
+  state: RendererFixtureState,
+  playerX: number,
+  playerZ: number
+): Set<string> {
   const candidates = [...state.fixtures.values()]
-    .filter((runtime) => runtime.group.state !== 'off')
+    .filter((runtime) => runtime.group.state !== 'off' && cellIsInsideActiveRenderScope(renderer, runtime.descriptor))
     .map((runtime) => ({ runtime, distance: fixtureDistanceTo(runtime, playerX, playerZ) }))
     .sort((a, b) => a.distance - b.distance || a.runtime.id.localeCompare(b.runtime.id))
     .slice(0, MAX_ACTIVE_FIXTURE_LIGHTS);
@@ -135,6 +150,10 @@ function markFixtureShadowsDirtyNearCell(state: RendererFixtureState, descriptor
   }
 }
 
+function componentFor(runtime: FixtureRuntime): FixtureLightComponent | undefined {
+  return runtime.light.light as unknown as FixtureLightComponent | undefined;
+}
+
 function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void {
   const state = stateFor(renderer);
   const descriptor = visual.descriptor;
@@ -150,7 +169,7 @@ function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void 
         range: FIXTURE_LIGHT_RANGE,
         intensity: 0,
         castShadows: true,
-        shadowResolution: FIXTURE_SHADOW_RESOLUTION,
+        shadowResolution: getRenderSettings().shadowResolution,
         shadowBias: FIXTURE_SHADOW_BIAS,
         normalOffsetBias: FIXTURE_SHADOW_NORMAL_OFFSET,
         shadowUpdateMode: pc.SHADOWUPDATE_NONE
@@ -161,13 +180,9 @@ function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void 
         fixture.y - FIXTURE_PANEL_HALF_HEIGHT - FIXTURE_EMITTER_CLEARANCE,
         fixture.z
       );
-      // Participation is selected around the player on update; merely loading a Cell
-      // must never let the total realtime light count exceed the explicit cap.
       light.enabled = false;
 
       const mesh = entityByName(visual.root, `${group.id}:fixture:${fixtureIndex}`);
-      // The luminous diffuser is the source, not an occluder. Let architecture cast
-      // shadows while preventing the panel from shadowing its own near-field Omni.
       if (mesh?.render) mesh.render.castShadows = false;
 
       state.fixtures.set(id, {
@@ -203,8 +218,9 @@ function updateFixtureLighting(
   playerZ: number
 ): void {
   const state = stateFor(renderer);
-  const selectedIds = selectActiveFixtureIds(state, playerX, playerZ);
+  const selectedIds = selectActiveFixtureIds(renderer, state, playerX, playerZ);
   const groupPulses = new Map<string, number>();
+  const settings = getRenderSettings();
 
   const pulseFor = (group: LightGroupSpec): number => {
     const existing = groupPulses.get(group.id);
@@ -215,24 +231,30 @@ function updateFixtureLighting(
   };
 
   for (const runtime of state.fixtures.values()) {
-    // One canonical pulse is sampled once per light group per frame and then applied
-    // synchronously to both the visible M-F1 diffuser and its emitted Omni energy.
+    // Exactly one deterministic pulse is sampled per M-F1 group each frame. The
+    // panel presentation and corresponding Omni consume that same value.
     const pulse = pulseFor(runtime.group);
     const selected = selectedIds.has(runtime.id);
     if (selected && !runtime.selected) runtime.shadowDirty = true;
     runtime.selected = selected;
 
-    if (runtime.mesh?.render) {
-      runtime.mesh.render.material = fixtureMaterial(state, runtime.descriptor, runtime.group, pulse);
-    }
-    if (!runtime.light.light) continue;
-    runtime.light.light.color = lightColor(runtime.group);
-    runtime.light.light.intensity = selected
-      ? runtime.group.intensity * pulse * FIXTURE_LIGHT_INTENSITY_MULTIPLIER
-      : 0;
+    if (runtime.mesh?.render) runtime.mesh.render.material = fixtureMaterial(state, runtime.descriptor, runtime.group, pulse);
+    const light = componentFor(runtime);
+    if (!light) continue;
+    light.color = lightColor(runtime.group);
+    light.range = FIXTURE_LIGHT_RANGE;
+    light.castShadows = true;
+    light.shadowResolution = settings.shadowResolution;
+    light.shadowBias = FIXTURE_SHADOW_BIAS;
+    light.normalOffsetBias = FIXTURE_SHADOW_NORMAL_OFFSET;
+    light.intensity = selected ? runtime.group.intensity * pulse * FIXTURE_LIGHT_INTENSITY_MULTIPLIER : 0;
     runtime.light.enabled = selected && runtime.group.state !== 'off';
-    if (selected && runtime.group.state !== 'off' && pulse > 0.5 && runtime.shadowDirty) {
-      runtime.light.light.shadowUpdateMode = pc.SHADOWUPDATE_THISFRAME;
+
+    // Shadow maps describe static occlusion, not flicker brightness. Refresh only
+    // when the streamed geometry or light participation changed; never create a
+    // separate shadow-only selection pool.
+    if (selected && runtime.group.state !== 'off' && pulse > 0.001 && runtime.shadowDirty) {
+      light.shadowUpdateMode = pc.SHADOWUPDATE_THISFRAME;
       runtime.shadowDirty = false;
     }
   }
@@ -246,10 +268,11 @@ export const FIXTURE_LIGHTING_PROFILE = Object.freeze({
   emitterDrop: FIXTURE_PANEL_HALF_HEIGHT + FIXTURE_EMITTER_CLEARANCE,
   fixturePanelCastsShadows: false,
   castShadows: true,
-  shadowResolution: FIXTURE_SHADOW_RESOLUTION,
+  defaultShadowResolution: 512,
   shadowBias: FIXTURE_SHADOW_BIAS,
   normalOffsetBias: FIXTURE_SHADOW_NORMAL_OFFSET,
-  shadowUpdateMode: 'cell-local-this-frame'
+  shadowUpdateMode: 'cell-local-this-frame',
+  shadowCountPolicy: 'one-to-one-with-active-lights'
 });
 
 declare module './WorldRenderer.js' {
@@ -262,14 +285,10 @@ declare module './WorldRenderer.js' {
     ): void;
     readonly realtimeFixtureLightCount: number;
     readonly activeRealtimeFixtureLightCount: number;
+    readonly shadowedRealtimeFixtureLightCount: number;
   }
 }
 
-/**
- * Every rendered fluorescent fixture retains one stable real-light identity, while
- * at most 128 nearest fixture Omnis participate in realtime lighting. The same
- * canonical binary pulse drives panel appearance and Omni energy in one update.
- */
 export function installFixtureLighting(): void {
   if (installed) return;
   installed = true;
@@ -314,9 +333,23 @@ export function installFixtureLighting(): void {
       if (!state) return 0;
       let active = 0;
       for (const runtime of state.fixtures.values()) {
-        if (runtime.light.enabled && (runtime.light.light?.intensity ?? 0) > 0.001) active += 1;
+        if (runtime.selected && runtime.light.enabled && runtime.group.state !== 'off') active += 1;
       }
       return active;
+    }
+  });
+
+  Object.defineProperty(WorldRenderer.prototype, 'shadowedRealtimeFixtureLightCount', {
+    configurable: true,
+    get(this: WorldRenderer): number {
+      const state = states.get(this);
+      if (!state) return 0;
+      let shadowed = 0;
+      for (const runtime of state.fixtures.values()) {
+        const light = componentFor(runtime);
+        if (runtime.selected && runtime.light.enabled && runtime.group.state !== 'off' && light?.castShadows) shadowed += 1;
+      }
+      return shadowed;
     }
   });
 }
