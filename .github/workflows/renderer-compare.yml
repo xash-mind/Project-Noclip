@@ -15,6 +15,7 @@ on:
       - vercel.json
       - .github/workflows/renderer-compare.yml
       - scripts/profile-production.py
+      - scripts/profile-candidate-renderer.py
       - STATUS.md
 
 permissions:
@@ -92,7 +93,7 @@ jobs:
           NOCLIP_DEPLOYMENT_ID="local-candidate" \
           NOCLIP_EXPECTED_VERSION="$candidate_version" \
           NOCLIP_PROFILE_ARTIFACTS="artifacts/renderer-compare/after" \
-          python scripts/profile-production.py
+          python scripts/profile-candidate-renderer.py
       - name: Compare renderer budgets and Generation 3 invariants
         shell: bash
         run: |
@@ -114,7 +115,7 @@ jobs:
               before_metrics = before['scenarios'][key]['worldMetricsAfter']
               after_metrics = after['scenarios'][key]['worldMetricsAfter']
               assert after_metrics['loadedCells'] == before_metrics['loadedCells'], (
-                  f"{key} streaming cardinality changed: {before_metrics['loadedCells']} -> {after_metrics['loadedCells']}"
+                  f"{key} active streaming cardinality changed: {before_metrics['loadedCells']} -> {after_metrics['loadedCells']}"
               )
               assert after_metrics.get('generation') == 'gen3-v1', f"{key} did not profile Generation 3"
               for metric in ('drawCalls', 'colliders', 'interactions'):
@@ -122,12 +123,9 @@ jobs:
                   assert value <= caps[metric], f"{key} {metric} {value} exceeds absolute cap {caps[metric]}"
               before_draw = int(before_metrics['drawCalls'])
               after_draw = int(after_metrics['drawCalls'])
-              # Generation 3 intentionally replaces semantically different
-              # Generation 2 scenes. Keep the production delta as evidence,
-              # while judging the candidate against explicit scene budgets.
               comparison['scenarios'][key] = {
                   'production': {name: before_metrics.get(name) for name in ('drawCalls', 'loadedCells', 'colliders', 'interactions')},
-                  'candidate': {name: after_metrics.get(name) for name in ('drawCalls', 'loadedCells', 'colliders', 'interactions')},
+                  'candidate': {name: after_metrics.get(name) for name in ('drawCalls', 'loadedCells', 'retainedCells', 'colliders', 'interactions', 'activeOmnis', 'shadowedOmnis')},
                   'drawDeltaPct': round((after_draw - before_draw) * 100 / max(1, before_draw), 2),
                   'caps': caps,
               }
