@@ -1,7 +1,7 @@
 import * as pc from 'playcanvas';
 import { lightFlickerValue } from '../world/lighting.js';
 import { CELL_SIZE, type CellDescriptor, type LightGroupSpec } from '../world/types.js';
-import { cellIsInsideActiveRenderScope, getRenderSettings } from './renderSettings.js';
+import { cellIsInsideActiveRenderScope, getRenderSettings, renderDistanceProfile } from './renderSettings.js';
 import { WorldRenderer } from './WorldRenderer.js';
 import { makeMaterial, type CellVisual } from './support.js';
 
@@ -123,13 +123,14 @@ function selectActiveFixtureIds(
   renderer: WorldRenderer,
   state: RendererFixtureState,
   playerX: number,
-  playerZ: number
+  playerZ: number,
+  maxActiveLights: number
 ): Set<string> {
   const candidates = [...state.fixtures.values()]
     .filter((runtime) => runtime.group.state !== 'off' && cellIsInsideActiveRenderScope(renderer, runtime.descriptor))
     .map((runtime) => ({ runtime, distance: fixtureDistanceTo(runtime, playerX, playerZ) }))
     .sort((a, b) => a.distance - b.distance || a.runtime.id.localeCompare(b.runtime.id))
-    .slice(0, MAX_ACTIVE_FIXTURE_LIGHTS);
+    .slice(0, maxActiveLights);
   return new Set(candidates.map(({ runtime }) => runtime.id));
 }
 
@@ -218,9 +219,11 @@ function updateFixtureLighting(
   playerZ: number
 ): void {
   const state = stateFor(renderer);
-  const selectedIds = selectActiveFixtureIds(renderer, state, playerX, playerZ);
-  const groupPulses = new Map<string, number>();
   const settings = getRenderSettings();
+  const renderDistanceCeiling = renderDistanceProfile(settings).lightShadowSafetyCeiling;
+  const maxActiveLights = Math.min(MAX_ACTIVE_FIXTURE_LIGHTS, renderDistanceCeiling);
+  const selectedIds = selectActiveFixtureIds(renderer, state, playerX, playerZ, maxActiveLights);
+  const groupPulses = new Map<string, number>();
 
   const pulseFor = (group: LightGroupSpec): number => {
     const existing = groupPulses.get(group.id);
@@ -272,7 +275,8 @@ export const FIXTURE_LIGHTING_PROFILE = Object.freeze({
   shadowBias: FIXTURE_SHADOW_BIAS,
   normalOffsetBias: FIXTURE_SHADOW_NORMAL_OFFSET,
   shadowUpdateMode: 'cell-local-this-frame',
-  shadowCountPolicy: 'one-to-one-with-active-lights'
+  shadowCountPolicy: 'one-to-one-with-active-lights',
+  distanceCeilingPolicy: '32-per-cell-radius-tier-up-to-128'
 });
 
 declare module './WorldRenderer.js' {

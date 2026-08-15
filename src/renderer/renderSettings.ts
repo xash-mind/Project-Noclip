@@ -66,6 +66,14 @@ function squareCellCount(radius: number): number {
   return width * width;
 }
 
+function lightShadowCeilingForRadius(loadRadius: number): number {
+  // Render Distance owns one 32-light/shadow budget step per whole Cell-radius
+  // tier, capped by the existing 128-light renderer safety ceiling. This keeps
+  // Low/Medium/High/Ultra at 32/64/96/128 maximum active M-F1 Omnis while
+  // preserving the hard one-light-to-one-shadow invariant at every tier.
+  return Math.min(M_F1_LIGHT_SHADOW_SAFETY_CEILING, loadRadius * 32);
+}
+
 function distanceProfile(level: RenderDistanceLevel): RenderDistanceProfile {
   const loadRadius = LOAD_RADII[level];
   const retentionRadius = loadRadius + 1;
@@ -81,7 +89,7 @@ function distanceProfile(level: RenderDistanceLevel): RenderDistanceProfile {
     worstCaseRetainedCells: squareCellCount(retentionRadius),
     fogStart,
     fogEnd,
-    lightShadowSafetyCeiling: M_F1_LIGHT_SHADOW_SAFETY_CEILING
+    lightShadowSafetyCeiling: lightShadowCeilingForRadius(loadRadius)
   });
 }
 
