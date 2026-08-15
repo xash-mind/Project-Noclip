@@ -23,7 +23,8 @@ test('runtime keeps fixture identities but bounds realtime Omni participation to
   assert.equal(appSource.includes('renderer.spatialFixtureLights('), false);
   assert.ok(appSource.includes('renderer.updateFixtureLighting(this.journeyElapsed, this.save.settings.reducedFlicker, position.x, position.z)'));
   assert.ok(fixtureLightingSource.includes('const MAX_ACTIVE_FIXTURE_LIGHTS = 128'));
-  assert.ok(fixtureLightingSource.includes('.slice(0, MAX_ACTIVE_FIXTURE_LIGHTS)'));
+  assert.ok(fixtureLightingSource.includes('.slice(0, maxActiveLights)'));
+  assert.ok(fixtureLightingSource.includes('renderDistanceProfile(settings).lightShadowSafetyCeiling'));
   assert.ok(fixtureLightingSource.includes('cellIsInsideActiveRenderScope(renderer, runtime.descriptor)'));
   assert.ok(fixtureLightingSource.includes('group.fixtures.forEach'));
   assert.ok(fixtureLightingSource.includes('state.fixtures.set(id'));
