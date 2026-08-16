@@ -26,7 +26,9 @@ const CATALOG_PROP_SCALE: Record<PropSpec['kind'], [number, number, number]> = {
   'ceiling-gap': [1.2, 0.06, 1.2],
   stain: [1.2, 0.02, 1.0],
   'carpet-patch': [1.2, 0.02, 1.0],
-  sign: [1.4, 0.65, 0.08]
+  sign: [1.4, 0.65, 0.08],
+  bucket: [0.62, 0.58, 0.62],
+  'paint-can': [0.34, 0.38, 0.34]
 };
 
 export class RendererCellBuilder {
@@ -136,7 +138,9 @@ export class RendererCellBuilder {
       'ceiling-gap': this.getMaterial('prop:void', [0.005, 0.005, 0.004]),
       stain: this.getMaterial('prop:stain', [0.12, 0.09, 0.045], 'carpet', prop.materialVariant ?? 0),
       'carpet-patch': this.getMaterial('prop:carpet', profile.floorTint, 'carpet', prop.materialVariant ?? 0),
-      sign: this.getMaterial('prop:sign', [0.15, 0.18, 0.13], undefined, 0, [1, 1], [0.08, 0.17, 0.07], 0.55)
+      sign: this.getMaterial('prop:sign', [0.15, 0.18, 0.13], undefined, 0, [1, 1], [0.08, 0.17, 0.07], 0.55),
+      bucket: this.getMaterial('prop:bucket', [0.37, 0.35, 0.29], 'concrete', prop.materialVariant ?? 0),
+      'paint-can': this.getMaterial('prop:paint-can', [0.46, 0.47, 0.45], 'concrete', prop.materialVariant ?? 0)
     };
   }
 
@@ -187,6 +191,35 @@ export class RendererCellBuilder {
       this.box(`${prop.id}:body`, container, [0, 0, 0], [sx, sy, sz], material);
       const tape = this.getMaterial('prop:box-tape', [0.56, 0.49, 0.31]);
       this.box(`${prop.id}:tape`, container, [0, sy / 2 + 0.008, 0], [sx * 0.16, 0.016, sz], tape);
+    } else if (prop.kind === 'bucket' || prop.kind === 'paint-can') {
+      const isPaintCan = prop.kind === 'paint-can';
+      const sides = 8;
+      const radiusX = sx * 0.46;
+      const radiusZ = sz * 0.46;
+      const sideWidth = Math.min(sx, sz) * (isPaintCan ? 0.34 : 0.32);
+      const wallDepth = Math.max(0.025, Math.min(sx, sz) * 0.055);
+      const rimHeight = Math.max(0.025, sy * 0.055);
+      const rimMaterial = this.getMaterial(isPaintCan ? 'prop:paint-can-rim' : 'prop:bucket-rim', isPaintCan ? [0.58, 0.59, 0.56] : [0.43, 0.41, 0.34], 'concrete', 1);
+      const cavity = this.getMaterial('prop:open-container-cavity', [0.025, 0.026, 0.023]);
+      for (let index = 0; index < sides; index += 1) {
+        const angle = index * 360 / sides;
+        const radians = angle * Math.PI / 180;
+        const x = Math.sin(radians) * radiusX;
+        const z = Math.cos(radians) * radiusZ;
+        this.box(`${prop.id}:side:${index}`, container, [x, -rimHeight / 2, z], [sideWidth, sy - rimHeight, wallDepth], material, angle);
+        this.box(`${prop.id}:rim:${index}`, container, [x, sy / 2 - rimHeight / 2, z], [sideWidth * 1.08, rimHeight, wallDepth * 1.5], rimMaterial, angle);
+      }
+      this.box(`${prop.id}:interior`, container, [0, sy / 2 - rimHeight * 2.4, 0], [sx * 0.72, rimHeight * 0.55, sz * 0.72], cavity);
+      if (isPaintCan) {
+        const residue = this.getMaterial('prop:paint-can-label-residue', [0.57, 0.56, 0.49], 'paper', 0);
+        this.box(`${prop.id}:label-residue`, container, [0.025, -sy * 0.03, -sz * 0.475], [sx * 0.48, sy * 0.34, 0.012], residue, -3);
+        this.box(`${prop.id}:label-tear`, container, [-sx * 0.17, -sy * 0.18, -sz * 0.482], [sx * 0.12, sy * 0.08, 0.014], material, 7);
+      } else {
+        const handle = this.getMaterial('prop:bucket-handle', [0.24, 0.24, 0.21], 'concrete', 0);
+        this.box(`${prop.id}:handle-top`, container, [0, sy * 0.34, 0], [sx * 0.72, 0.025, 0.025], handle);
+        this.box(`${prop.id}:handle-left`, container, [-sx * 0.36, sy * 0.18, 0], [0.025, sy * 0.34, 0.025], handle);
+        this.box(`${prop.id}:handle-right`, container, [sx * 0.36, sy * 0.18, 0], [0.025, sy * 0.34, 0.025], handle);
+      }
     } else {
       this.box(`${prop.id}:body`, container, [0, 0, 0], [sx, sy, sz], material);
     }

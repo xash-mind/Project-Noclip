@@ -96,6 +96,11 @@ A-A1 pieces
   .curve
     render-only reconstruction -> src/renderer/level0RegionPresentation.ts
 
+Arch-only bucket / open paint-can Features
+  deterministic placement -> src/world/gen3SpaceTopologyBuild.ts
+  procedural prop geometry -> src/renderer/cellBuilder.ts
+  World Lab showcase       -> src/renderer/objectCatalog.ts
+
 Arch surface finish
   -> src/renderer/level0SurfacePresentation.ts
   -> src/renderer/level0Wallpaper.ts
@@ -204,6 +209,19 @@ movement solver
   -> src/physics/*
   -> src/app/ProjectNoclipGame.ts
 ```
+
+## I want to change Cell streaming
+
+```text
+movement/boundary detection -> src/app/ProjectNoclipGame.ts
+Render Distance scope       -> src/renderer/renderSettingsRuntime.ts + src/renderer/renderSettings.ts
+predictive/budgeted work    -> src/renderer/streamingScheduler.ts
+Cell build/collider registry-> src/renderer/WorldRenderer.ts + src/renderer/cellBuilder.ts
+retained fixture resources  -> src/renderer/fixtureLighting.ts
+localized static batches    -> src/renderer/StaticWorldBatching.ts
+```
+
+Cells remain deterministic cache addresses. Streaming changes when a descriptor is prepared, never what that Cell is.
 
 ## I want to change saves
 

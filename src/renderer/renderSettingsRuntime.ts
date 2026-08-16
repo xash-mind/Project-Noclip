@@ -2,12 +2,11 @@ import * as pc from 'playcanvas';
 import { CameraFrame } from 'playcanvas/build/playcanvas/src/extras/render-passes/camera-frame.js';
 import { ProjectNoclipGame } from '../app/ProjectNoclipGame.js';
 import type { SaveData } from '../persistence/types.js';
-import { canShift, shouldShift } from '../simulation/shifting.js';
 import { calculateExposureDay, calculateWorldDay } from '../simulation/timeline.js';
-import { generateCell } from '../world/generator.js';
 import { sampleGen3Environment } from '../world/gen3.js';
 import type { LightFieldSample } from '../world/lighting.js';
 import type { CellDescriptor, WorldTuning } from '../world/types.js';
+import { installStreamingScheduler, reconcileStreaming } from './streamingScheduler.js';
 import type { WorldRenderer } from './WorldRenderer.js';
 import {
   getRenderSettings,
@@ -73,6 +72,7 @@ interface GameRuntimeAccess {
 
 type RuntimePrototype = {
   setupEngine(this: ProjectNoclipGame): void;
+  update(this: ProjectNoclipGame, dt: number): void;
   updateStreaming(this: ProjectNoclipGame, force?: boolean, radiusOverride?: number): void;
   refreshLightField(this: ProjectNoclipGame): void;
 };
@@ -218,89 +218,7 @@ function setupEngine(this: ProjectNoclipGame): void {
 }
 
 function updateStreaming(this: ProjectNoclipGame, force = false, radiusOverride?: number): void {
-  const state = access(this);
-  if (!state.save || !state.renderer) return;
-  if (radiusOverride === undefined) state.streamWarmupToken += 1;
-
-  const settings = getRenderSettings();
-  const profile = renderDistanceProfile(settings);
-  state.tuning = { ...state.tuning, activeRadius: profile.loadRadius };
-  const targetRadius = profile.loadRadius;
-  const radius = Math.max(1, Math.min(targetRadius, Math.round(radiusOverride ?? targetRadius)));
-  const retentionRadius = profile.retentionRadius;
-  setRendererRenderScope(state.renderer, {
-    centerCellX: state.currentCellX,
-    centerCellZ: state.currentCellZ,
-    loadRadius: radius,
-    retentionRadius
-  });
-
-  const exposure = state.tuning.exposureOverride ?? calculateExposureDay(state.save.exposure);
-  const worldDay = state.tuning.worldDayOverride ?? calculateWorldDay(Date.now());
-  const desired = new Set<string>();
-  for (let x = state.currentCellX - radius; x <= state.currentCellX + radius; x += 1) {
-    for (let z = state.currentCellZ - radius; z <= state.currentCellZ + radius; z += 1) {
-      const id = `${x}:${z}`;
-      desired.add(id);
-      const descriptor = generateCell({
-        seed: state.save.seed,
-        x,
-        z,
-        worldDay,
-        exposure,
-        shiftEpoch: state.save.shiftEpochs[id] ?? 0,
-        tuning: state.tuning,
-        generationVersion: state.save.generationVersion
-      });
-      const existing = state.renderer.loaded.get(id)?.descriptor;
-      if (!existing) state.renderer.loadCell(descriptor);
-      else if (
-        force
-        || existing.address.shiftEpoch !== descriptor.address.shiftEpoch
-        || existing.address.zoneId !== descriptor.address.zoneId
-        || existing.roomArchetype !== descriptor.roomArchetype
-      ) state.renderer.refreshCell(descriptor);
-      const visual = state.renderer.loaded.get(id);
-      if (visual) visual.root.enabled = true;
-      if (x === state.currentCellX && z === state.currentCellZ) state.currentCell = descriptor;
-    }
-  }
-
-  for (const [id, visual] of [...state.renderer.loaded.entries()]) {
-    if (desired.has(id)) continue;
-    const distance = Math.max(
-      Math.abs(visual.descriptor.address.cellX - state.currentCellX),
-      Math.abs(visual.descriptor.address.cellZ - state.currentCellZ)
-    );
-    if (distance <= retentionRadius) {
-      // Retain one Cell ring for hysteresis, but remove it from renderer participation.
-      visual.root.enabled = false;
-      continue;
-    }
-    const unloadCount = (state.save.unloadCounts[id] ?? 0) + 1;
-    state.save.unloadCounts[id] = unloadCount;
-    if (
-      state.save.generationVersion === 'gen2'
-      && canShift({
-        occupied: false,
-        observed: false,
-        distanceInCells: distance,
-        stability: visual.descriptor.stability,
-        protectedInteraction: false,
-        preservesPath: true
-      })
-      && shouldShift(state.save.seed, id, unloadCount, state.tuning.shiftChance)
-    ) state.save.shiftEpochs[id] = (state.save.shiftEpochs[id] ?? 0) + 1;
-    state.renderer.unloadCell(id);
-  }
-
-  if (state.app) {
-    const rendering = renderControl(state.app);
-    if (!rendering.autoRender) rendering.renderNextFrame = true;
-  }
-  state.refreshRegionExtent();
-  state.refreshLightField();
-  state.notifyRegionEntry();
+  reconcileStreaming(this, force, radiusOverride);
 }
 
 function refreshLightField(this: ProjectNoclipGame): void {
@@ -381,4 +299,5 @@ export function installRenderSettingsRuntime(): void {
   prototype.setupEngine = setupEngine;
   prototype.updateStreaming = updateStreaming;
   prototype.refreshLightField = refreshLightField;
+  installStreamingScheduler(prototype);
 }

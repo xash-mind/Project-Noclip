@@ -135,7 +135,7 @@ Registered Transition destinations are not playable Levels: Level 1, Level 2, Le
 |---|---|---|---|
 | **Ordinary Level 0** | `ordinary-level-0` | **Implemented** | The underlying Level 0 grammar everywhere: a connectivity-first world-space partition network with small/medium rooms and narrow connectors as the common texture, occasional larger rooms, and rare very large spaces. Local segment acceptance shapes movement without recurrent sealed boxes or a dominant Cell/orientation cadence. Sparse wallpaper-clad rectangular pillars may occur. |
 | **Pillar Field** | `pillar-field` | **Implemented** | A continuous modifier of Ordinary Level 0. Common Pillar territory retains ordinary wall/room networks while partial/interrupted rows of rectangular wallpaper-clad piers become more frequent and medium open sections appear. Pier spacing remains 7.2 m and generated width is exactly 90% of the dev.3 distribution (`1.395–2.07 m`). Rare deep-field cores suppress most ordinary partitions and intensify the regular lattice, preserving very large near-pure fields as an exceptional deterministic extreme rather than the median experience. |
-| **Arch Rooms** | `arch-rooms` | **Implemented** | A continuous modifier of the common Level 0 network. Pale finishes and world-owned divider spans emerge with affinity while ordinary enclosure walls remain connected through the transition. Each divider chooses one stable bay scale before Cell clipping; normal repeated bays are symmetrical with continuous lower panels/headers and solid terminations. Explicit irregular/asymmetrical dividers use a bounded rare gate; malformed Cell-clipped openings and overlapping pieces are forbidden defects. |
+| **Arch Rooms** | `arch-rooms` | **Implemented** | A continuous modifier of the common Level 0 network. Pale finishes and world-owned divider spans emerge with affinity while ordinary enclosure walls remain connected through the transition. A-A1 keeps its accepted small central curve while each rectangular shoulder is exactly half the previous span, moving the piers inward. The visible upper mass sits 0.24 m below the ceiling while piers remain floor-to-ceiling, and the deeper upper layer bridges shared piers continuously. Normal repeated bays are symmetrical with continuous lower panels/headers and solid terminations. Explicit irregular/asymmetrical dividers use a bounded rare gate; malformed Cell-clipped openings and overlapping pieces are forbidden defects. |
 
 ## Architecture Patterns
 
@@ -195,6 +195,8 @@ The yellow photographic cast comes primarily from harsh fluorescent lighting. Do
 |---|---|---|
 | Sparse furniture | **Implemented** | Rare tables, chairs, or cabinets from an independent seed domain. Most space remains empty. |
 | Occasional ordinary pillar | **Implemented** | Rare rectangular wallpaper-clad floor-to-ceiling support; not an Arch or alcove motif and not the Region-owned `P-A1` pattern. |
+| Medium bucket | **Implemented** | Sparse deterministic Arch-Room-only environmental dressing. Open utility-bucket silhouette, muted aged finish, non-solid and route-clear; never loot. |
+| Small grey open paint can | **Implemented** | Sparse deterministic Arch-Room-only environmental dressing. Smaller lidless grey can with visible rim/dark cavity and restrained peeled-label residue without text; non-solid and route-clear; never loot. |
 
 ## Structures
 

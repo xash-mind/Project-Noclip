@@ -5,6 +5,7 @@ import {
   WALL_THICKNESS,
   type MaterialId,
   type PropSpec,
+  type RegionId,
   type WallSpec,
   type WorldTuning
 } from './types.js';
@@ -12,6 +13,7 @@ import {
   ARCH_HEADER_HEIGHT,
   ARCH_LOWER_HEIGHT,
   ARCH_PIER_WIDTH,
+  archBayProfile,
   PILLAR_MAX_WIDTH,
   PILLAR_MIN_WIDTH,
   PILLAR_SPACING,
@@ -147,7 +149,7 @@ export function topologySeamWall(
 }
 
 function alignArchPortal(wall: TopologyWall, portal: TopologyPortal): TopologyPortal {
-  const bay = 4.55 + unitFloat(`${wall.id}:bay`) * 0.70;
+  const bay = archBayProfile(wall.id).pitch;
   const phase = wall.start + bay / 2;
   const index = Math.round((portal.center - phase) / bay);
   const center = Math.max(
@@ -230,12 +232,12 @@ function addArchWall(
   };
 
   // Semantic/collision structure stays deliberately small. Curved intrados are
-  // render-only geometry in dev6FollowupPresentation.ts, so they cannot inflate
+  // render-only geometry in level0RegionPresentation.ts, so they cannot inflate
   // wall/collider budgets again.
   add('lower', wall.start, wall.end, ARCH_LOWER_HEIGHT / 2, ARCH_LOWER_HEIGHT, routeCuts);
   add('header', wall.start, wall.end, WALL_HEIGHT - ARCH_HEADER_HEIGHT / 2, ARCH_HEADER_HEIGHT, []);
 
-  const bay = 4.55 + unitFloat(`${wall.id}:bay`) * 0.70;
+  const bay = archBayProfile(wall.id).pitch;
   const pierHeight = WALL_HEIGHT - ARCH_HEADER_HEIGHT - ARCH_LOWER_HEIGHT;
   const pierY = ARCH_LOWER_HEIGHT + pierHeight / 2;
   let pierIndex = 0;
@@ -441,6 +443,95 @@ function addPillars(
   return { count, deepSamples };
 }
 
+
+
+export const ARCH_ENVIRONMENT_PROP_PROFILE = Object.freeze({
+  bucketChance: 0.12,
+  paintCanChance: 0.09,
+  placementAttempts: 6,
+  routeClearance: 0.24
+});
+
+function sceneryBounds(worldX: number, worldZ: number, sx: number, sz: number, margin = 0): { minX: number; maxX: number; minZ: number; maxZ: number } {
+  return {
+    minX: worldX - sx / 2 - margin,
+    maxX: worldX + sx / 2 + margin,
+    minZ: worldZ - sz / 2 - margin,
+    maxZ: worldZ + sz / 2 + margin
+  };
+}
+
+function archSceneryPositionClear(
+  worldX: number,
+  worldZ: number,
+  sx: number,
+  sz: number,
+  topologyWalls: readonly TopologyWall[],
+  reservations: readonly RouteReservationEnvelope[],
+  existing: readonly PropSpec[],
+  cellX: number,
+  cellZ: number
+): boolean {
+  const candidate = sceneryBounds(worldX, worldZ, sx, sz, ARCH_ENVIRONMENT_PROP_PROFILE.routeClearance);
+  if (reservations.some((reservation) => boundsOverlap(candidate, reservation))) return false;
+  if (topologyWalls.some((wall) => boundsOverlap(candidate, expandedTopologyWallBounds(wall)))) return false;
+  const centerX = cellX * CELL_SIZE;
+  const centerZ = cellZ * CELL_SIZE;
+  for (const prop of existing) {
+    const other = sceneryBounds(centerX + prop.position.x, centerZ + prop.position.z, prop.scale.x, prop.scale.z, 0.18);
+    if (boundsOverlap(candidate, other)) return false;
+  }
+  return true;
+}
+
+function addOneArchSceneryProp(
+  ctx: DomainContext,
+  cellX: number,
+  cellZ: number,
+  kind: 'bucket' | 'paint-can',
+  chance: number,
+  topologyWalls: readonly TopologyWall[],
+  reservations: readonly RouteReservationEnvelope[],
+  output: PropSpec[]
+): void {
+  const key = `${ctx.seed}:gen3-arch-prop:${cellX}:${cellZ}:${kind}`;
+  if (unitFloat(`${key}:spawn`) >= chance) return;
+  const [sx, sy, sz] = kind === 'bucket' ? [0.62, 0.58, 0.62] : [0.34, 0.38, 0.34];
+  const centerX = cellX * CELL_SIZE;
+  const centerZ = cellZ * CELL_SIZE;
+  const half = CELL_SIZE / 2 - 0.8;
+  for (let attempt = 0; attempt < ARCH_ENVIRONMENT_PROP_PROFILE.placementAttempts; attempt += 1) {
+    const worldX = centerX - half + unitFloat(`${key}:x:${attempt}`) * half * 2;
+    const worldZ = centerZ - half + unitFloat(`${key}:z:${attempt}`) * half * 2;
+    if (cellX === 0 && cellZ === 0 && Math.hypot(worldX, worldZ) < 1.8) continue;
+    if (!archSceneryPositionClear(worldX, worldZ, sx, sz, topologyWalls, reservations, output, cellX, cellZ)) continue;
+    output.push({
+      id: stableId('gen3-arch-prop', ctx.seed, cellX, cellZ, kind),
+      kind,
+      position: { x: worldX - centerX, y: sy / 2, z: worldZ - centerZ },
+      scale: { x: sx, y: sy, z: sz },
+      rotationY: Math.floor(unitFloat(`${key}:rotation`) * 360),
+      materialVariant: Math.floor(unitFloat(`${key}:material`) * 3),
+      solid: false
+    });
+    return;
+  }
+}
+
+function addArchRoomEnvironmentalProps(
+  ctx: DomainContext,
+  cellX: number,
+  cellZ: number,
+  regionId: RegionId | undefined,
+  topologyWalls: readonly TopologyWall[],
+  reservations: readonly RouteReservationEnvelope[],
+  output: PropSpec[]
+): void {
+  if (regionId !== 'arch-rooms') return;
+  addOneArchSceneryProp(ctx, cellX, cellZ, 'bucket', ARCH_ENVIRONMENT_PROP_PROFILE.bucketChance, topologyWalls, reservations, output);
+  addOneArchSceneryProp(ctx, cellX, cellZ, 'paint-can', ARCH_ENVIRONMENT_PROP_PROFILE.paintCanChance, topologyWalls, reservations, output);
+}
+
 function relevantDomains(seed: string, cellX: number, cellZ: number): Array<{ x: number; z: number }> {
   const centerX = cellX * CELL_SIZE;
   const centerZ = cellZ * CELL_SIZE;
@@ -514,6 +605,7 @@ export function generateSpaceTopologyArchitecture(options: {
   worldDay: number;
   exposure: number;
   tuning: WorldTuning;
+  regionId?: RegionId;
 }): Gen3ArchitectureResult {
   const ctx: DomainContext = {
     seed: options.seed,
@@ -527,6 +619,7 @@ export function generateSpaceTopologyArchitecture(options: {
   const reservations = reservationsForWalls(topologyWalls);
   const archIds = new Set<string>();
   const pillar = addPillars(ctx, options.cellX, options.cellZ, topologyWalls, reservations, props);
+  addArchRoomEnvironmentalProps(ctx, options.cellX, options.cellZ, options.regionId, topologyWalls, reservations, props);
   for (const wall of topologyWalls) {
     const externalCuts = [
       ...pillarCutsForWall(options.cellX, options.cellZ, wall, props),

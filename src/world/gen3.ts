@@ -638,7 +638,7 @@ export function generateGen3Layout(options: {
   const conditionIds: ConditionId[] = [];
   const materialIds: MaterialId[] = ['level-0-wallpaper', 'level-0-carpet', 'level-0-ceiling', 'fluorescent-panel'];
 
-  const architecture = generateCoherentGen3Architecture({ seed, cellX, cellZ, worldDay, exposure, tuning });
+  const architecture = generateCoherentGen3Architecture({ seed, cellX, cellZ, worldDay, exposure, tuning, regionId: environment.regionId });
 walls.push(...architecture.walls);
 props.push(...architecture.props);
 const centerInfluence = sampleGen3RegionInfluence(seed, cellX * CELL_SIZE, cellZ * CELL_SIZE, worldDay, exposure, tuning);

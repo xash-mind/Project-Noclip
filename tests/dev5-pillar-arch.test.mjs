@@ -147,7 +147,7 @@ test('A-A1 renderer reconstructs heavy framed bays from world-space divider runs
       const curveWidth = bay.curveEnd - bay.curveStart;
       assert.ok(Math.abs(center - curveCenter) < 1e-9, `off-center curve ${bay.id}`);
       assert.ok(curveWidth >= 0.71 && curveWidth <= 1.43, `curve width ${curveWidth} in ${bay.id}`);
-      assert.ok(curveWidth <= (bay.end - bay.start) * 0.44 + 1e-9, `curve occupies too much of bay ${bay.id}`);
+      assert.ok(curveWidth <= (bay.end - bay.start) * 0.52 + 1e-9, `curve occupies too much of tightened bay ${bay.id}`);
     }
   }
   assert.ok(bayCount > 100, `only ${bayCount} framed bays`);

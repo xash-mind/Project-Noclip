@@ -21,7 +21,9 @@ export interface ObjectCatalogEntry {
 const PROP_CATALOG: ReadonlyArray<Omit<ObjectCatalogEntry, 'id' | 'kind'>> = [
   { label: 'Table Feature', categoryId: 'features', propKind: 'table', searchTerms: ['desk', 'surface', 'sparse furniture'] },
   { label: 'Chair Feature', categoryId: 'features', propKind: 'chair', searchTerms: ['seat', 'sparse furniture'] },
-  { label: 'Cabinet Feature', categoryId: 'features', propKind: 'cabinet', searchTerms: ['locker', 'cupboard', 'sparse furniture'] }
+  { label: 'Cabinet Feature', categoryId: 'features', propKind: 'cabinet', searchTerms: ['locker', 'cupboard', 'sparse furniture'] },
+  { label: 'Medium Bucket', categoryId: 'features', propKind: 'bucket', searchTerms: ['utility bucket', 'open top', 'Arch Room dressing'] },
+  { label: 'Small Grey Open Paint Can', categoryId: 'features', propKind: 'paint-can', searchTerms: ['lidless', 'open paint can', 'peeled label', 'Arch Room dressing'] }
 ];
 
 const itemEntries: ObjectCatalogEntry[] = Object.values(ITEM_DEFINITIONS).map((definition) => ({
@@ -61,7 +63,7 @@ export function validateObjectCatalog(): string[] {
   for (const definition of Object.values(ITEM_DEFINITIONS)) {
     if (!OBJECT_CATALOG.some((entry) => entry.itemDefinitionId === definition.id)) errors.push(`Missing item ${definition.id}`);
   }
-  for (const propKind of ['table', 'chair', 'cabinet'] as const) if (!OBJECT_CATALOG.some((entry) => entry.propKind === propKind)) errors.push(`Missing implemented Feature ${propKind}`);
+  for (const propKind of ['table', 'chair', 'cabinet', 'bucket', 'paint-can'] as const) if (!OBJECT_CATALOG.some((entry) => entry.propKind === propKind)) errors.push(`Missing implemented Feature ${propKind}`);
   return errors;
 }
 

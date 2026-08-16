@@ -18,6 +18,57 @@ export const ARCH_IRREGULAR_CHANCE = 0;
 export const ARCH_PIER_WIDTH = 0.44;
 export const ARCH_LOWER_HEIGHT = 1.0;
 export const ARCH_HEADER_HEIGHT = 0.44;
+export const ARCH_LEGACY_BAY_MIN = 4.55;
+export const ARCH_LEGACY_BAY_RANGE = 0.70;
+export const ARCH_CURVE_MIN_WIDTH = 0.72;
+export const ARCH_CURVE_MAX_WIDTH = 1.42;
+export const ARCH_SHOULDER_SPAN_SCALE = 0.5;
+
+export interface ArchBayProfile {
+  legacyPitch: number;
+  legacyOpening: number;
+  curveWidth: number;
+  legacyShoulderSpan: number;
+  shoulderSpan: number;
+  opening: number;
+  pitch: number;
+}
+
+export function legacyArchCurveWidth(opening: number): number {
+  return Math.min(ARCH_CURVE_MAX_WIDTH, Math.max(ARCH_CURVE_MIN_WIDTH, opening * 0.34), opening * 0.44);
+}
+
+/**
+ * A-A1 keeps the accepted central curve but halves both rectangular shoulders.
+ * Pier centres therefore move inward without changing the curve seed domain.
+ */
+export function archBayProfile(ownerId: string): ArchBayProfile {
+  const legacyPitch = ARCH_LEGACY_BAY_MIN + unitFloat(`${ownerId}:bay`) * ARCH_LEGACY_BAY_RANGE;
+  const legacyOpening = legacyPitch - ARCH_PIER_WIDTH;
+  const curveWidth = legacyArchCurveWidth(legacyOpening);
+  const legacyShoulderSpan = Math.max(0, (legacyOpening - curveWidth) / 2);
+  const shoulderSpan = legacyShoulderSpan * ARCH_SHOULDER_SPAN_SCALE;
+  const opening = curveWidth + shoulderSpan * 2;
+  return {
+    legacyPitch,
+    legacyOpening,
+    curveWidth,
+    legacyShoulderSpan,
+    shoulderSpan,
+    opening,
+    pitch: opening + ARCH_PIER_WIDTH
+  };
+}
+
+/** Recover the preserved pre-tightening curve width from a reconstructed opening. */
+export function preservedArchCurveWidth(opening: number): number {
+  let legacyOpening = Math.max(opening, opening * 2 - ARCH_CURVE_MAX_WIDTH);
+  for (let pass = 0; pass < 6; pass += 1) {
+    const curve = legacyArchCurveWidth(legacyOpening);
+    legacyOpening = opening * 2 - curve;
+  }
+  return legacyArchCurveWidth(legacyOpening);
+}
 
 export const PILLAR_WIDTH_SCALE = 0.9;
 export const PILLAR_MIN_WIDTH = 1.55 * PILLAR_WIDTH_SCALE;

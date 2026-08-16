@@ -83,8 +83,10 @@ test('M-F1 panel ownership resolves the real visible panel and keeps it out of t
 
   assert.ok(batchingSource.includes('if (isMFluorescentPanelVisualName(entity.name))'));
   assert.ok(batchingSource.includes('entity.render.batchGroupId = -1'));
-  assert.ok(batchingSource.includes("addGroup(STATIC_WORLD_BATCH_GROUP_NAME, false"));
-  assert.ok(batchingSource.includes('assignStaticVisuals(child)'));
+  assert.ok(batchingSource.includes('addGroup(`${STATIC_WORLD_BATCH_GROUP_NAME}:'));
+  assert.ok(batchingSource.includes('assignStaticVisuals(child, batchGroupId)'));
+  assert.ok(batchingSource.includes('app.batcher.markGroupDirty(batch.id)'));
+  assert.equal(batchingSource.includes('markGroupDirty(STATIC_WORLD_BATCH_GROUP_ID)'), false);
 });
 
 test('M-F1 diffuser and Omni consume one canonical continuous pulse in the same per-frame update', () => {

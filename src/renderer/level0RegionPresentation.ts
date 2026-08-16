@@ -1,5 +1,5 @@
 import * as pc from 'playcanvas';
-import { ARCH_HEADER_HEIGHT, ARCH_LOWER_HEIGHT } from '../world/gen3ArchitectureCore.js';
+import { ARCH_HEADER_HEIGHT, ARCH_LOWER_HEIGHT, ARCH_SHOULDER_SPAN_SCALE, preservedArchCurveWidth } from '../world/gen3ArchitectureCore.js';
 import {
   CELL_SIZE,
   WALL_HEIGHT,
@@ -67,12 +67,11 @@ let installed = false;
 const CARPET_REPEAT_METERS = CELL_SIZE / 5;
 const ARCH_CURVE_SEGMENTS = 18;
 const ARCH_HEADER_BRIDGE_MAX_GAP = 4.1;
-const ARCH_CURVE_MAX_WIDTH = 1.42;
-const ARCH_CURVE_MIN_WIDTH = 0.72;
-const ARCH_UPPER_BOTTOM = 2.02;
-const ARCH_UPPER_TOP = WALL_HEIGHT - 0.14;
-const ARCH_CURVE_APEX = Math.min(ARCH_UPPER_TOP - 0.24, 2.56);
-const ARCH_JOIN_OVERLAP = 0.035;
+const ARCH_UPPER_BOTTOM = 1.92;
+const ARCH_UPPER_TOP = WALL_HEIGHT - 0.24;
+const ARCH_CURVE_APEX = Math.min(ARCH_UPPER_TOP - 0.24, 2.46);
+const ARCH_JOIN_OVERLAP = 0.045;
+const ARCH_CELL_SEAM_OVERLAP = 0.012;
 const ARCH_PIER_DEPTH = WALL_THICKNESS + 0.10;
 const ARCH_UPPER_DEPTH = WALL_THICKNESS + 0.16;
 const ARCH_LOWER_PANEL_DEPTH = Math.max(0.14, WALL_THICKNESS - 0.10);
@@ -324,7 +323,18 @@ function mergedHeaderRuns(line: WorldArchLine): Interval[] {
 }
 
 function curveWidthForBay(width: number): number {
-  return Math.min(ARCH_CURVE_MAX_WIDTH, Math.max(ARCH_CURVE_MIN_WIDTH, width * 0.34), width * 0.44);
+  return preservedArchCurveWidth(width);
+}
+
+export function archFramePresentationProfile(): {
+  upperBottom: number; upperTop: number; ceilingReveal: number; curveApex: number;
+  joinOverlap: number; cellSeamOverlap: number; pierDepth: number; upperDepth: number; shoulderSpanScale: number;
+} {
+  return {
+    upperBottom: ARCH_UPPER_BOTTOM, upperTop: ARCH_UPPER_TOP, ceilingReveal: WALL_HEIGHT - ARCH_UPPER_TOP, curveApex: ARCH_CURVE_APEX,
+    joinOverlap: ARCH_JOIN_OVERLAP, cellSeamOverlap: ARCH_CELL_SEAM_OVERLAP, pierDepth: ARCH_PIER_DEPTH, upperDepth: ARCH_UPPER_DEPTH,
+    shoulderSpanScale: ARCH_SHOULDER_SPAN_SCALE
+  };
 }
 
 function intervalContains(intervals: readonly Interval[], point: number, margin = 0.06): boolean {
@@ -431,8 +441,8 @@ function cellOwnsLine(descriptor: CellDescriptor, orientation: WallSpec['orienta
 }
 function clippedInterval(descriptor: CellDescriptor, orientation: WallSpec['orientation'], start: number, end: number): Interval | undefined {
   const [cellStart, cellEnd] = cellAlongBounds(descriptor, orientation);
-  const clippedStart = Math.max(start, cellStart);
-  const clippedEnd = Math.min(end, cellEnd);
+  const clippedStart = Math.max(start, cellStart - ARCH_CELL_SEAM_OVERLAP);
+  const clippedEnd = Math.min(end, cellEnd + ARCH_CELL_SEAM_OVERLAP);
   return clippedEnd - clippedStart > 0.015 ? [clippedStart, clippedEnd] : undefined;
 }
 function localBoxPosition(
@@ -626,8 +636,9 @@ function hideSemanticDividerMeshes(visual: CellVisual, ids: Set<string>): void {
   }
 }
 
-function renderArchFrames(renderer: WorldRenderer): void {
+function renderArchFrames(renderer: WorldRenderer, targetCellIds?: ReadonlySet<string>): void {
   const visuals = [...renderer.loaded.values()];
+  const targetVisuals = targetCellIds ? visuals.filter((visual) => targetCellIds.has(visual.descriptor.id)) : visuals;
   const descriptors = visuals.map((visual) => visual.descriptor);
   const lines = archLinesForDescriptors(descriptors);
   const sourceIds = dividerSourceWallIds(lines);
@@ -636,7 +647,7 @@ function renderArchFrames(renderer: WorldRenderer): void {
   const upperMaterial = material(cache, 'arch-frame:upper', ARCH_UPPER_TINT);
   const panelMaterial = material(cache, 'arch-frame:panel', ARCH_PANEL_TINT);
 
-  for (const visual of visuals) {
+  for (const visual of targetVisuals) {
     clearArchFrameVisuals(visual);
     if (visual.descriptor.world.generationVersion === 'gen3-v1') {
       resetSemanticArchMeshes(visual);
@@ -648,7 +659,7 @@ function renderArchFrames(renderer: WorldRenderer): void {
     const bays = frameBaysForLine(line);
     const activeSupportIntervals = mergeIntervals(line.solids.map((wall) => [wall.start, wall.end] as const))
       .filter((support) => bays.some((bay) => Math.abs(support[1] - bay.start) < 0.08 || Math.abs(support[0] - bay.end) < 0.08));
-    for (const visual of visuals) {
+    for (const visual of targetVisuals) {
       if (visual.descriptor.world.generationVersion !== 'gen3-v1') continue;
       for (let index = 0; index < activeSupportIntervals.length; index += 1) {
         const support = activeSupportIntervals[index]!;
@@ -665,8 +676,26 @@ function renderArchFrames(renderer: WorldRenderer): void {
           pierMaterial
         );
       }
+      const shoulderHeight = ARCH_UPPER_TOP - ARCH_UPPER_BOTTOM;
+      for (let supportIndex = 0; supportIndex < activeSupportIntervals.length; supportIndex += 1) {
+        const support = activeSupportIntervals[supportIndex]!;
+        const connectsLeft = bays.some((bay) => Math.abs(bay.end - support[0]) < 0.08);
+        const connectsRight = bays.some((bay) => Math.abs(bay.start - support[1]) < 0.08);
+        if (!connectsLeft || !connectsRight) continue;
+        addWorldBoxClipped(
+          visual,
+          `upper-through-pier:${line.key}:${supportIndex}`,
+          line.orientation,
+          line.fixed,
+          support[0] - ARCH_JOIN_OVERLAP,
+          support[1] + ARCH_JOIN_OVERLAP,
+          ARCH_UPPER_BOTTOM + shoulderHeight / 2,
+          shoulderHeight,
+          ARCH_UPPER_DEPTH,
+          upperMaterial
+        );
+      }
       for (const bay of bays) {
-        const shoulderHeight = ARCH_UPPER_TOP - ARCH_UPPER_BOTTOM;
         addWorldBoxClipped(
           visual,
           `shoulder-left:${bay.id}`,
@@ -722,6 +751,27 @@ function applyRegionPresentation(renderer: WorldRenderer, visual: CellVisual): v
  * topology/collision ownership; A-A1 is reconstructed from those world-space
  * divider runs so streaming Cells only clip one continuous heavy frame.
  */
+const pendingArchCells = new WeakMap<WorldRenderer, Set<string>>();
+const scheduledArchFlush = new WeakSet<WorldRenderer>();
+
+function markNearbyArchCells(renderer: WorldRenderer, descriptor: CellDescriptor): void {
+  const pending = pendingArchCells.get(renderer) ?? new Set<string>();
+  for (const visual of renderer.loaded.values()) {
+    if (Math.abs(visual.descriptor.address.cellX - descriptor.address.cellX) <= 1
+      && Math.abs(visual.descriptor.address.cellZ - descriptor.address.cellZ) <= 1) pending.add(visual.descriptor.id);
+  }
+  pendingArchCells.set(renderer, pending);
+  if (scheduledArchFlush.has(renderer)) return;
+  scheduledArchFlush.add(renderer);
+  queueMicrotask(() => {
+    scheduledArchFlush.delete(renderer);
+    const targets = pendingArchCells.get(renderer);
+    if (!targets || targets.size === 0) return;
+    pendingArchCells.set(renderer, new Set());
+    renderArchFrames(renderer, targets);
+  });
+}
+
 export function installLevel0RegionPresentation(): void {
   if (installed) return;
   installed = true;
@@ -731,12 +781,13 @@ export function installLevel0RegionPresentation(): void {
     originalLoadCell.call(this, descriptor);
     const visual = this.loaded.get(descriptor.id);
     if (visual && !alreadyLoaded) applyRegionPresentation(this, visual);
-    renderArchFrames(this);
+    markNearbyArchCells(this, descriptor);
   };
 
   const originalUnloadCell = WorldRenderer.prototype.unloadCell;
   WorldRenderer.prototype.unloadCell = function patchedRegionPresentationUnload(this: WorldRenderer, cellId: string): void {
+    const descriptor = this.loaded.get(cellId)?.descriptor;
     originalUnloadCell.call(this, cellId);
-    renderArchFrames(this);
+    if (descriptor) markNearbyArchCells(this, descriptor);
   };
 }

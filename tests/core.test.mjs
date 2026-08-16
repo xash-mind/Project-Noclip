@@ -162,7 +162,7 @@ test('Blackout is a Condition with exactly zero local fixtures', () => {
 test('World Lab registries expose canonical categories and only spawn Items or implemented Features', () => {
   assert.deepEqual(validateObjectCatalog(), []);
   assert.deepEqual(new Set(OBJECT_CATALOG.flatMap((entry) => entry.itemDefinitionId ? [entry.itemDefinitionId] : [])), new Set(Object.keys(ITEM_DEFINITIONS)));
-  assert.deepEqual(new Set(OBJECT_CATALOG.flatMap((entry) => entry.propKind ? [entry.propKind] : [])), new Set(['table', 'chair', 'cabinet']));
+  assert.deepEqual(new Set(OBJECT_CATALOG.flatMap((entry) => entry.propKind ? [entry.propKind] : [])), new Set(['table', 'chair', 'cabinet', 'bucket', 'paint-can']));
   assert.deepEqual(WORLD_VOCABULARY_CATEGORIES, ['Levels', 'Regions', 'Variants', 'Geometry', 'Materials', 'Conditions', 'Features', 'Structures', 'Carvers', 'Anomalies', 'Entities', 'Items', 'Transitions']);
   assert.equal(WORLD_CATALOG.some((entry) => entry.id === 'threshold' || entry.label === 'Threshold'), false);
   assert.equal(WORLD_CATALOG.find((entry) => entry.id === 'manila-room')?.category, 'Structures');

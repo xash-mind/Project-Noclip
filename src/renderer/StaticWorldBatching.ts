@@ -5,96 +5,86 @@ import { isMFluorescentPanelVisualName } from './fixtureVisualOwnership.js';
 import { installFixtureLighting } from './fixtureLighting.js';
 import { installLevel0RegionPresentation } from './level0RegionPresentation.js';
 
-const STATIC_WORLD_BATCH_GROUP_ID = 1601;
-const STATIC_WORLD_BATCH_GROUP_NAME = 'level0-static-world';
+const STATIC_WORLD_BATCH_GROUP_ID_START = 1601;
+const STATIC_WORLD_BATCH_GROUP_NAME = 'level0-static-cell';
 const RECONCILE_INTERVAL_MS = 100;
 const EXCLUDED_SUBTREE_PREFIXES = ['item:', 'note:', 'exit:', 'exit-frame:', 'crack:'] as const;
 
+export const STATIC_WORLD_BATCHING_PROFILE = Object.freeze({
+  mode: 'per-cell' as const,
+  reconcileIntervalMs: RECONCILE_INTERVAL_MS,
+  maxAabbSize: CELL_SIZE * 1.5,
+  excludesFluorescentPanels: true
+});
+
 type BatchRenderComponent = { batchGroupId: number };
-type BatchEntity = pc.Entity & {
-  name: string;
-  guid: string;
-  children: readonly unknown[];
-  render?: { material: pc.StandardMaterial } & BatchRenderComponent;
-};
+type BatchEntity = pc.Entity & { name: string; guid: string; children: readonly unknown[]; render?: { material: pc.StandardMaterial } & BatchRenderComponent; };
 type BatchManager = {
   addGroup(name: string, dynamic: boolean, maxAabbSize: number, id?: number): unknown;
+  removeGroup(id: number): void;
   markGroupDirty(id: number): void;
 };
 type BatchApplication = pc.Application & { root: BatchEntity; batcher: BatchManager };
-type ApplicationLookup = typeof pc.Application & {
-  getApplication(id?: string): pc.Application | undefined;
-};
+type ApplicationLookup = typeof pc.Application & { getApplication(id?: string): pc.Application | undefined; };
+interface CellBatch { id: number; guid: string; }
 
-function isBatchEntity(node: unknown): node is BatchEntity {
-  return node instanceof pc.Entity;
-}
-
-function isExcludedSubtree(entity: BatchEntity): boolean {
-  return EXCLUDED_SUBTREE_PREFIXES.some((prefix) => entity.name.startsWith(prefix));
-}
-
-function assignStaticVisuals(entity: BatchEntity): boolean {
+function isBatchEntity(node: unknown): node is BatchEntity { return node instanceof pc.Entity; }
+function isExcludedSubtree(entity: BatchEntity): boolean { return EXCLUDED_SUBTREE_PREFIXES.some((prefix) => entity.name.startsWith(prefix)); }
+function assignStaticVisuals(entity: BatchEntity, batchGroupId: number): boolean {
   if (isExcludedSubtree(entity)) return false;
   if (isMFluorescentPanelVisualName(entity.name)) {
-    if (entity.render && entity.render.batchGroupId !== -1) {
-      entity.render.batchGroupId = -1;
-      return true;
-    }
+    if (entity.render && entity.render.batchGroupId !== -1) { entity.render.batchGroupId = -1; return true; }
     return false;
   }
   let changed = false;
-  if (entity.render && entity.render.batchGroupId !== STATIC_WORLD_BATCH_GROUP_ID) {
-    entity.render.batchGroupId = STATIC_WORLD_BATCH_GROUP_ID;
-    changed = true;
-  }
-  for (const child of entity.children) {
-    if (isBatchEntity(child)) changed = assignStaticVisuals(child) || changed;
-  }
+  if (entity.render && entity.render.batchGroupId !== batchGroupId) { entity.render.batchGroupId = batchGroupId; changed = true; }
+  for (const child of entity.children) if (isBatchEntity(child)) changed = assignStaticVisuals(child, batchGroupId) || changed;
   return changed;
 }
-
 function getRunningApplication(): BatchApplication | undefined {
-  const application = (pc.Application as ApplicationLookup).getApplication('game-canvas');
-  return application as BatchApplication | undefined;
+  return (pc.Application as ApplicationLookup).getApplication('game-canvas') as BatchApplication | undefined;
 }
 
-/**
- * Installs renderer-owned Level 0 presentation/lighting and one render-only
- * batching layer over canonical streamed Cells. M-F1 diffuser panels remain
- * dynamic because their material changes on the canonical electrical pulse.
- * Collision, interaction and persistence data never enter this layer.
- */
+/** Static geometry is batched per streamed Cell so one entering/leaving Cell never invalidates the whole Level 0 batch. */
 export function installStaticWorldBatching(): void {
   installLevel0RegionPresentation();
   installArchDividerRuntimeCorrection();
   installFixtureLighting();
   let currentApp: BatchApplication | undefined;
-  let previousCellGuids = new Set<string>();
+  let nextGroupId = STATIC_WORLD_BATCH_GROUP_ID_START;
+  let freeGroupIds: number[] = [];
+  let cellBatches = new Map<string, CellBatch>();
 
+  const reset = (app: BatchApplication): void => {
+    currentApp = app;
+    nextGroupId = STATIC_WORLD_BATCH_GROUP_ID_START;
+    freeGroupIds = [];
+    cellBatches = new Map();
+  };
+  const allocate = (app: BatchApplication, cell: BatchEntity): CellBatch => {
+    const id = freeGroupIds.pop() ?? nextGroupId++;
+    app.batcher.addGroup(`${STATIC_WORLD_BATCH_GROUP_NAME}:${cell.guid}`, false, STATIC_WORLD_BATCHING_PROFILE.maxAabbSize, id);
+    const batch = { id, guid: cell.guid };
+    cellBatches.set(cell.guid, batch);
+    return batch;
+  };
   const reconcile = (): void => {
     const app = getRunningApplication();
     if (!app) return;
-
-    if (app !== currentApp) {
-      currentApp = app;
-      previousCellGuids = new Set<string>();
-      app.batcher.addGroup(STATIC_WORLD_BATCH_GROUP_NAME, false, CELL_SIZE * 3, STATIC_WORLD_BATCH_GROUP_ID);
+    if (app !== currentApp) reset(app);
+    const cells = app.root.children.filter(isBatchEntity).filter((entity) => entity.name.startsWith('cell:'));
+    const present = new Set(cells.map((cell) => cell.guid));
+    for (const [guid, batch] of [...cellBatches.entries()]) {
+      if (present.has(guid)) continue;
+      app.batcher.removeGroup(batch.id);
+      freeGroupIds.push(batch.id);
+      cellBatches.delete(guid);
     }
-
-    const cells = app.root.children
-      .filter(isBatchEntity)
-      .filter((entity) => entity.name.startsWith('cell:'));
-    const nextCellGuids = new Set<string>(cells.map((entity) => entity.guid));
-    const cellSetChanged = nextCellGuids.size !== previousCellGuids.size
-      || [...nextCellGuids].some((guid) => !previousCellGuids.has(guid));
-    let assignedNewVisual = false;
-    for (const cell of cells) assignedNewVisual = assignStaticVisuals(cell) || assignedNewVisual;
-
-    if (cellSetChanged || assignedNewVisual) app.batcher.markGroupDirty(STATIC_WORLD_BATCH_GROUP_ID);
-    previousCellGuids = nextCellGuids;
+    for (const cell of cells) {
+      const batch = cellBatches.get(cell.guid) ?? allocate(app, cell);
+      if (assignStaticVisuals(cell, batch.id)) app.batcher.markGroupDirty(batch.id);
+    }
   };
-
   reconcile();
   window.setInterval(reconcile, RECONCILE_INTERVAL_MS);
 }

@@ -52,7 +52,9 @@ export const PROP_KINDS = [
   'ceiling-gap',
   'stain',
   'carpet-patch',
-  'sign'
+  'sign',
+  'bucket',
+  'paint-can'
 ] as const;
 export type PropKind = typeof PROP_KINDS[number];
 
