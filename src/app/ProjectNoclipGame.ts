@@ -394,7 +394,8 @@ export class ProjectNoclipGame {
     const token = ++this.streamWarmupToken;
     requestAnimationFrame(() => requestAnimationFrame(() => {
       if (token !== this.streamWarmupToken || !this.started || !this.save || !this.renderer) return;
-      this.updateStreaming(false, targetRadius);
+      // Startup may fill the accepted active envelope eagerly; movement transitions stay budgeted.
+      this.updateStreaming(true, targetRadius);
     }));
   }
 
