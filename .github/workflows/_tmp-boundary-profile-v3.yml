@@ -1,0 +1,150 @@
+name: Temporary Boundary Profile V3
+
+on:
+  push:
+    branches:
+      - cleanup/codebase-maintainability-2026-08-14
+
+permissions:
+  contents: write
+
+jobs:
+  profile:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Prepare and instrument exact before/after worktrees
+        run: |
+          git worktree add /tmp/noclip-before 2a183c9cdcd9ad4089e0f4261e276ae82a8efc23
+          git worktree add /tmp/noclip-after 04d89e8a4b772efdcd817ceb19cf748b1198c760
+          cp scripts/_tmp_boundary_profile_v3.py /tmp/boundary-profile-v3.py
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          roots=[(Path('/tmp/noclip-before'),'src/renderer/renderSettingsRuntime.ts'),(Path('/tmp/noclip-after'),'src/renderer/streamingScheduler.ts')]
+          expose="(window as unknown as { __testGame?: ProjectNoclipGame }).__testGame = game;\n"
+          helper="""
+          function profiledGenerateCell(options: Parameters<typeof generateCell>[0]): CellDescriptor {
+            const started = performance.now();
+            const result = generateCell(options);
+            const metrics = typeof window !== 'undefined'
+              ? (window as unknown as { __streamProfileMetrics?: Record<string, number> }).__streamProfileMetrics
+              : undefined;
+            if (metrics) {
+              metrics.generateCalls = (metrics.generateCalls ?? 0) + 1;
+              metrics.generateMs = (metrics.generateMs ?? 0) + performance.now() - started;
+            }
+            return result;
+          }
+          """
+          for root,gen_path in roots:
+              main=root/'src/main.ts';text=main.read_text();needle='const game = new ProjectNoclipGame();\n';assert needle in text;main.write_text(text.replace(needle,needle+expose,1))
+              gen=root/gen_path;text=gen.read_text();needle='let installed = false;\n';assert needle in text;text=text.replace(needle,needle+helper,1);assert 'generateCell({' in text;text=text.replace('generateCell({','profiledGenerateCell({');gen.write_text(text)
+
+              cell=root/'src/renderer/cellBuilder.ts';text=cell.read_text()
+              needle='  buildCell(descriptor: CellDescriptor): CellVisual {\n';assert needle in text
+              text=text.replace(needle,needle+'    const __profileCellStart = performance.now();\n    let __profileCollisionMs = 0;\n    let __profileCollisionCalls = 0;\n',1)
+              old='      const collider = this.toWorldCollider(descriptor, wallSpec);\n      colliders.push(collider); this.walls.set(collider.id, collider);\n'
+              assert old in text
+              new='      const __profileCollisionStart = performance.now();\n      const collider = this.toWorldCollider(descriptor, wallSpec);\n      colliders.push(collider); this.walls.set(collider.id, collider);\n      __profileCollisionMs += performance.now() - __profileCollisionStart;\n      __profileCollisionCalls += 1;\n'
+              text=text.replace(old,new,1)
+              old='    const interactions = this.addInteractions(descriptor, root);\n    return { descriptor, root, colliders, interactions };\n'
+              assert old in text
+              new="""    const interactions = this.addInteractions(descriptor, root);
+            const __profileMetrics = typeof window !== 'undefined'
+              ? (window as unknown as { __streamProfileMetrics?: Record<string, number> }).__streamProfileMetrics
+              : undefined;
+            if (__profileMetrics) {
+              __profileMetrics.cellBuildCalls = (__profileMetrics.cellBuildCalls ?? 0) + 1;
+              __profileMetrics.cellBuildMs = (__profileMetrics.cellBuildMs ?? 0) + performance.now() - __profileCellStart;
+              __profileMetrics.collisionRegistrationCalls = (__profileMetrics.collisionRegistrationCalls ?? 0) + __profileCollisionCalls;
+              __profileMetrics.collisionRegistrationMs = (__profileMetrics.collisionRegistrationMs ?? 0) + __profileCollisionMs;
+            }
+            return { descriptor, root, colliders, interactions };
+          """
+              cell.write_text(text.replace(old,new,1))
+
+              arch=root/'src/renderer/level0RegionPresentation.ts';text=arch.read_text()
+              text,count=re.subn(r'(function renderArchFrames\([^\n]+\): void \{\n)',r'\1  const __profileArchStart = performance.now();\n',text,count=1);assert count==1
+              marker='\n}\n\nfunction applyRegionPresentation(renderer: WorldRenderer, visual: CellVisual): void {';assert marker in text
+              addition="""
+            const __profileArchMetrics = typeof window !== 'undefined'
+              ? (window as unknown as { __streamProfileMetrics?: Record<string, number> }).__streamProfileMetrics
+              : undefined;
+            if (__profileArchMetrics) {
+              __profileArchMetrics.archCalls = (__profileArchMetrics.archCalls ?? 0) + 1;
+              __profileArchMetrics.archMs = (__profileArchMetrics.archMs ?? 0) + performance.now() - __profileArchStart;
+            }
+          }
+
+          function applyRegionPresentation(renderer: WorldRenderer, visual: CellVisual): void {"""
+              arch.write_text(text.replace(marker,'\n'+addition,1))
+
+              fixture=root/'src/renderer/fixtureLighting.ts';text=fixture.read_text()
+              needle='function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void {\n';assert needle in text;text=text.replace(needle,needle+'  const __profileFixtureStart = performance.now();\n',1)
+              marker='  markFixtureShadowsDirtyNearCell(state, descriptor);\n}\n\nfunction detachCellFixtures';assert marker in text
+              repl="""  markFixtureShadowsDirtyNearCell(state, descriptor);
+            const __profileFixtureMetrics = typeof window !== 'undefined'
+              ? (window as unknown as { __streamProfileMetrics?: Record<string, number> }).__streamProfileMetrics
+              : undefined;
+            if (__profileFixtureMetrics) {
+              __profileFixtureMetrics.fixtureAttachCalls = (__profileFixtureMetrics.fixtureAttachCalls ?? 0) + 1;
+              __profileFixtureMetrics.fixtureAttachMs = (__profileFixtureMetrics.fixtureAttachMs ?? 0) + performance.now() - __profileFixtureStart;
+            }
+          }
+
+          function detachCellFixtures"""
+              fixture.write_text(text.replace(marker,repl,1))
+
+              batching=root/'src/renderer/StaticWorldBatching.ts';text=batching.read_text()
+              needle='  const reconcile = (): void => {\n';assert needle in text;text=text.replace(needle,needle+'    const __profileBatchStart = performance.now();\n',1)
+              marker='  };\n  reconcile();\n';assert marker in text
+              repl="""    const __profileBatchMetrics = typeof window !== 'undefined'
+              ? (window as unknown as { __streamProfileMetrics?: Record<string, number> }).__streamProfileMetrics
+              : undefined;
+            if (__profileBatchMetrics) {
+              __profileBatchMetrics.staticBatchCalls = (__profileBatchMetrics.staticBatchCalls ?? 0) + 1;
+              __profileBatchMetrics.staticBatchMs = (__profileBatchMetrics.staticBatchMs ?? 0) + performance.now() - __profileBatchStart;
+            }
+          };
+          reconcile();
+          """
+              batching.write_text(text.replace(marker,repl,1))
+          PY
+      - name: Build exact instrumented revisions
+        run: |
+          (cd /tmp/noclip-before && npm install --no-audit --no-fund && npm run typecheck && npm run build)
+          (cd /tmp/noclip-after && npm install --no-audit --no-fund && npm run typecheck && npm run build)
+      - name: Serve exact revisions
+        run: |
+          (cd /tmp/noclip-before && PORT=4173 npm run preview >/tmp/before.log 2>&1 &)
+          (cd /tmp/noclip-after && PORT=4174 npm run preview >/tmp/after.log 2>&1 &)
+          for n in $(seq 1 30); do curl -fsS http://127.0.0.1:4173 >/dev/null && curl -fsS http://127.0.0.1:4174 >/dev/null && exit 0; sleep 1; done
+          cat /tmp/before.log /tmp/after.log; exit 1
+      - name: Install Selenium
+        run: python -m pip install --disable-pip-version-check selenium
+      - name: Profile boundary transitions
+        run: python /tmp/boundary-profile-v3.py
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boundary-profile-v3
+          path: artifacts/boundary-profile-v3
+          if-no-files-found: warn
+      - name: Remove temporary harness
+        if: always()
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm -f .github/workflows/_tmp-boundary-profile-v3.yml scripts/_tmp_boundary_profile_v3.py
+          git commit -m "chore: remove instrumented boundary profiler"
+          git push origin HEAD:cleanup/codebase-maintainability-2026-08-14
