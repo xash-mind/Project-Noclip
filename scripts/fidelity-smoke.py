@@ -46,6 +46,33 @@ def build_driver() -> webdriver.Chrome:
     return driver
 
 
+def force_headless_focus(driver: webdriver.Chrome) -> None:
+    driver.execute_script("""
+      try {
+        Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => true });
+      } catch (_error) {}
+      window.focus();
+      document.querySelector('#game-canvas')?.focus();
+    """)
+
+
+def pointer_locked(driver: webdriver.Chrome) -> bool:
+    return bool(driver.execute_script("return document.pointerLockElement===document.querySelector('#game-canvas')"))
+
+
+def ensure_gameplay_active(driver: webdriver.Chrome, timeout: float = 7.0) -> None:
+    force_headless_focus(driver)
+    if pointer_locked(driver):
+        return
+    button = driver.find_element(By.CSS_SELECTOR, '[data-action="resume"]')
+    if button.is_displayed():
+        button.click()
+    else:
+        driver.find_element(By.CSS_SELECTOR, '#game-canvas').click()
+    force_headless_focus(driver)
+    wait_for(driver, lambda current: pointer_locked(current), timeout=timeout, message="pointer lock")
+
+
 def capture_canvas(driver: webdriver.Chrome, path: Path) -> None:
     value = driver.execute_async_script("""
       const done = arguments[0]; const canvas = document.querySelector('#game-canvas');
@@ -100,10 +127,8 @@ def qa_locate(driver: webdriver.Chrome, region: str, depth: str) -> str:
 
 
 def resume_input(driver: webdriver.Chrome) -> bool:
-    button = driver.find_element(By.CSS_SELECTOR, '[data-action="resume"]')
-    if button.is_displayed(): button.click()
     try:
-        wait_for(driver, lambda current: current.execute_script("return document.pointerLockElement===document.querySelector('#game-canvas')"), timeout=7, message="pointer lock")
+        ensure_gameplay_active(driver)
         return True
     except AssertionError:
         return False
@@ -136,10 +161,14 @@ def drive_forward_to_progress(
     timeout: float,
 ) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
+    ensure_gameplay_active(driver)
     key_event(driver, "keyDown")
     try:
         while time.monotonic() < deadline:
-            driver.execute_script("return performance.now();")
+            if not pointer_locked(driver):
+                key_event(driver, "keyUp")
+                ensure_gameplay_active(driver)
+                key_event(driver, "keyDown")
             snapshot = qa_snapshot(driver)
             if snapshot and path_progress(snapshot, start, end) >= target_progress:
                 return snapshot
@@ -147,7 +176,7 @@ def drive_forward_to_progress(
     finally:
         key_event(driver, "keyUp")
     final_snapshot = qa_snapshot(driver)
-    raise AssertionError(f"Player did not reach path progress {target_progress:.2f}; final={final_snapshot}, start={start}, end={end}")
+    raise AssertionError(f"Player did not reach path progress {target_progress:.2f}; final={final_snapshot}, start={start}, end={end}, pointerLock={pointer_locked(driver)}")
 
 
 def fixture_snapshot(driver: webdriver.Chrome, group_id: str) -> dict[str, Any]:
@@ -162,15 +191,19 @@ def fixture_snapshot(driver: webdriver.Chrome, group_id: str) -> dict[str, Any]:
 
 def wait_for_flicker_phase(driver: webdriver.Chrome, group_id: str, lit: bool, timeout: float = 24.0) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
+    pulses: set[float] = set()
     while time.monotonic() < deadline:
+        ensure_gameplay_active(driver)
         value = fixture_snapshot(driver, group_id)
         pulse = float(value.get("pulse", -1))
+        pulses.add(round(pulse, 6))
         if (pulse >= FLICKER_THRESHOLD) == lit:
-            # Allow the renderer one frame to apply the same thresholded pulse before capture.
             time.sleep(0.08)
-            return fixture_snapshot(driver, group_id)
+            settled = fixture_snapshot(driver, group_id)
+            settled["observedPulseCount"] = len(pulses)
+            return settled
         time.sleep(0.04)
-    raise AssertionError(f"Timed out waiting for flicker {'lit' if lit else 'dark'} phase for {group_id}")
+    raise AssertionError(f"Timed out waiting for flicker {'lit' if lit else 'dark'} phase for {group_id}; distinctPulses={sorted(pulses)}")
 
 
 def fixture_state_evidence(driver: webdriver.Chrome, state: str) -> dict[str, Any]:
@@ -178,6 +211,7 @@ def fixture_state_evidence(driver: webdriver.Chrome, state: str) -> dict[str, An
     if not evidence:
         raise AssertionError(f"Could not resolve a deterministic {state} fixture")
     time.sleep(0.7)
+    ensure_gameplay_active(driver)
     snapshot = qa_snapshot(driver)
     if not snapshot:
         raise AssertionError(f"Missing runtime snapshot for {state} fixture")
@@ -237,16 +271,14 @@ def main() -> None:
         if not route: raise AssertionError("Could not resolve a freshly streamed runtime-clear Arch route bay")
         time.sleep(0.7); before = qa_snapshot(driver); capture_canvas(driver, ARTIFACT_DIR / "arch-route-before.png")
         if not resume_input(driver): raise AssertionError("Pointer lock unavailable for required Arch traversal")
-        # The semantic gate remains unchanged; the larger timeout only tolerates slow SwiftShader frames.
+        # Keep the actual journey active in headless Chromium; losing pointer lock pauses movement and the canonical flicker clock.
         after = drive_forward_to_progress(driver, route["start"], route["end"], ARCH_ROUTE_CROSSING_PROGRESS, 36.0)
         capture_canvas(driver, ARTIFACT_DIR / "arch-route-after.png")
         fixed, axis = float(route["fixed"]), "z" if route["orientation"] == "z" else "x"
         if not before or not (float(before[axis]) < fixed - 0.7 and float(after[axis]) > fixed + 0.7):
             raise AssertionError(f"Player did not traverse the selected Arch route bay: {before} -> {after}, route={route}")
-        report["arch"] = {"message": arch_message, "route": route, "before": before, "after": after, "pointerLock": True}
+        report["arch"] = {"message": arch_message, "route": route, "before": before, "after": after, "pointerLock": pointer_locked(driver)}
 
-        # Fixture-specific evidence verifies actual deterministic on/off states and both
-        # sides of the renderer's shared binary flicker threshold.
         qa_locate(driver, "ordinary-level-0", "nearest")
         fixture_states = {
             state: fixture_state_evidence(driver, state)

@@ -54,6 +54,23 @@ def force_headless_focus(driver: webdriver.Chrome) -> None:
     """)
 
 
+def pointer_locked(driver: webdriver.Chrome) -> bool:
+    return bool(driver.execute_script("return document.pointerLockElement===document.querySelector('#game-canvas')"))
+
+
+def ensure_gameplay_active(driver: webdriver.Chrome, timeout: float = 7.0) -> None:
+    force_headless_focus(driver)
+    if pointer_locked(driver):
+        return
+    resume = driver.find_element(By.CSS_SELECTOR, '[data-action="resume"]')
+    if resume.is_displayed():
+        resume.click()
+    else:
+        driver.find_element(By.CSS_SELECTOR, '#game-canvas').click()
+    force_headless_focus(driver)
+    wait_for(driver, lambda current: pointer_locked(current), timeout=timeout, message="pointer lock")
+
+
 def capture_canvas(driver: webdriver.Chrome, path: Path) -> None:
     value = driver.execute_async_script("""
       const done = arguments[0]; const canvas = document.querySelector('#game-canvas');
@@ -87,19 +104,23 @@ def place_fixture(driver: webdriver.Chrome, state: str) -> dict[str, Any]:
     if not evidence:
         raise AssertionError(f"Could not place at deterministic {state} fixture")
     time.sleep(0.8)
+    ensure_gameplay_active(driver)
     return evidence
 
 
 def wait_flicker(driver: webdriver.Chrome, group_id: str, lit: bool, timeout: float = 16.0) -> dict[str, Any] | None:
     deadline = time.monotonic() + timeout
+    pulses: set[float] = set()
     while time.monotonic() < deadline:
-        force_headless_focus(driver)
+        ensure_gameplay_active(driver)
         snapshot = fixture_snapshot(driver, group_id)
         pulse = float(snapshot.get("pulse", -1))
+        pulses.add(round(pulse, 6))
         if (pulse >= FLICKER_THRESHOLD) == lit:
             time.sleep(0.05)
-            return fixture_snapshot(driver, group_id)
-        driver.execute_script("return performance.now();")
+            settled = fixture_snapshot(driver, group_id)
+            settled["observedPulseCount"] = len(pulses)
+            return settled
         time.sleep(0.035)
     return None
 
@@ -118,11 +139,7 @@ def main() -> None:
           const set=(selector,value)=>{const e=document.querySelector(selector);if(!e)return false;if(e.type==='checkbox')e.checked=value;else e.value=value;e.dispatchEvent(new Event('change',{bubbles:true}));return true;};
           set('[data-lab="bypass"]',true); set('[data-lab="radius"]','3'); set('[data-lab="condition"]','clear'); set('[data-lab="carver"]','none'); set('[data-lab="structure"]','none');
         """)
-        resume = driver.find_element(By.CSS_SELECTOR, '[data-action="resume"]')
-        if resume.is_displayed():
-            resume.click()
-        force_headless_focus(driver)
-        wait_for(driver, lambda current: current.execute_script("return document.pointerLockElement===document.querySelector('#game-canvas')"), timeout=7, message="pointer lock")
+        ensure_gameplay_active(driver)
 
         on = place_fixture(driver, "on")
         on_snapshot = fixture_snapshot(driver, on["groupId"])
