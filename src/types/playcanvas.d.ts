@@ -43,7 +43,7 @@ declare module 'playcanvas' {
     constructor(name?: string);
     name: string;
     enabled: boolean;
-    render?: { material: StandardMaterial; castShadows: boolean };
+    render?: { enabled: boolean; material: StandardMaterial; castShadows: boolean };
     light?: { intensity: number; range: number; color: Color; shadowUpdateMode: number };
     addComponent(type: string, data?: Record<string, unknown>): void;
     addChild(child: Entity): void;
