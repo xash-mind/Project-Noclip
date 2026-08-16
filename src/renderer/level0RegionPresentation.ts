@@ -70,8 +70,9 @@ const ARCH_HEADER_BRIDGE_MAX_GAP = 4.1;
 const ARCH_UPPER_BOTTOM = 1.92;
 const ARCH_UPPER_TOP = WALL_HEIGHT - 0.24;
 const ARCH_CURVE_APEX = Math.min(ARCH_UPPER_TOP - 0.24, 2.46);
-const ARCH_JOIN_OVERLAP = 0.045;
-const ARCH_CELL_SEAM_OVERLAP = 0.012;
+const ARCH_CURVE_JOIN_HANDOFF = 0.018;
+const ARCH_PIER_BRIDGE_OVERLAP = 0.045;
+const ARCH_CELL_SEAM_HANDOFF = 0.012;
 const ARCH_PIER_DEPTH = WALL_THICKNESS + 0.10;
 const ARCH_UPPER_DEPTH = WALL_THICKNESS + 0.16;
 const ARCH_LOWER_PANEL_DEPTH = Math.max(0.14, WALL_THICKNESS - 0.10);
@@ -332,7 +333,7 @@ export function archFramePresentationProfile(): {
 } {
   return {
     upperBottom: ARCH_UPPER_BOTTOM, upperTop: ARCH_UPPER_TOP, ceilingReveal: WALL_HEIGHT - ARCH_UPPER_TOP, curveApex: ARCH_CURVE_APEX,
-    joinOverlap: ARCH_JOIN_OVERLAP, cellSeamOverlap: ARCH_CELL_SEAM_OVERLAP, pierDepth: ARCH_PIER_DEPTH, upperDepth: ARCH_UPPER_DEPTH,
+    joinOverlap: ARCH_CURVE_JOIN_HANDOFF, cellSeamOverlap: ARCH_CELL_SEAM_HANDOFF, pierDepth: ARCH_PIER_DEPTH, upperDepth: ARCH_UPPER_DEPTH,
     shoulderSpanScale: ARCH_SHOULDER_SPAN_SCALE
   };
 }
@@ -441,8 +442,14 @@ function cellOwnsLine(descriptor: CellDescriptor, orientation: WallSpec['orienta
 }
 function clippedInterval(descriptor: CellDescriptor, orientation: WallSpec['orientation'], start: number, end: number): Interval | undefined {
   const [cellStart, cellEnd] = cellAlongBounds(descriptor, orientation);
-  const clippedStart = Math.max(start, cellStart - ARCH_CELL_SEAM_OVERLAP);
-  const clippedEnd = Math.min(end, cellEnd + ARCH_CELL_SEAM_OVERLAP);
+  // One-sided Cell handoff: the preceding Cell owns the small overlap distance,
+  // and the following Cell begins exactly where that extension ends. This moves
+  // the join away from the Cell root boundary without drawing coplanar duplicate
+  // faces (which would z-fight).
+  const entersFromPreviousCell = start < cellStart - 0.0005;
+  const continuesIntoNextCell = end > cellEnd + 0.0005;
+  const clippedStart = Math.max(start, cellStart + (entersFromPreviousCell ? ARCH_CELL_SEAM_HANDOFF : 0));
+  const clippedEnd = Math.min(end, cellEnd + (continuesIntoNextCell ? ARCH_CELL_SEAM_HANDOFF : 0));
   return clippedEnd - clippedStart > 0.015 ? [clippedStart, clippedEnd] : undefined;
 }
 function localBoxPosition(
@@ -551,7 +558,15 @@ function addCurveMeshClipped(
 ): void {
   const descriptor = visual.descriptor;
   if (!cellOwnsLine(descriptor, bay.orientation, bay.fixed)) return;
-  const clip = clippedInterval(descriptor, bay.orientation, bay.curveStart, bay.curveEnd);
+  // Shoulder and curve surfaces hand off at one exact world coordinate rather
+  // than overlapping coplanar faces. The 18 mm inset is visually negligible but
+  // keeps the join hidden inside the shoulder footprint and eliminates z-fighting.
+  const clip = clippedInterval(
+    descriptor,
+    bay.orientation,
+    bay.curveStart + ARCH_CURVE_JOIN_HANDOFF,
+    bay.curveEnd - ARCH_CURVE_JOIN_HANDOFF
+  );
   if (!clip) return;
   const positions: number[] = [];
   const normals: number[] = [];
@@ -687,8 +702,8 @@ function renderArchFrames(renderer: WorldRenderer, targetCellIds?: ReadonlySet<s
           `upper-through-pier:${line.key}:${supportIndex}`,
           line.orientation,
           line.fixed,
-          support[0] - ARCH_JOIN_OVERLAP,
-          support[1] + ARCH_JOIN_OVERLAP,
+          support[0] - ARCH_PIER_BRIDGE_OVERLAP,
+          support[1] + ARCH_PIER_BRIDGE_OVERLAP,
           ARCH_UPPER_BOTTOM + shoulderHeight / 2,
           shoulderHeight,
           ARCH_UPPER_DEPTH,
@@ -701,8 +716,8 @@ function renderArchFrames(renderer: WorldRenderer, targetCellIds?: ReadonlySet<s
           `shoulder-left:${bay.id}`,
           bay.orientation,
           bay.fixed,
-          bay.start - ARCH_JOIN_OVERLAP,
-          bay.curveStart + ARCH_JOIN_OVERLAP,
+          bay.start - ARCH_PIER_BRIDGE_OVERLAP,
+          bay.curveStart + ARCH_CURVE_JOIN_HANDOFF,
           ARCH_UPPER_BOTTOM + shoulderHeight / 2,
           shoulderHeight,
           ARCH_UPPER_DEPTH,
@@ -713,8 +728,8 @@ function renderArchFrames(renderer: WorldRenderer, targetCellIds?: ReadonlySet<s
           `shoulder-right:${bay.id}`,
           bay.orientation,
           bay.fixed,
-          bay.curveEnd - ARCH_JOIN_OVERLAP,
-          bay.end + ARCH_JOIN_OVERLAP,
+          bay.curveEnd - ARCH_CURVE_JOIN_HANDOFF,
+          bay.end + ARCH_PIER_BRIDGE_OVERLAP,
           ARCH_UPPER_BOTTOM + shoulderHeight / 2,
           shoulderHeight,
           ARCH_UPPER_DEPTH,

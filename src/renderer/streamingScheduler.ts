@@ -337,8 +337,10 @@ export function reconcileStreaming(game: ProjectNoclipGame, force = false, radiu
       cancel(scheduler, 'unload', x, z);
       const visual = state.renderer.loaded.get(id);
       if (visual) {
+        // A retained/active Cell descriptor cannot change while it remains loaded:
+        // shift epochs advance only on actual unload. Reusing it avoids flooding the
+        // per-frame queue with 48 deterministic no-op descriptor refreshes per step.
         visual.root.enabled = true;
-        if (x !== state.currentCellX || z !== state.currentCellZ) enqueue(scheduler, 'refresh', x, z, 80 + cellDistance(state, x, z));
       } else {
         const score = -((x - state.currentCellX) * scheduler.directionX + (z - state.currentCellZ) * scheduler.directionZ);
         missing.push({ x, z, score });

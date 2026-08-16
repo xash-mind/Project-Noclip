@@ -10,6 +10,7 @@ const { archFramePresentationProfile } = await import('../.test-dist/src/rendere
 const { OBJECT_CATALOG, validateObjectCatalog } = await import('../.test-dist/src/renderer/objectCatalog.js');
 const streamingSource = await readFile(new URL('../src/renderer/streamingScheduler.ts', import.meta.url), 'utf8');
 const batchingSource = await readFile(new URL('../src/renderer/StaticWorldBatching.ts', import.meta.url), 'utf8');
+const archPresentationSource = await readFile(new URL('../src/renderer/level0RegionPresentation.ts', import.meta.url), 'utf8');
 
 function tuning(regionOverride) {
   return { ...DEFAULT_TUNING, regionOverride, conditionOverride: 'clear', carverOverride: 'none', structureOverride: 'none', gateBypass: true };
@@ -41,7 +42,7 @@ test('A-A1 visible upper assembly is translated down 0.10 m and stays deeper tha
   assert.ok(Math.abs(profile.curveApex - 2.46) < 1e-12);
   assert.equal(profile.shoulderSpanScale, 0.5);
   assert.ok(profile.upperDepth > profile.pierDepth);
-  assert.ok(profile.joinOverlap >= 0.04);
+  assert.ok(profile.joinOverlap >= 0.015 && profile.joinOverlap <= 0.02);
   assert.ok(profile.cellSeamOverlap > 0);
 });
 
@@ -96,7 +97,17 @@ test('streaming scheduler predicts into only the existing retention ring and bud
   assert.match(streamingSource, /const retentionRadius = loadRadius \+ STREAMING_SCHEDULER_PROFILE\.predictiveExtraRings/);
   assert.match(streamingSource, /for \(let offset = -loadRadius; offset <= loadRadius; offset \+= 1\)/);
   assert.match(streamingSource, /processOneJob\(this\)/);
+  assert.equal(streamingSource.includes("enqueue(scheduler, 'refresh', x, z"), false);
   assert.match(streamingSource, /visual\.root\.enabled = false/);
+});
+
+test('A-A1 seam handoffs avoid coplanar duplicate faces', () => {
+  assert.match(archPresentationSource, /entersFromPreviousCell/);
+  assert.match(archPresentationSource, /continuesIntoNextCell/);
+  assert.match(archPresentationSource, /bay\.curveStart \+ ARCH_CURVE_JOIN_HANDOFF/);
+  assert.match(archPresentationSource, /bay\.curveEnd - ARCH_CURVE_JOIN_HANDOFF/);
+  assert.match(archPresentationSource, /support\[0\] - ARCH_PIER_BRIDGE_OVERLAP/);
+  assert.equal(archPresentationSource.includes('ARCH_JOIN_OVERLAP'), false);
 });
 
 test('static world batching is localized per Cell rather than one global dirty group', () => {
