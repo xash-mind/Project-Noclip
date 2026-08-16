@@ -67,8 +67,8 @@ let installed = false;
 const CARPET_REPEAT_METERS = CELL_SIZE / 5;
 const ARCH_CURVE_SEGMENTS = 18;
 const ARCH_HEADER_BRIDGE_MAX_GAP = 4.1;
-const ARCH_CURVE_MAX_WIDTH = 1.62;
-const ARCH_CURVE_MIN_WIDTH = 1.28;
+const ARCH_CURVE_MAX_WIDTH = 1.42;
+const ARCH_CURVE_MIN_WIDTH = 0.72;
 const ARCH_UPPER_BOTTOM = 2.02;
 const ARCH_UPPER_TOP = WALL_HEIGHT - 0.14;
 const ARCH_CURVE_APEX = Math.min(ARCH_UPPER_TOP - 0.24, 2.56);
@@ -324,7 +324,7 @@ function mergedHeaderRuns(line: WorldArchLine): Interval[] {
 }
 
 function curveWidthForBay(width: number): number {
-  return Math.min(ARCH_CURVE_MAX_WIDTH, Math.max(ARCH_CURVE_MIN_WIDTH, width * 0.34));
+  return Math.min(ARCH_CURVE_MAX_WIDTH, Math.max(ARCH_CURVE_MIN_WIDTH, width * 0.34), width * 0.44);
 }
 
 function intervalContains(intervals: readonly Interval[], point: number, margin = 0.06): boolean {
