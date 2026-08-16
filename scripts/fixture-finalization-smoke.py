@@ -39,12 +39,14 @@ def build_driver() -> webdriver.Chrome:
     if binary:
         options.binary_location = binary
     driver = webdriver.Chrome(options=options)
+    driver.execute_cdp_cmd("Emulation.setFocusEmulationEnabled", {"enabled": True})
     driver.set_page_load_timeout(60)
     driver.set_script_timeout(60)
     return driver
 
 
 def force_headless_focus(driver: webdriver.Chrome) -> None:
+    driver.execute_cdp_cmd("Emulation.setFocusEmulationEnabled", {"enabled": True})
     driver.execute_script("""
       try {
         Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => true });
@@ -166,6 +168,8 @@ def main() -> None:
                 *(["fixture-flicker-dark.png"] if dark_snapshot is not None else []),
             ],
         }
+        if lit_snapshot is None or dark_snapshot is None:
+            raise AssertionError(f"Flicker fixture did not expose both canonical pulse phases: {report['states']['flicker']}")
 
         off = place_fixture(driver, "off")
         off_snapshot = fixture_snapshot(driver, off["groupId"])

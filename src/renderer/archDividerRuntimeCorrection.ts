@@ -35,7 +35,8 @@ export function archStructuralRole(wall: WallSpec): ArchStructuralRole | undefin
 
 export function archSemanticWallOwnsFinalCollision(wall: WallSpec): boolean {
   const role = archStructuralRole(wall);
-  if (role === 'upper' || role === 'pier') return false;
+  if (role === 'upper') return false;
+  if (role === 'pier') return true;
   return wallMinY(wall) <= 0.04;
 }
 
@@ -87,9 +88,10 @@ function applyArchDividerRuntimeCorrection(renderer: WorldRenderer, visual: Cell
 
 /**
  * Final A-A1 compatibility pass after Region reconstruction. Structural semantic
- * fallback pieces use plain Arch-compatible materials (never wallpaper), while
- * the 2D solver retains collision only for semantic pieces that genuinely reach
- * the floor. Renderer-only upper/pier reconstruction cannot close a solved route.
+ * fallback pieces use plain Arch-compatible materials (never wallpaper). The
+ * 2D solver removes overhead header semantics, but keeps the semantic pier
+ * footprint because the visible reconstructed pier reaches the floor on exactly
+ * that footprint. Portal cuts and decorative lower panels retain world ownership.
  */
 export function installArchDividerRuntimeCorrection(): void {
   if (installed) return;
