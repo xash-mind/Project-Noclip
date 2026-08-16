@@ -1,0 +1,42 @@
+name: Temporary Finalize Arch Streaming
+
+on:
+  push:
+    branches:
+      - cleanup/codebase-maintainability-2026-08-14
+
+permissions:
+  contents: write
+
+jobs:
+  apply-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply final bounded refinements
+        run: python scripts/_tmp_finalize_arch_streaming.py
+      - name: Install
+        run: npm install --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Tests
+        run: npm test
+      - name: Benchmark
+        run: npm run benchmark
+      - name: Production build
+        run: npm run build
+      - name: Commit verified source only
+        run: |
+          rm -f package-lock.json
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "fix: finalize Arch seams and streaming queue"
+          git push origin HEAD:cleanup/codebase-maintainability-2026-08-14
