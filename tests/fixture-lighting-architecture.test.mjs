@@ -9,6 +9,10 @@ const runtimeSource = await readFile(new URL('../src/renderer/renderSettingsRunt
 
 const { generateCell } = await import('../.test-dist/src/world/generator.js');
 const { DEFAULT_TUNING } = await import('../.test-dist/src/world/types.js');
+const {
+  findMFluorescentPanelVisualIndex,
+  isMFluorescentPanelVisualName
+} = await import('../.test-dist/src/renderer/fixtureVisualOwnership.js');
 
 function numericConstant(source, name) {
   const match = source.match(new RegExp(`const ${name} = ([0-9.]+);`));
@@ -40,7 +44,7 @@ test('every active M-F1 Omni retains its own shadow while its luminous diffuser 
   assert.equal(fixtureLightingSource.includes('innerConeAngle:'), false);
   assert.equal(fixtureLightingSource.includes('outerConeAngle:'), false);
   assert.ok(fixtureLightingSource.includes('castShadows: true'));
-  assert.ok(fixtureLightingSource.includes('if (mesh?.render) mesh.render.castShadows = false'));
+  assert.ok(fixtureLightingSource.includes('mesh.render.castShadows = false'));
   assert.ok(fixtureLightingSource.includes('fixturePanelCastsShadows: false'));
   assert.ok(fixtureLightingSource.includes('shadowResolution: getRenderSettings().shadowResolution'));
   assert.ok(fixtureLightingSource.includes('const FIXTURE_SHADOW_BIAS = 0.4'));
@@ -54,6 +58,33 @@ test('every active M-F1 Omni retains its own shadow while its luminous diffuser 
   assert.ok(fixtureLightingSource.includes('markFixtureShadowsDirtyNearCell'));
   assert.equal(fixtureLightingSource.includes('markFixtureShadowsDirty(state)'), false);
   assert.ok(batchingSource.includes('installFixtureLighting()'));
+});
+
+test('M-F1 panel ownership resolves the real visible panel and keeps it out of the static batch', () => {
+  assert.equal(isMFluorescentPanelVisualName('fixture:0'), true);
+  assert.equal(isMFluorescentPanelVisualName('light-group-abc:fixture:1'), true);
+  assert.equal(isMFluorescentPanelVisualName('wall:fixture-housing'), false);
+  assert.equal(isMFluorescentPanelVisualName('ceiling'), false);
+
+  const currentCellBuilderPanels = [
+    { name: 'fixture:0', x: -3.4, z: -2.4 },
+    { name: 'fixture:1', x: 3.4, z: 2.4 },
+    { name: 'fixture:2', x: -3.4, z: 2.4 },
+    { name: 'fixture:3', x: 3.4, z: -2.4 }
+  ];
+  assert.equal(findMFluorescentPanelVisualIndex(currentCellBuilderPanels, -3.4, 2.4), 2);
+  assert.equal(findMFluorescentPanelVisualIndex(currentCellBuilderPanels, 4.3, 4.3), -1);
+
+  assert.ok(fixtureLightingSource.includes('const panels = reconcileFixturePanels(state, visual)'));
+  assert.ok(fixtureLightingSource.includes('const panel = matched ?? addFixturePanelVisual'));
+  assert.ok(fixtureLightingSource.includes('panel.name = `${group.id}:fixture:${fixtureIndex}`'));
+  assert.ok(fixtureLightingSource.includes('if (!claimed.has(candidate)) candidate.destroy()'));
+  assert.ok(fixtureLightingSource.includes('const mesh = panels.get(id)'));
+
+  assert.ok(batchingSource.includes('if (isMFluorescentPanelVisualName(entity.name))'));
+  assert.ok(batchingSource.includes('entity.render.batchGroupId = -1'));
+  assert.ok(batchingSource.includes("addGroup(STATIC_WORLD_BATCH_GROUP_NAME, false"));
+  assert.ok(batchingSource.includes('assignStaticVisuals(child)'));
 });
 
 test('M-F1 diffuser and Omni consume one canonical continuous pulse in the same per-frame update', () => {
@@ -71,24 +102,7 @@ test('M-F1 diffuser and Omni consume one canonical continuous pulse in the same 
   assert.ok(appSource.includes('this.renderer.updateFixtureLighting('));
 });
 
-test('eye adaptation stays bounded and recovers from light much faster than darkness', () => {
-  const base = numericConstant(appSource, 'BASE_SCENE_EXPOSURE');
-  const max = numericConstant(appSource, 'MAX_DARK_ADAPTED_EXPOSURE');
-  const darkSeconds = numericConstant(appSource, 'DARK_ADAPT_SECONDS');
-  const lightSeconds = numericConstant(appSource, 'LIGHT_ADAPT_SECONDS');
-  assert.equal(base, 1);
-  assert.equal(max, 1.8);
-  assert.ok(darkSeconds >= 6 && darkSeconds <= 12);
-  assert.ok(lightSeconds > 0 && lightSeconds <= 1.5);
-  assert.ok(darkSeconds / lightSeconds >= 5, 'dark adaptation should be substantially slower than bright recovery');
-  assert.ok(appSource.includes('Math.min(MAX_DARK_ADAPTED_EXPOSURE, BASE_SCENE_EXPOSURE + gain)'));
-  assert.ok(appSource.includes('target > current ? DARK_ADAPT_SECONDS : LIGHT_ADAPT_SECONDS'));
-  assert.ok(appSource.includes('this.app.scene.exposure = this.eyeExposure'));
-  assert.ok(runtimeSource.includes('state.blackoutStrength = blackoutStrength'));
-  assert.ok(runtimeSource.includes('level0AmbientForBlackout(state.blackoutStrength)'));
-});
-
-test('Blackout Condition generates no local fluorescent fixtures', () => {
+test('generated Blackout cells still own no M-F1 light groups', () => {
   const cell = generateCell({
     seed: 'fixture-lighting-blackout',
     x: 0,
@@ -108,4 +122,23 @@ test('Blackout Condition generates no local fluorescent fixtures', () => {
   });
   assert.equal(cell.lightGroups.length, 0);
   assert.equal(cell.world.blackoutStrength, 1);
+  assert.ok(fixtureLightingSource.includes('for (const candidate of available)'));
+  assert.ok(fixtureLightingSource.includes('candidate.destroy()'));
+});
+
+test('eye adaptation stays bounded and recovers from light much faster than darkness', () => {
+  const base = numericConstant(appSource, 'BASE_SCENE_EXPOSURE');
+  const max = numericConstant(appSource, 'MAX_DARK_ADAPTED_EXPOSURE');
+  const darkSeconds = numericConstant(appSource, 'DARK_ADAPT_SECONDS');
+  const lightSeconds = numericConstant(appSource, 'LIGHT_ADAPT_SECONDS');
+  assert.equal(base, 1);
+  assert.equal(max, 1.8);
+  assert.ok(darkSeconds >= 6 && darkSeconds <= 12);
+  assert.ok(lightSeconds > 0 && lightSeconds <= 1.5);
+  assert.ok(darkSeconds / lightSeconds >= 5, 'dark adaptation should be substantially slower than bright recovery');
+  assert.ok(appSource.includes('Math.min(MAX_DARK_ADAPTED_EXPOSURE, BASE_SCENE_EXPOSURE + gain)'));
+  assert.ok(appSource.includes('target > current ? DARK_ADAPT_SECONDS : LIGHT_ADAPT_SECONDS'));
+  assert.ok(appSource.includes('this.app.scene.exposure = this.eyeExposure'));
+  assert.ok(runtimeSource.includes('state.blackoutStrength = blackoutStrength'));
+  assert.ok(runtimeSource.includes('level0AmbientForBlackout(state.blackoutStrength)'));
 });

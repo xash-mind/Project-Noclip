@@ -1,4 +1,5 @@
-import { CELL_SIZE, type WallSpec } from '../world/types.js';
+import { ARCH_HEADER_HEIGHT, ARCH_LOWER_HEIGHT } from '../world/gen3ArchitectureCore.js';
+import { CELL_SIZE, WALL_HEIGHT, type WallSpec } from '../world/types.js';
 
 /**
  * Original procedural recreation informed by the source-supported 1990s Borden
@@ -86,7 +87,6 @@ export function paintLevel0ChevronWallpaper(context: CanvasRenderingContext2D, s
   context.fillStyle = palette.paper;
   context.fillRect(0, 0, size, size);
 
-  // Paper variation is deliberately subtle and deterministic, not fragment-random.
   for (let y = 0; y < size; y += 4) {
     const alpha = 0.018 + ((y / 4) % 5) * 0.002;
     context.fillStyle = `rgba(94,84,61,${alpha.toFixed(3)})`;
@@ -130,7 +130,18 @@ export function paintLevel0ChevronWallpaper(context: CanvasRenderingContext2D, s
   context.globalAlpha = 1;
 }
 
-/** The runtime collision solver is 2D, so only floor-reaching wall pieces may own navigation collision. */
+/**
+ * The runtime movement solver is 2D. Floor-reaching walls own collision normally;
+ * A-A1 mid-height semantic pier pieces also collide because the renderer extends
+ * those same world-owned supports down to the floor. Header/curve pieces never do.
+ */
 export function shouldGen3WallCollide(wall: WallSpec): boolean {
-  return wall.cy - wall.sy / 2 <= 0.04;
+  const minY = wall.cy - wall.sy / 2;
+  if (minY <= 0.04) return true;
+  if (wall.materialId !== 'arch-pale-wallpaper') return false;
+  const maxY = wall.cy + wall.sy / 2;
+  const headerBottom = WALL_HEIGHT - ARCH_HEADER_HEIGHT;
+  return wall.sy > 1.35
+    && minY <= ARCH_LOWER_HEIGHT + 0.065
+    && maxY >= headerBottom - 0.045;
 }

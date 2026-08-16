@@ -1,6 +1,11 @@
 import * as pc from 'playcanvas';
 import { lightFlickerValue } from '../world/lighting.js';
 import { CELL_SIZE, type CellDescriptor, type LightGroupSpec } from '../world/types.js';
+import {
+  findMFluorescentPanelVisualIndex,
+  isMFluorescentPanelVisualName,
+  type MFluorescentPanelVisualAddress
+} from './fixtureVisualOwnership.js';
 import { cellIsInsideActiveRenderScope, getRenderSettings, renderDistanceProfile } from './renderSettings.js';
 import { WorldRenderer } from './WorldRenderer.js';
 import { makeMaterial, type CellVisual } from './support.js';
@@ -9,6 +14,8 @@ const FIXTURE_LIGHT_RANGE = 12.0;
 const FIXTURE_LIGHT_INTENSITY_MULTIPLIER = 2.0;
 const MAX_ACTIVE_FIXTURE_LIGHTS = 128;
 const FIXTURE_PANEL_HALF_HEIGHT = 0.04;
+const FIXTURE_PANEL_LENGTH = 2.2;
+const FIXTURE_PANEL_WIDTH = 0.38;
 const FIXTURE_EMITTER_CLEARANCE = 0.03;
 const FIXTURE_SHADOW_BIAS = 0.4;
 const FIXTURE_SHADOW_NORMAL_OFFSET = 0.04;
@@ -58,6 +65,65 @@ function childrenOf(entity: pc.Entity): pc.Entity[] {
 
 function entityByName(root: pc.Entity, name: string): pc.Entity | undefined {
   return childrenOf(root).find((child) => child.name === name);
+}
+
+function addFixturePanelVisual(
+  state: RendererFixtureState,
+  visual: CellVisual,
+  group: LightGroupSpec,
+  fixtureIndex: number
+): pc.Entity | undefined {
+  const fixture = group.fixtures[fixtureIndex];
+  if (!fixture) return undefined;
+  const entity = new pc.Entity(`${group.id}:fixture:${fixtureIndex}`);
+  entity.addComponent('render', { type: 'box' });
+  entity.setLocalPosition(fixture.x, fixture.y, fixture.z);
+  entity.setLocalScale(FIXTURE_PANEL_LENGTH, FIXTURE_PANEL_HALF_HEIGHT * 2, FIXTURE_PANEL_WIDTH);
+  entity.setLocalEulerAngles(0, group.rotationY, 0);
+  if (entity.render) {
+    entity.render.material = fixtureMaterial(state, visual.descriptor, group, group.state === 'off' ? 0 : 1);
+    entity.render.castShadows = false;
+  }
+  visual.root.addChild(entity);
+  return entity;
+}
+
+function reconcileFixturePanels(state: RendererFixtureState, visual: CellVisual): Map<string, pc.Entity> {
+  const root = visual.root;
+  const available = childrenOf(root).filter((child) => child.render && isMFluorescentPanelVisualName(child.name));
+  const claimed = new Set<pc.Entity>();
+  const resolved = new Map<string, pc.Entity>();
+
+  for (const group of visual.descriptor.lightGroups) {
+    group.fixtures.forEach((fixture, fixtureIndex) => {
+      const id = `${group.id}:${fixtureIndex}`;
+      const direct = entityByName(root, `${group.id}:fixture:${fixtureIndex}`);
+      if (direct?.render) {
+        direct.render.castShadows = false;
+        claimed.add(direct);
+        resolved.set(id, direct);
+        return;
+      }
+      const candidates = available.filter((candidate) => !claimed.has(candidate));
+      const addresses: MFluorescentPanelVisualAddress[] = candidates.map((candidate) => {
+        const position = candidate.getLocalPosition();
+        return { name: candidate.name, x: position.x, z: position.z };
+      });
+      const matchIndex = findMFluorescentPanelVisualIndex(addresses, fixture.x, fixture.z);
+      const matched = matchIndex >= 0 ? candidates[matchIndex] : undefined;
+      const panel = matched ?? addFixturePanelVisual(state, visual, group, fixtureIndex);
+      if (!panel) return;
+      panel.name = `${group.id}:fixture:${fixtureIndex}`;
+      if (panel.render) panel.render.castShadows = false;
+      claimed.add(panel);
+      resolved.set(id, panel);
+    });
+  }
+
+  for (const candidate of available) {
+    if (!claimed.has(candidate)) candidate.destroy();
+  }
+  return resolved;
 }
 
 function fixturePulse(group: LightGroupSpec, elapsedSeconds: number, reducedFlicker: boolean): number {
@@ -158,6 +224,7 @@ function componentFor(runtime: FixtureRuntime): FixtureLightComponent | undefine
 function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void {
   const state = stateFor(renderer);
   const descriptor = visual.descriptor;
+  const panels = reconcileFixturePanels(state, visual);
   for (const group of descriptor.lightGroups) {
     group.fixtures.forEach((fixture, fixtureIndex) => {
       const id = `${group.id}:${fixtureIndex}`;
@@ -183,7 +250,7 @@ function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void 
       );
       light.enabled = false;
 
-      const mesh = entityByName(visual.root, `${group.id}:fixture:${fixtureIndex}`);
+      const mesh = panels.get(id);
       if (mesh?.render) mesh.render.castShadows = false;
 
       state.fixtures.set(id, {
@@ -234,8 +301,6 @@ function updateFixtureLighting(
   };
 
   for (const runtime of state.fixtures.values()) {
-    // Exactly one deterministic pulse is sampled per M-F1 group each frame. The
-    // panel presentation and corresponding Omni consume that same value.
     const pulse = pulseFor(runtime.group);
     const selected = selectedIds.has(runtime.id);
     if (selected && !runtime.selected) runtime.shadowDirty = true;
@@ -253,9 +318,6 @@ function updateFixtureLighting(
     light.intensity = selected ? runtime.group.intensity * pulse * FIXTURE_LIGHT_INTENSITY_MULTIPLIER : 0;
     runtime.light.enabled = selected && runtime.group.state !== 'off';
 
-    // Shadow maps describe static occlusion, not flicker brightness. Refresh only
-    // when the streamed geometry or light participation changed; never create a
-    // separate shadow-only selection pool.
     if (selected && runtime.group.state !== 'off' && pulse > 0.001 && runtime.shadowDirty) {
       light.shadowUpdateMode = pc.SHADOWUPDATE_THISFRAME;
       runtime.shadowDirty = false;

@@ -13,12 +13,19 @@ import {
   PILLAR_SPACING,
   PILLAR_WIDTH_SCALE,
   sampleGen3RegionInfluence,
-  WALL_HEIGHT
+  WALL_HEIGHT,
+  window as cellWindow
 } from './dev5-world-coherence-helpers.mjs';
 
 const { sampleLightField } = await import('../.test-dist/src/world/lighting.js');
 const { routeReservationEnvelopesForCell } = await import('../.test-dist/src/world/gen3SpaceTopologyBuild.js');
-const { archCurveSegmentsForCell, carpetProfileForCell, holeDepthBands } = await import('../.test-dist/src/renderer/level0RegionPresentation.js');
+const {
+  archCurveSegmentsForCell,
+  archFrameBaysForDescriptors,
+  carpetProfileForCell,
+  holeDepthBands
+} = await import('../.test-dist/src/renderer/level0RegionPresentation.js');
+const { shouldGen3WallCollide } = await import('../.test-dist/src/renderer/level0Wallpaper.js');
 
 function overlaps(left, right) {
   return left.maxX > right.minX
@@ -123,7 +130,74 @@ test('Arch topology emits stable complete divider runs instead of floating fragm
   assert.ok(routed.every((spec) => spec.minimumRouteWidth >= 1.95), `route width ${Math.min(...routed.map((spec) => spec.minimumRouteWidth))}`);
 });
 
-test('Arch curves are render-only multi-step apertures and do not inflate semantic wall counts', () => {
+test('A-A1 renderer reconstructs heavy framed bays from world-space divider runs', () => {
+  const tuning = clean('arch-rooms');
+  let bayCount = 0;
+  let routeCount = 0;
+  let decorativeCount = 0;
+  for (let seedIndex = 0; seedIndex < 5; seedIndex += 1) {
+    const descriptors = cellWindow(`arch-frame-${seedIndex}`, 0, 0, 4, tuning);
+    const bays = archFrameBaysForDescriptors(descriptors);
+    bayCount += bays.length;
+    routeCount += bays.filter((bay) => bay.route).length;
+    decorativeCount += bays.filter((bay) => !bay.route).length;
+    for (const bay of bays) {
+      const center = (bay.start + bay.end) / 2;
+      const curveCenter = (bay.curveStart + bay.curveEnd) / 2;
+      const curveWidth = bay.curveEnd - bay.curveStart;
+      assert.ok(Math.abs(center - curveCenter) < 1e-9, `off-center curve ${bay.id}`);
+      assert.ok(curveWidth >= 1.27 && curveWidth <= 1.63, `curve width ${curveWidth} in ${bay.id}`);
+      assert.ok(curveWidth < (bay.end - bay.start) * 0.5, `curve occupies too much of bay ${bay.id}`);
+    }
+  }
+  assert.ok(bayCount > 100, `only ${bayCount} framed bays`);
+  assert.ok(routeCount > 10, `only ${routeCount} route bays`);
+  assert.ok(decorativeCount > 20, `only ${decorativeCount} lower-panel bays`);
+});
+
+test('A-A1 frame reconstruction is stable when neighboring loaded Cells expand around the same interior', () => {
+  const tuning = clean('arch-rooms');
+  const seed = 'arch-frame-loaded-window';
+  const small = archFrameBaysForDescriptors(cellWindow(seed, 0, 0, 4, tuning))
+    .filter((bay) => Math.abs((bay.start + bay.end) / 2) < CELL_SIZE * 2.5 && Math.abs(bay.fixed) < CELL_SIZE * 2.5)
+    .map((bay) => `${bay.lineKey}:${bay.start.toFixed(3)}:${bay.end.toFixed(3)}:${bay.route}`)
+    .sort();
+  const large = new Set(archFrameBaysForDescriptors(cellWindow(seed, 0, 0, 5, tuning))
+    .map((bay) => `${bay.lineKey}:${bay.start.toFixed(3)}:${bay.end.toFixed(3)}:${bay.route}`));
+  assert.ok(small.length > 20, `only ${small.length} interior bays`);
+  assert.ok(small.every((key) => large.has(key)), 'interior divider reconstruction changed when neighboring Cells were loaded');
+});
+
+test('A-A1 pier collision follows the visible floor-to-ceiling frame while header/curve geometry stays non-colliding', () => {
+  const tuning = clean('arch-rooms');
+  let headers = 0;
+  let midPiers = 0;
+  let lowerPanels = 0;
+  for (const descriptor of cellWindow('arch-collision', 0, 0, 4, tuning)) {
+    for (const wall of descriptor.walls.filter((candidate) => candidate.materialId === 'arch-pale-wallpaper')) {
+      const minY = wall.cy - wall.sy / 2;
+      const maxY = wall.cy + wall.sy / 2;
+      const header = Math.abs(wall.sy - 0.44) < 0.055 && Math.abs(maxY - WALL_HEIGHT) < 0.045;
+      const lower = Math.abs(wall.sy - 1.0) < 0.065 && minY <= 0.045;
+      const pier = minY > 0.04 && wall.sy > 1.35 && maxY >= WALL_HEIGHT - 0.485;
+      if (header) {
+        headers += 1;
+        assert.equal(shouldGen3WallCollide(wall), false, `header ${wall.id} gained floor collision`);
+      } else if (lower) {
+        lowerPanels += 1;
+        assert.equal(shouldGen3WallCollide(wall), true, `lower panel ${wall.id} lost collision`);
+      } else if (pier) {
+        midPiers += 1;
+        assert.equal(shouldGen3WallCollide(wall), true, `frame pier ${wall.id} is visually floor-reaching but not colliding`);
+      }
+    }
+  }
+  assert.ok(headers > 20, `only ${headers} headers`);
+  assert.ok(lowerPanels > 20, `only ${lowerPanels} lower pieces`);
+  assert.ok(midPiers > 20, `only ${midPiers} mid-pier pieces`);
+});
+
+test('Arch curves remain render-only, small and centered rather than broad bay cut-outs', () => {
   const tuning = clean('arch-rooms');
   const curveBottoms = new Set();
   let curvedPieces = 0;
@@ -150,7 +224,7 @@ test('Arch curves are render-only multi-step apertures and do not inflate semant
     }
   }
   assert.equal(semanticCurvePieces, 0, 'curved intrados leaked back into semantic/collision walls');
-  assert.ok(curvedPieces > 120, `only ${curvedPieces} render-only curved aperture segments`);
+  assert.ok(curvedPieces > 40, `only ${curvedPieces} render-only curved aperture segments`);
   assert.ok(curveBottoms.size >= 4, `arch aperture has only ${curveBottoms.size} distinct curve heights`);
   assert.ok(maxSemanticWalls <= 64, `Arch semantic wall budget reached ${maxSemanticWalls} across ${checkedCells} sampled cells`);
 });

@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
 import { CELL_SIZE } from '../world/types.js';
+import { isMFluorescentPanelVisualName } from './fixtureVisualOwnership.js';
 import { installFixtureLighting } from './fixtureLighting.js';
 import { installLevel0RegionPresentation } from './level0RegionPresentation.js';
 
@@ -34,6 +35,13 @@ function isExcludedSubtree(entity: BatchEntity): boolean {
 
 function assignStaticVisuals(entity: BatchEntity): boolean {
   if (isExcludedSubtree(entity)) return false;
+  if (isMFluorescentPanelVisualName(entity.name)) {
+    if (entity.render && entity.render.batchGroupId !== -1) {
+      entity.render.batchGroupId = -1;
+      return true;
+    }
+    return false;
+  }
   let changed = false;
   if (entity.render && entity.render.batchGroupId !== STATIC_WORLD_BATCH_GROUP_ID) {
     entity.render.batchGroupId = STATIC_WORLD_BATCH_GROUP_ID;
@@ -52,8 +60,9 @@ function getRunningApplication(): BatchApplication | undefined {
 
 /**
  * Installs renderer-owned Level 0 presentation/lighting and one render-only
- * batching layer over canonical streamed Cells. Collision, interaction and
- * persistence data never enter this layer.
+ * batching layer over canonical streamed Cells. M-F1 diffuser panels remain
+ * dynamic because their material changes on the canonical electrical pulse.
+ * Collision, interaction and persistence data never enter this layer.
  */
 export function installStaticWorldBatching(): void {
   installLevel0RegionPresentation();

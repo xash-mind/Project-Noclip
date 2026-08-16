@@ -19,24 +19,35 @@ type Vec3Tuple = readonly [number, number, number];
 type Vec2Tuple = readonly [number, number];
 type Interval = readonly [number, number];
 
-interface ArchLine {
-  orientation: WallSpec['orientation'];
-  fixed: number;
-  headers: WallSpec[];
-  solids: Interval[];
-}
-interface ArchCurveOpening {
+interface WorldArchWall {
   id: string;
-  sourceWallId: string;
+  cellId: string;
   orientation: WallSpec['orientation'];
   fixed: number;
   start: number;
   end: number;
-  springY: number;
-  apexY: number;
-  headerBottom: number;
+  minY: number;
+  maxY: number;
 }
-
+interface WorldArchLine {
+  key: string;
+  orientation: WallSpec['orientation'];
+  fixed: number;
+  headers: WorldArchWall[];
+  lowers: WorldArchWall[];
+  solids: WorldArchWall[];
+}
+export interface ArchFrameBay {
+  id: string;
+  lineKey: string;
+  orientation: WallSpec['orientation'];
+  fixed: number;
+  start: number;
+  end: number;
+  curveStart: number;
+  curveEnd: number;
+  route: boolean;
+}
 export interface ArchCurveSegment {
   id: string;
   sourceWallId: string;
@@ -54,9 +65,22 @@ const caches = new WeakMap<WorldRenderer, RegionPresentationCache>();
 const carpetClones = new WeakMap<pc.StandardMaterial, Map<string, pc.StandardMaterial>>();
 let installed = false;
 const CARPET_REPEAT_METERS = CELL_SIZE / 5;
-const ARCH_CURVE_SEGMENTS = 24;
+const ARCH_CURVE_SEGMENTS = 18;
 const ARCH_HEADER_BRIDGE_MAX_GAP = 4.1;
-const ARCH_UV_REPEAT_METERS = 2.8;
+const ARCH_CURVE_MAX_WIDTH = 1.62;
+const ARCH_CURVE_MIN_WIDTH = 1.28;
+const ARCH_UPPER_BOTTOM = 2.02;
+const ARCH_UPPER_TOP = WALL_HEIGHT - 0.14;
+const ARCH_CURVE_APEX = Math.min(ARCH_UPPER_TOP - 0.24, 2.56);
+const ARCH_JOIN_OVERLAP = 0.035;
+const ARCH_PIER_DEPTH = WALL_THICKNESS + 0.10;
+const ARCH_UPPER_DEPTH = WALL_THICKNESS + 0.16;
+const ARCH_LOWER_PANEL_DEPTH = Math.max(0.14, WALL_THICKNESS - 0.10);
+const ARCH_LOWER_PANEL_HEIGHT = Math.min(ARCH_LOWER_HEIGHT - 0.06, 0.94);
+const ARCH_FRAME_PREFIX = 'arch-frame:';
+const ARCH_PIER_TINT: readonly [number, number, number] = [0.76, 0.735, 0.665];
+const ARCH_UPPER_TINT: readonly [number, number, number] = [0.955, 0.945, 0.885];
+const ARCH_PANEL_TINT: readonly [number, number, number] = [0.885, 0.872, 0.805];
 
 function childrenOf(entity: pc.Entity): pc.Entity[] {
   return [...(entity as pc.Entity & { children: readonly pc.Entity[] }).children];
@@ -212,6 +236,11 @@ function isArchHeader(wall: WallSpec): boolean {
     && Math.abs(wall.sy - ARCH_HEADER_HEIGHT) < 0.055
     && Math.abs(wallMaxY(wall) - WALL_HEIGHT) < 0.045;
 }
+function isArchLower(wall: WallSpec): boolean {
+  return wall.materialId === 'arch-pale-wallpaper'
+    && Math.abs(wall.sy - ARCH_LOWER_HEIGHT) < 0.065
+    && wallMinY(wall) <= 0.045;
+}
 function isArchVerticalSolid(wall: WallSpec): boolean {
   const headerBottom = WALL_HEIGHT - ARCH_HEADER_HEIGHT;
   return wall.materialId === 'arch-pale-wallpaper'
@@ -219,22 +248,23 @@ function isArchVerticalSolid(wall: WallSpec): boolean {
     && wallMaxY(wall) >= headerBottom - 0.045
     && wall.sy > 1.35;
 }
-function archLines(descriptor: CellDescriptor): Map<string, ArchLine> {
-  const lines = new Map<string, ArchLine>();
-  for (const header of descriptor.walls.filter(isArchHeader)) {
-    const fixed = fixedCoordinate(header);
-    const key = `${header.orientation}:${fixed.toFixed(3)}`;
-    const line = lines.get(key) ?? { orientation: header.orientation, fixed, headers: [], solids: [] };
-    line.headers.push(header);
-    lines.set(key, line);
-  }
-  for (const wall of descriptor.walls.filter(isArchVerticalSolid)) {
-    const key = `${wall.orientation}:${fixedCoordinate(wall).toFixed(3)}`;
-    const line = lines.get(key);
-    if (line) line.solids.push(longInterval(wall));
-  }
-  return lines;
+
+function toWorldArchWall(descriptor: CellDescriptor, wall: WallSpec): WorldArchWall {
+  const baseX = descriptor.address.cellX * CELL_SIZE;
+  const baseZ = descriptor.address.cellZ * CELL_SIZE;
+  const interval = longInterval(wall);
+  return {
+    id: wall.id,
+    cellId: descriptor.id,
+    orientation: wall.orientation,
+    fixed: fixedCoordinate(wall) + (wall.orientation === 'z' ? baseZ : baseX),
+    start: interval[0] + (wall.orientation === 'z' ? baseX : baseZ),
+    end: interval[1] + (wall.orientation === 'z' ? baseX : baseZ),
+    minY: wallMinY(wall),
+    maxY: wallMaxY(wall)
+  };
 }
+
 function mergeIntervals(intervals: readonly Interval[]): Interval[] {
   const sorted = [...intervals].sort((left, right) => left[0] - right[0]);
   const merged: Array<[number, number]> = [];
@@ -245,43 +275,135 @@ function mergeIntervals(intervals: readonly Interval[]): Interval[] {
   }
   return merged;
 }
-function subtractSolids(interval: Interval, solids: readonly Interval[]): Interval[] {
-  let pieces: Interval[] = [interval];
-  for (const solid of solids) {
-    pieces = pieces.flatMap(([start, end]) => {
-      if (solid[1] <= start || solid[0] >= end) return [[start, end] as const];
-      const next: Interval[] = [];
-      if (solid[0] - start > 0.04) next.push([start, Math.min(end, solid[0])]);
-      if (end - solid[1] > 0.04) next.push([Math.max(start, solid[1]), end]);
-      return next;
-    });
-  }
-  return pieces;
+
+function overlapsInterval(left: Interval, right: Interval): boolean {
+  return left[1] > right[0] + 0.01 && left[0] < right[1] - 0.01;
 }
 
-function archCurveOpeningsForCell(descriptor: CellDescriptor): ArchCurveOpening[] {
-  if (descriptor.world.generationVersion !== 'gen3-v1' || descriptor.world.regionId !== 'arch-rooms') return [];
-  const output: ArchCurveOpening[] = [];
-  const headerBottom = WALL_HEIGHT - ARCH_HEADER_HEIGHT;
-  const springY = Math.max(ARCH_LOWER_HEIGHT + 0.52, 1.52);
-  const apexY = headerBottom - 0.035;
-  for (const [lineKey, line] of archLines(descriptor)) {
-    const solids = mergeIntervals(line.solids);
-    let openingIndex = 0;
-    for (const header of line.headers) {
-      for (const opening of subtractSolids(longInterval(header), solids)) {
-        const width = opening[1] - opening[0];
-        if (width < 1.7 || width > 6.4) continue;
+function archLinesForDescriptors(descriptors: readonly CellDescriptor[]): Map<string, WorldArchLine> {
+  const lines = new Map<string, WorldArchLine>();
+  for (const descriptor of descriptors) {
+    if (descriptor.world.generationVersion !== 'gen3-v1') continue;
+    for (const wall of descriptor.walls) {
+      if (!isArchHeader(wall)) continue;
+      const world = toWorldArchWall(descriptor, wall);
+      const key = `${world.orientation}:${world.fixed.toFixed(3)}`;
+      const line = lines.get(key) ?? { key, orientation: world.orientation, fixed: world.fixed, headers: [], lowers: [], solids: [] };
+      line.headers.push(world);
+      lines.set(key, line);
+    }
+  }
+  for (const descriptor of descriptors) {
+    if (descriptor.world.generationVersion !== 'gen3-v1') continue;
+    for (const wall of descriptor.walls) {
+      if (!isArchLower(wall) && !isArchVerticalSolid(wall)) continue;
+      const world = toWorldArchWall(descriptor, wall);
+      const key = `${world.orientation}:${world.fixed.toFixed(3)}`;
+      const line = lines.get(key);
+      if (!line) continue;
+      const headerIntervals = mergeIntervals(line.headers.map((header) => [header.start, header.end] as const));
+      if (!headerIntervals.some((header) => overlapsInterval(header, [world.start, world.end]))) continue;
+      if (isArchLower(wall)) line.lowers.push(world);
+      if (isArchVerticalSolid(wall)) line.solids.push(world);
+    }
+  }
+  return lines;
+}
+
+function mergedHeaderRuns(line: WorldArchLine): Interval[] {
+  const raw = mergeIntervals(line.headers.map((header) => [header.start, header.end] as const));
+  if (raw.length < 2) return raw;
+  const bridged: Array<[number, number]> = [];
+  for (const interval of raw) {
+    const previous = bridged[bridged.length - 1];
+    const gap = previous ? interval[0] - previous[1] : Number.POSITIVE_INFINITY;
+    if (previous && gap > 0.03 && gap <= ARCH_HEADER_BRIDGE_MAX_GAP) previous[1] = interval[1];
+    else bridged.push([interval[0], interval[1]]);
+  }
+  return bridged;
+}
+
+function curveWidthForBay(width: number): number {
+  return Math.min(ARCH_CURVE_MAX_WIDTH, Math.max(ARCH_CURVE_MIN_WIDTH, width * 0.34));
+}
+
+function intervalContains(intervals: readonly Interval[], point: number, margin = 0.06): boolean {
+  return intervals.some(([start, end]) => point >= start + margin && point <= end - margin);
+}
+
+function frameBaysForLine(line: WorldArchLine): ArchFrameBay[] {
+  const headers = mergedHeaderRuns(line);
+  const solids = mergeIntervals(line.solids.map((wall) => [wall.start, wall.end] as const));
+  const lowers = mergeIntervals(line.lowers.map((wall) => [wall.start, wall.end] as const));
+  const bays: ArchFrameBay[] = [];
+  let bayIndex = 0;
+  for (const header of headers) {
+    const supports = solids.filter((solid) => overlapsInterval(solid, header));
+    for (let index = 1; index < supports.length; index += 1) {
+      const left = supports[index - 1];
+      const right = supports[index];
+      if (!left || !right) continue;
+      const start = left[1];
+      const end = right[0];
+      const width = end - start;
+      if (width < 1.7 || width > 6.4) continue;
+      const center = (start + end) / 2;
+      const curveWidth = curveWidthForBay(width);
+      bays.push({
+        id: `${line.key}:${bayIndex++}`,
+        lineKey: line.key,
+        orientation: line.orientation,
+        fixed: line.fixed,
+        start,
+        end,
+        curveStart: center - curveWidth / 2,
+        curveEnd: center + curveWidth / 2,
+        route: !intervalContains(lowers, center)
+      });
+    }
+  }
+  return bays;
+}
+
+export function archFrameBaysForDescriptors(descriptors: readonly CellDescriptor[]): ArchFrameBay[] {
+  return [...archLinesForDescriptors(descriptors).values()].flatMap(frameBaysForLine);
+}
+
+function localArchLines(descriptor: CellDescriptor): Map<string, WorldArchLine> {
+  return archLinesForDescriptors([descriptor]);
+}
+
+function curveY(start: number, end: number, along: number): number {
+  const center = (start + end) / 2;
+  const halfWidth = (end - start) / 2;
+  const normalized = Math.min(1, Math.abs(along - center) / Math.max(0.001, halfWidth));
+  return ARCH_UPPER_BOTTOM
+    + (ARCH_CURVE_APEX - ARCH_UPPER_BOTTOM) * Math.sqrt(Math.max(0, 1 - normalized * normalized));
+}
+
+export function archCurveSegmentsForCell(descriptor: CellDescriptor): ArchCurveSegment[] {
+  const output: ArchCurveSegment[] = [];
+  const baseX = descriptor.address.cellX * CELL_SIZE;
+  const baseZ = descriptor.address.cellZ * CELL_SIZE;
+  for (const line of localArchLines(descriptor).values()) {
+    for (const bay of frameBaysForLine(line)) {
+      const width = bay.curveEnd - bay.curveStart;
+      for (let index = 0; index < ARCH_CURVE_SEGMENTS; index += 1) {
+        const start = bay.curveStart + width * index / ARCH_CURVE_SEGMENTS;
+        const end = bay.curveStart + width * (index + 1) / ARCH_CURVE_SEGMENTS;
+        const bottom = Math.min(curveY(bay.curveStart, bay.curveEnd, start), curveY(bay.curveStart, bay.curveEnd, end));
+        const height = ARCH_UPPER_TOP - bottom;
+        if (height < 0.025) continue;
+        const along = (start + end) / 2;
         output.push({
-          id: `arch-curve:${lineKey}:${openingIndex++}`,
-          sourceWallId: header.id,
-          orientation: line.orientation,
-          fixed: line.fixed,
-          start: opening[0],
-          end: opening[1],
-          springY,
-          apexY,
-          headerBottom
+          id: `arch-frame:curve-segment:${bay.id}:${index}`,
+          sourceWallId: line.headers[0]?.id ?? bay.id,
+          position: bay.orientation === 'z'
+            ? [along - baseX, bottom + height / 2, bay.fixed - baseZ]
+            : [bay.fixed - baseX, bottom + height / 2, along - baseZ],
+          scale: bay.orientation === 'z'
+            ? [end - start, height, ARCH_UPPER_DEPTH]
+            : [ARCH_UPPER_DEPTH, height, end - start]
         });
       }
     }
@@ -289,67 +411,73 @@ function archCurveOpeningsForCell(descriptor: CellDescriptor): ArchCurveOpening[
   return output;
 }
 
-function archCurveY(opening: ArchCurveOpening, along: number): number {
-  const center = (opening.start + opening.end) / 2;
-  const halfWidth = (opening.end - opening.start) / 2;
-  const normalized = Math.min(1, Math.abs(along - center) / halfWidth);
-  return opening.springY
-    + (opening.apexY - opening.springY) * Math.sqrt(Math.max(0, 1 - normalized * normalized));
+export function archHeaderBridgeSegmentsForCell(_descriptor: CellDescriptor): ArchCurveSegment[] {
+  return [];
 }
 
-export function archCurveSegmentsForCell(descriptor: CellDescriptor): ArchCurveSegment[] {
-  const output: ArchCurveSegment[] = [];
-  for (const opening of archCurveOpeningsForCell(descriptor)) {
-    const width = opening.end - opening.start;
-    for (let index = 0; index < ARCH_CURVE_SEGMENTS; index += 1) {
-      const start = opening.start + width * index / ARCH_CURVE_SEGMENTS;
-      const end = opening.start + width * (index + 1) / ARCH_CURVE_SEGMENTS;
-      const bottom = Math.min(archCurveY(opening, start), archCurveY(opening, end));
-      const height = opening.headerBottom - bottom;
-      if (height < 0.025) continue;
-      const along = (start + end) / 2;
-      output.push({
-        id: `${opening.id}:${index}`,
-        sourceWallId: opening.sourceWallId,
-        position: opening.orientation === 'z'
-          ? [along, bottom + height / 2, opening.fixed]
-          : [opening.fixed, bottom + height / 2, along],
-        scale: opening.orientation === 'z'
-          ? [end - start, height, WALL_THICKNESS + 0.008]
-          : [WALL_THICKNESS + 0.008, height, end - start]
-      });
-    }
-  }
-  return output;
+function cellAlongBounds(descriptor: CellDescriptor, orientation: WallSpec['orientation']): Interval {
+  const center = orientation === 'z'
+    ? descriptor.address.cellX * CELL_SIZE
+    : descriptor.address.cellZ * CELL_SIZE;
+  return [center - CELL_SIZE / 2, center + CELL_SIZE / 2];
+}
+function perpendicularCellOwner(fixed: number): number {
+  return Math.floor((fixed + CELL_SIZE / 2) / CELL_SIZE);
+}
+function cellOwnsLine(descriptor: CellDescriptor, orientation: WallSpec['orientation'], fixed: number): boolean {
+  return orientation === 'z'
+    ? descriptor.address.cellZ === perpendicularCellOwner(fixed)
+    : descriptor.address.cellX === perpendicularCellOwner(fixed);
+}
+function clippedInterval(descriptor: CellDescriptor, orientation: WallSpec['orientation'], start: number, end: number): Interval | undefined {
+  const [cellStart, cellEnd] = cellAlongBounds(descriptor, orientation);
+  const clippedStart = Math.max(start, cellStart);
+  const clippedEnd = Math.min(end, cellEnd);
+  return clippedEnd - clippedStart > 0.015 ? [clippedStart, clippedEnd] : undefined;
+}
+function localBoxPosition(
+  descriptor: CellDescriptor,
+  orientation: WallSpec['orientation'],
+  fixed: number,
+  along: number,
+  y: number
+): Vec3Tuple {
+  const baseX = descriptor.address.cellX * CELL_SIZE;
+  const baseZ = descriptor.address.cellZ * CELL_SIZE;
+  return orientation === 'z'
+    ? [along - baseX, y, fixed - baseZ]
+    : [fixed - baseX, y, along - baseZ];
+}
+function localBoxScale(orientation: WallSpec['orientation'], length: number, height: number, depth: number): Vec3Tuple {
+  return orientation === 'z'
+    ? [length, height, depth]
+    : [depth, height, length];
 }
 
-export function archHeaderBridgeSegmentsForCell(descriptor: CellDescriptor): ArchCurveSegment[] {
-  if (descriptor.world.generationVersion !== 'gen3-v1' || descriptor.world.regionId !== 'arch-rooms') return [];
-  const output: ArchCurveSegment[] = [];
-  for (const [lineKey, line] of archLines(descriptor)) {
-    const headers = [...line.headers].sort((left, right) => longInterval(left)[0] - longInterval(right)[0]);
-    for (let index = 1; index < headers.length; index += 1) {
-      const previous = headers[index - 1];
-      const current = headers[index];
-      if (!previous || !current) continue;
-      const previousInterval = longInterval(previous);
-      const currentInterval = longInterval(current);
-      const gap = currentInterval[0] - previousInterval[1];
-      if (gap <= 0.035 || gap > ARCH_HEADER_BRIDGE_MAX_GAP) continue;
-      const along = (previousInterval[1] + currentInterval[0]) / 2;
-      output.push({
-        id: `arch-header-bridge:${lineKey}:${index}`,
-        sourceWallId: previous.id,
-        position: line.orientation === 'z'
-          ? [along, WALL_HEIGHT - ARCH_HEADER_HEIGHT / 2, line.fixed]
-          : [line.fixed, WALL_HEIGHT - ARCH_HEADER_HEIGHT / 2, along],
-        scale: line.orientation === 'z'
-          ? [gap, ARCH_HEADER_HEIGHT, WALL_THICKNESS + 0.008]
-          : [WALL_THICKNESS + 0.008, ARCH_HEADER_HEIGHT, gap]
-      });
-    }
-  }
-  return output;
+function addWorldBoxClipped(
+  visual: CellVisual,
+  name: string,
+  orientation: WallSpec['orientation'],
+  fixed: number,
+  start: number,
+  end: number,
+  y: number,
+  height: number,
+  depth: number,
+  value: pc.StandardMaterial
+): void {
+  const descriptor = visual.descriptor;
+  if (!cellOwnsLine(descriptor, orientation, fixed)) return;
+  const clip = clippedInterval(descriptor, orientation, start, end);
+  if (!clip) return;
+  const along = (clip[0] + clip[1]) / 2;
+  addBox(
+    `${ARCH_FRAME_PREFIX}${name}`,
+    visual.root,
+    localBoxPosition(descriptor, orientation, fixed, along, y),
+    localBoxScale(orientation, clip[1] - clip[0], height, depth),
+    value
+  );
 }
 
 function subtract(left: Vec3Tuple, right: Vec3Tuple): Vec3Tuple {
@@ -369,150 +497,246 @@ function normalize(value: Vec3Tuple): Vec3Tuple {
 function dot(left: Vec3Tuple, right: Vec3Tuple): number {
   return left[0] * right[0] + left[1] * right[1] + left[2] * right[2];
 }
-function curvePoint(opening: ArchCurveOpening, along: number, y: number, normalOffset: number): Vec3Tuple {
-  return opening.orientation === 'z'
-    ? [along, y, opening.fixed + normalOffset]
-    : [opening.fixed + normalOffset, y, along];
-}
-function curveUv(along: number, y: number): Vec2Tuple {
-  return [along / ARCH_UV_REPEAT_METERS, y / ARCH_UV_REPEAT_METERS];
-}
 function pushQuad(
   positions: number[],
   normals: number[],
-  uvs: number[],
   indices: number[],
   points: readonly [Vec3Tuple, Vec3Tuple, Vec3Tuple, Vec3Tuple],
-  texcoords: readonly [Vec2Tuple, Vec2Tuple, Vec2Tuple, Vec2Tuple],
   desiredNormal: Vec3Tuple
 ): void {
-  let orderedPoints = [...points] as Vec3Tuple[];
-  let orderedUvs = [...texcoords] as Vec2Tuple[];
-  let normal = normalize(cross(subtract(orderedPoints[1]!, orderedPoints[0]!), subtract(orderedPoints[2]!, orderedPoints[0]!)));
+  let ordered = [...points] as Vec3Tuple[];
+  let normal = normalize(cross(subtract(ordered[1]!, ordered[0]!), subtract(ordered[2]!, ordered[0]!)));
   if (dot(normal, desiredNormal) < 0) {
-    orderedPoints = [orderedPoints[0]!, orderedPoints[3]!, orderedPoints[2]!, orderedPoints[1]!];
-    orderedUvs = [orderedUvs[0]!, orderedUvs[3]!, orderedUvs[2]!, orderedUvs[1]!];
-    normal = normalize(cross(subtract(orderedPoints[1]!, orderedPoints[0]!), subtract(orderedPoints[2]!, orderedPoints[0]!)));
+    ordered = [ordered[0]!, ordered[3]!, ordered[2]!, ordered[1]!];
+    normal = normalize(cross(subtract(ordered[1]!, ordered[0]!), subtract(ordered[2]!, ordered[0]!)));
   }
   const base = positions.length / 3;
-  for (let index = 0; index < 4; index += 1) {
-    const point = orderedPoints[index]!;
-    const uv = orderedUvs[index]!;
+  for (const point of ordered) {
     positions.push(point[0], point[1], point[2]);
     normals.push(normal[0], normal[1], normal[2]);
-    uvs.push(uv[0], uv[1]);
   }
   indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
 }
 
-function addArchCurveMesh(
+function curvePoint(
+  descriptor: CellDescriptor,
+  orientation: WallSpec['orientation'],
+  fixed: number,
+  along: number,
+  y: number,
+  normalOffset: number
+): Vec3Tuple {
+  const baseX = descriptor.address.cellX * CELL_SIZE;
+  const baseZ = descriptor.address.cellZ * CELL_SIZE;
+  return orientation === 'z'
+    ? [along - baseX, y, fixed - baseZ + normalOffset]
+    : [fixed - baseX + normalOffset, y, along - baseZ];
+}
+
+function addCurveMeshClipped(
   renderer: WorldRenderer,
-  root: pc.Entity,
-  opening: ArchCurveOpening,
+  visual: CellVisual,
+  bay: ArchFrameBay,
   value: pc.StandardMaterial
 ): void {
+  const descriptor = visual.descriptor;
+  if (!cellOwnsLine(descriptor, bay.orientation, bay.fixed)) return;
+  const clip = clippedInterval(descriptor, bay.orientation, bay.curveStart, bay.curveEnd);
+  if (!clip) return;
   const positions: number[] = [];
   const normals: number[] = [];
-  const uvs: number[] = [];
   const indices: number[] = [];
-  const halfThickness = (WALL_THICKNESS + 0.01) / 2;
-  const width = opening.end - opening.start;
-  const frontNormal: Vec3Tuple = opening.orientation === 'z' ? [0, 0, -1] : [-1, 0, 0];
-  const backNormal: Vec3Tuple = opening.orientation === 'z' ? [0, 0, 1] : [1, 0, 0];
+  const halfDepth = ARCH_UPPER_DEPTH / 2;
+  const fullWidth = bay.curveEnd - bay.curveStart;
+  const step = fullWidth / ARCH_CURVE_SEGMENTS;
+  const startIndex = Math.max(0, Math.floor((clip[0] - bay.curveStart) / step));
+  const endIndex = Math.min(ARCH_CURVE_SEGMENTS, Math.ceil((clip[1] - bay.curveStart) / step));
+  const frontNormal: Vec3Tuple = bay.orientation === 'z' ? [0, 0, -1] : [-1, 0, 0];
+  const backNormal: Vec3Tuple = bay.orientation === 'z' ? [0, 0, 1] : [1, 0, 0];
 
-  for (let index = 0; index < ARCH_CURVE_SEGMENTS; index += 1) {
-    const start = opening.start + width * index / ARCH_CURVE_SEGMENTS;
-    const end = opening.start + width * (index + 1) / ARCH_CURVE_SEGMENTS;
-    const startY = archCurveY(opening, start);
-    const endY = archCurveY(opening, end);
-    const startUvBottom = curveUv(start, startY);
-    const endUvBottom = curveUv(end, endY);
-    const startUvTop = curveUv(start, opening.headerBottom);
-    const endUvTop = curveUv(end, opening.headerBottom);
-
-    pushQuad(
-      positions, normals, uvs, indices,
-      [
-        curvePoint(opening, start, startY, -halfThickness),
-        curvePoint(opening, start, opening.headerBottom, -halfThickness),
-        curvePoint(opening, end, opening.headerBottom, -halfThickness),
-        curvePoint(opening, end, endY, -halfThickness)
-      ],
-      [startUvBottom, startUvTop, endUvTop, endUvBottom],
-      frontNormal
-    );
-    pushQuad(
-      positions, normals, uvs, indices,
-      [
-        curvePoint(opening, start, startY, halfThickness),
-        curvePoint(opening, end, endY, halfThickness),
-        curvePoint(opening, end, opening.headerBottom, halfThickness),
-        curvePoint(opening, start, opening.headerBottom, halfThickness)
-      ],
-      [startUvBottom, endUvBottom, endUvTop, startUvTop],
-      backNormal
-    );
-    pushQuad(
-      positions, normals, uvs, indices,
-      [
-        curvePoint(opening, start, startY, -halfThickness),
-        curvePoint(opening, end, endY, -halfThickness),
-        curvePoint(opening, end, endY, halfThickness),
-        curvePoint(opening, start, startY, halfThickness)
-      ],
-      [[start / ARCH_UV_REPEAT_METERS, 0], [end / ARCH_UV_REPEAT_METERS, 0], [end / ARCH_UV_REPEAT_METERS, 0.16], [start / ARCH_UV_REPEAT_METERS, 0.16]],
-      [0, -1, 0]
-    );
+  for (let index = startIndex; index < endIndex; index += 1) {
+    const start = Math.max(clip[0], bay.curveStart + step * index);
+    const end = Math.min(clip[1], bay.curveStart + step * (index + 1));
+    if (end - start <= 0.005) continue;
+    const startY = curveY(bay.curveStart, bay.curveEnd, start);
+    const endY = curveY(bay.curveStart, bay.curveEnd, end);
+    pushQuad(positions, normals, indices, [
+      curvePoint(descriptor, bay.orientation, bay.fixed, start, startY, -halfDepth),
+      curvePoint(descriptor, bay.orientation, bay.fixed, start, ARCH_UPPER_TOP, -halfDepth),
+      curvePoint(descriptor, bay.orientation, bay.fixed, end, ARCH_UPPER_TOP, -halfDepth),
+      curvePoint(descriptor, bay.orientation, bay.fixed, end, endY, -halfDepth)
+    ], frontNormal);
+    pushQuad(positions, normals, indices, [
+      curvePoint(descriptor, bay.orientation, bay.fixed, start, startY, halfDepth),
+      curvePoint(descriptor, bay.orientation, bay.fixed, end, endY, halfDepth),
+      curvePoint(descriptor, bay.orientation, bay.fixed, end, ARCH_UPPER_TOP, halfDepth),
+      curvePoint(descriptor, bay.orientation, bay.fixed, start, ARCH_UPPER_TOP, halfDepth)
+    ], backNormal);
+    pushQuad(positions, normals, indices, [
+      curvePoint(descriptor, bay.orientation, bay.fixed, start, startY, -halfDepth),
+      curvePoint(descriptor, bay.orientation, bay.fixed, end, endY, -halfDepth),
+      curvePoint(descriptor, bay.orientation, bay.fixed, end, endY, halfDepth),
+      curvePoint(descriptor, bay.orientation, bay.fixed, start, startY, halfDepth)
+    ], [0, -1, 0]);
   }
-
+  if (positions.length === 0) return;
   const app = (renderer as unknown as RendererAccess).app;
   const mesh = new pc.Mesh(app.graphicsDevice);
   mesh.setPositions(positions);
   mesh.setNormals(normals);
-  mesh.setUvs(0, uvs);
   mesh.setIndices(indices);
   mesh.update();
   const meshInstance = new pc.MeshInstance(mesh, value);
-  const entity = new pc.Entity(`${opening.id}:mesh`);
+  const entity = new pc.Entity(`${ARCH_FRAME_PREFIX}curve:${bay.id}:${descriptor.id}`);
   entity.addComponent('render', { meshInstances: [meshInstance] });
-  root.addChild(entity);
+  visual.root.addChild(entity);
 }
 
-function renderArchPresentation(renderer: WorldRenderer, visual: CellVisual): void {
+function dividerSourceWallIds(lines: Map<string, WorldArchLine>): Set<string> {
+  const ids = new Set<string>();
+  for (const line of lines.values()) {
+    for (const wall of [...line.headers, ...line.lowers, ...line.solids]) ids.add(wall.id);
+  }
+  return ids;
+}
+
+function clearArchFrameVisuals(visual: CellVisual): void {
   for (const child of childrenOf(visual.root)) {
-    if (child.name.startsWith('arch-curve:') || child.name.startsWith('arch-header-bridge:')) child.destroy();
+    if (
+      child.name.startsWith(ARCH_FRAME_PREFIX)
+      || child.name.startsWith('arch-curve:')
+      || child.name.startsWith('arch-header-bridge:')
+    ) child.destroy();
   }
-  for (const segment of archHeaderBridgeSegmentsForCell(visual.descriptor)) {
-    const source = entityByName(visual.root, segment.sourceWallId);
-    if (!source?.render) continue;
-    addBox(segment.id, visual.root, segment.position, segment.scale, source.render.material as pc.StandardMaterial);
+}
+
+function resetSemanticArchMeshes(visual: CellVisual): void {
+  for (const wall of visual.descriptor.walls) {
+    if (wall.materialId !== 'arch-pale-wallpaper') continue;
+    if (!isArchHeader(wall) && !isArchLower(wall) && !isArchVerticalSolid(wall)) continue;
+    const source = entityByName(visual.root, wall.id);
+    if (source?.render) source.render.enabled = true;
   }
-  for (const opening of archCurveOpeningsForCell(visual.descriptor)) {
-    const source = entityByName(visual.root, opening.sourceWallId);
-    if (!source?.render) continue;
-    addArchCurveMesh(renderer, visual.root, opening, source.render.material as pc.StandardMaterial);
+}
+
+function hideSemanticDividerMeshes(visual: CellVisual, ids: Set<string>): void {
+  for (const id of ids) {
+    const source = entityByName(visual.root, id);
+    if (source?.render) source.render.enabled = false;
+  }
+}
+
+function renderArchFrames(renderer: WorldRenderer): void {
+  const visuals = [...renderer.loaded.values()];
+  const descriptors = visuals.map((visual) => visual.descriptor);
+  const lines = archLinesForDescriptors(descriptors);
+  const sourceIds = dividerSourceWallIds(lines);
+  const cache = cacheFor(renderer);
+  const pierMaterial = material(cache, 'arch-frame:pier', ARCH_PIER_TINT);
+  const upperMaterial = material(cache, 'arch-frame:upper', ARCH_UPPER_TINT);
+  const panelMaterial = material(cache, 'arch-frame:panel', ARCH_PANEL_TINT);
+
+  for (const visual of visuals) {
+    clearArchFrameVisuals(visual);
+    if (visual.descriptor.world.generationVersion === 'gen3-v1') {
+      resetSemanticArchMeshes(visual);
+      hideSemanticDividerMeshes(visual, sourceIds);
+    }
+  }
+
+  for (const line of lines.values()) {
+    const bays = frameBaysForLine(line);
+    const activeSupportIntervals = mergeIntervals(line.solids.map((wall) => [wall.start, wall.end] as const))
+      .filter((support) => bays.some((bay) => Math.abs(support[1] - bay.start) < 0.08 || Math.abs(support[0] - bay.end) < 0.08));
+    for (const visual of visuals) {
+      if (visual.descriptor.world.generationVersion !== 'gen3-v1') continue;
+      for (let index = 0; index < activeSupportIntervals.length; index += 1) {
+        const support = activeSupportIntervals[index]!;
+        addWorldBoxClipped(
+          visual,
+          `pier:${line.key}:${index}`,
+          line.orientation,
+          line.fixed,
+          support[0],
+          support[1],
+          WALL_HEIGHT / 2,
+          WALL_HEIGHT,
+          ARCH_PIER_DEPTH,
+          pierMaterial
+        );
+      }
+      for (const bay of bays) {
+        const shoulderHeight = ARCH_UPPER_TOP - ARCH_UPPER_BOTTOM;
+        addWorldBoxClipped(
+          visual,
+          `shoulder-left:${bay.id}`,
+          bay.orientation,
+          bay.fixed,
+          bay.start - ARCH_JOIN_OVERLAP,
+          bay.curveStart + ARCH_JOIN_OVERLAP,
+          ARCH_UPPER_BOTTOM + shoulderHeight / 2,
+          shoulderHeight,
+          ARCH_UPPER_DEPTH,
+          upperMaterial
+        );
+        addWorldBoxClipped(
+          visual,
+          `shoulder-right:${bay.id}`,
+          bay.orientation,
+          bay.fixed,
+          bay.curveEnd - ARCH_JOIN_OVERLAP,
+          bay.end + ARCH_JOIN_OVERLAP,
+          ARCH_UPPER_BOTTOM + shoulderHeight / 2,
+          shoulderHeight,
+          ARCH_UPPER_DEPTH,
+          upperMaterial
+        );
+        addCurveMeshClipped(renderer, visual, bay, upperMaterial);
+        if (!bay.route) {
+          addWorldBoxClipped(
+            visual,
+            `lower-panel:${bay.id}`,
+            bay.orientation,
+            bay.fixed,
+            bay.start + 0.02,
+            bay.end - 0.02,
+            ARCH_LOWER_PANEL_HEIGHT / 2,
+            ARCH_LOWER_PANEL_HEIGHT,
+            ARCH_LOWER_PANEL_DEPTH,
+            panelMaterial
+          );
+        }
+      }
+    }
   }
 }
 
 function applyRegionPresentation(renderer: WorldRenderer, visual: CellVisual): void {
   if (visual.descriptor.world.generationVersion !== 'gen3-v1') return;
   replaceHoleDepth(renderer, visual);
-  renderArchPresentation(renderer, visual);
   applyCarpetPresentation(visual);
 }
 
 /**
- * Installs renderer-only Level 0 Region presentation. World descriptors keep
- * authoritative topology/material identities; this layer owns Arch curve meshes,
- * Hole depth visuals, and Region carpet finish/UV presentation.
+ * Installs renderer-only Level 0 Region presentation. World descriptors retain
+ * topology/collision ownership; A-A1 is reconstructed from those world-space
+ * divider runs so streaming Cells only clip one continuous heavy frame.
  */
 export function installLevel0RegionPresentation(): void {
   if (installed) return;
   installed = true;
   const originalLoadCell = WorldRenderer.prototype.loadCell;
   WorldRenderer.prototype.loadCell = function patchedRegionPresentationLoad(this: WorldRenderer, descriptor: CellDescriptor): void {
+    const alreadyLoaded = this.loaded.has(descriptor.id);
     originalLoadCell.call(this, descriptor);
     const visual = this.loaded.get(descriptor.id);
-    if (visual) applyRegionPresentation(this, visual);
+    if (visual && !alreadyLoaded) applyRegionPresentation(this, visual);
+    renderArchFrames(this);
+  };
+
+  const originalUnloadCell = WorldRenderer.prototype.unloadCell;
+  WorldRenderer.prototype.unloadCell = function patchedRegionPresentationUnload(this: WorldRenderer, cellId: string): void {
+    originalUnloadCell.call(this, cellId);
+    renderArchFrames(this);
   };
 }

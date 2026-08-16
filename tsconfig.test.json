@@ -18,6 +18,7 @@
     "src/physics/**/*.ts",
     "src/playcanvas-compat.d.ts",
     "src/renderer/objectCatalog.ts",
+    "src/renderer/fixtureVisualOwnership.ts",
     "src/renderer/level0Wallpaper.ts",
     "src/renderer/level0RegionPresentation.ts",
     "src/renderer/renderSettings.ts"
