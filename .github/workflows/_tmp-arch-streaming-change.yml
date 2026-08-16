@@ -21,7 +21,9 @@ jobs:
         with:
           node-version: 22
       - name: Apply bounded candidate
-        run: python scripts/_tmp_apply_arch_streaming_change.py
+        run: |
+          python scripts/_tmp_apply_arch_streaming_change.py
+          python scripts/_tmp_fix_arch_streaming_tests.py
       - name: Install
         run: npm install --no-audit --no-fund
       - name: Typecheck
