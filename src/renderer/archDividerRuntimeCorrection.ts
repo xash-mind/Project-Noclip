@@ -35,6 +35,8 @@ export function archStructuralRole(wall: WallSpec): ArchStructuralRole | undefin
 
 export function archSemanticWallOwnsFinalCollision(wall: WallSpec): boolean {
   const role = archStructuralRole(wall);
+  // The player solver is 2D, so collision follows the final visible silhouette:
+  // overhead headers are removed while the reconstructed floor-to-ceiling pier keeps this footprint.
   if (role === 'upper') return false;
   if (role === 'pier') return true;
   return wallMinY(wall) <= 0.04;
