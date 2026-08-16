@@ -44,6 +44,16 @@ def build_driver() -> webdriver.Chrome:
     return driver
 
 
+def force_headless_focus(driver: webdriver.Chrome) -> None:
+    driver.execute_script("""
+      try {
+        Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => true });
+      } catch (_error) {}
+      window.focus();
+      document.querySelector('#game-canvas')?.focus();
+    """)
+
+
 def capture_canvas(driver: webdriver.Chrome, path: Path) -> None:
     value = driver.execute_async_script("""
       const done = arguments[0]; const canvas = document.querySelector('#game-canvas');
@@ -83,6 +93,7 @@ def place_fixture(driver: webdriver.Chrome, state: str) -> dict[str, Any]:
 def wait_flicker(driver: webdriver.Chrome, group_id: str, lit: bool, timeout: float = 16.0) -> dict[str, Any] | None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
+        force_headless_focus(driver)
         snapshot = fixture_snapshot(driver, group_id)
         pulse = float(snapshot.get("pulse", -1))
         if (pulse >= FLICKER_THRESHOLD) == lit:
@@ -101,6 +112,7 @@ def main() -> None:
         wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="new"]'), message="new journey").click()
         wait_for(driver, lambda current: current.execute_script("return document.querySelector('[data-ui=title]').hidden && !document.querySelector('[data-ui=hud]').hidden"), timeout=35, message="journey HUD")
         wait_for(driver, lambda current: current.execute_script("return Boolean(window.__projectNoclipQa)"), message="QA bridge")
+        force_headless_focus(driver)
         driver.execute_script("""
           const style=document.createElement('style'); style.textContent='[data-ui="hud"] > :not(canvas), .pause-overlay, [data-ui="version-indicator"] { opacity:0 !important; }'; document.head.appendChild(style);
           const set=(selector,value)=>{const e=document.querySelector(selector);if(!e)return false;if(e.type==='checkbox')e.checked=value;else e.value=value;e.dispatchEvent(new Event('change',{bubbles:true}));return true;};
@@ -109,6 +121,7 @@ def main() -> None:
         resume = driver.find_element(By.CSS_SELECTOR, '[data-action="resume"]')
         if resume.is_displayed():
             resume.click()
+        force_headless_focus(driver)
         wait_for(driver, lambda current: current.execute_script("return document.pointerLockElement===document.querySelector('#game-canvas')"), timeout=7, message="pointer lock")
 
         on = place_fixture(driver, "on")
