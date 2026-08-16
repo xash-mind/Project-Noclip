@@ -1,0 +1,38 @@
+name: Temporary Streaming Startup Fix
+
+on:
+  push:
+    branches:
+      - cleanup/codebase-maintainability-2026-08-14
+
+permissions:
+  contents: write
+
+jobs:
+  apply-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply fix
+        run: python scripts/_tmp_fix_streaming_startup.py
+      - name: Verify
+        run: |
+          npm install --no-audit --no-fund
+          npm run typecheck
+          npm test
+          npm run benchmark
+          npm run build
+      - name: Commit verified source-only fix
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "fix: keep startup eager while budgeting movement streaming"
+          git push origin HEAD:cleanup/codebase-maintainability-2026-08-14
