@@ -139,7 +139,7 @@ def main() -> None:
         driver.execute_script("""
           const style=document.createElement('style'); style.textContent='[data-ui="hud"] > :not(canvas), .pause-overlay, [data-ui="version-indicator"] { opacity:0 !important; }'; document.head.appendChild(style);
           const set=(selector,value)=>{const e=document.querySelector(selector);if(!e)return false;if(e.type==='checkbox')e.checked=value;else e.value=value;e.dispatchEvent(new Event('change',{bubbles:true}));return true;};
-          set('[data-lab="bypass"]',true); set('[data-lab="radius"]','3'); set('[data-lab="condition"]','clear'); set('[data-lab="carver"]','none'); set('[data-lab="structure"]','none');
+          set('[data-lab="bypass"]',true); set('[data-lab="radius"]','1'); set('[data-lab="condition"]','clear'); set('[data-lab="carver"]','none'); set('[data-lab="structure"]','none');
         """)
         ensure_gameplay_active(driver)
 
