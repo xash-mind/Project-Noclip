@@ -1,0 +1,3 @@
+import { spawnSync } from 'node:child_process';
+const targetId=process.argv[2]??'feature.medium-bucket';const steps=[[process.execPath,['scripts/build-presentation-definitions.mjs']],['npx',['tsc','-p','tsconfig.test.json']],[process.execPath,['--test','tests/presentation-architecture.test.mjs','tests/studio-foundation.test.mjs']]];
+for(const [command,args] of steps){const result=spawnSync(command,args,{cwd:process.cwd(),stdio:'inherit',shell:process.platform==='win32'&&command==='npx'});if(result.status!==0)process.exit(result.status??1);}console.log(`[Studio] targeted validation PASS for ${targetId}`);

@@ -265,9 +265,51 @@ A persisted structured presentation edit should be explainable from its receipt 
 
 **World Lab** remains the in-game runtime inspection / QA / forcing surface. It is not a filesystem editor, Git client, source editor or asset builder.
 
-**Noclip Studio** is the planned source-backed authoring/development surface. PAU exposes machine-readable metadata so Studio does not need to scrape TypeScript line numbers. Studio is **not implemented in PAU Run 1**.
+**Noclip Studio** is the source-backed local authoring/development companion. PAU Run 2 implements its first candidate foundation under `tools/studio/`; it consumes PAU machine-readable metadata instead of scraping TypeScript line numbers. Studio is development-only and is not ordinary gameplay or production runtime.
 
-## PAU Run 1 pilot boundary
+The local development bridge is explicit and bounded:
+
+```text
+running local game
+  <-> structured Studio bridge messages
+  <-> loopback Studio server/client
+  <-> canonical PAU source / NAL / Git diff / validation
+```
+
+The game-side bridge is loaded only in Vite development mode. Privileged Studio code binds to loopback, receives a per-run token from `npm run studio`, exposes no arbitrary `eval`/source execution surface, and is excluded from production game bundles. `npm run build` verifies that privileged Studio bridge/write markers are absent from `dist/`.
+
+World Lab may select, inspect, isolate, locate, and **Open in Studio**. It does not gain filesystem, Git, asset-build, or arbitrary source-write authority.
+
+### PAU source-backed authoring
+
+PAU Run 2 makes the Run 1 pilot Representation definitions structured authoring sources:
+
+```text
+src/presentation/definitions/level0-features.json
+  -> npm run presentation:build
+  -> src/presentation/generatedLevel0FeatureDefinitions.ts
+  -> existing Representation Registry
+```
+
+Studio derives editable controls from `RepresentationDefinition.editableParameters`. A preview is an in-memory overlay above the canonical Representation definition; it never mutates a `CellDescriptor`, `PropSpec`, Journey save, seed, or stable generated ID. `SAVE TO PROJECT` validates the canonical owner, writes only PAU-controlled definitions/bindings, regenerates outputs, runs focused validation, and creates a canonical `change-receipt-v1`.
+
+Three development change modes remain distinct:
+
+- **runtime-preview** — temporary presentation override; no project write;
+- **structured-project-change / representation-rebind / asset-import** — canonical PAU/NAL source-backed operation with diff and ChangeReceipt;
+- **code change** — outside current PAU metadata; Studio produces DevelopmentContext/agent handoff rather than gaining arbitrary coding authority.
+
+Git safety is conservative: Studio blocks project writes on protected `main`/`master` or detached HEAD, refuses to overwrite canonical files that were already dirty when Studio started, separates Studio-touched paths from other worktree changes, and only performs a targeted revert when the receipt's post-write hashes still match. Studio does not commit, push, merge, deploy, or open PRs.
+
+### Studio-facing semantic coverage
+
+The first Studio candidate exposes semantic inspection for `A-A1`, `P-A1`, Medium Bucket, Small Grey Open Paint Can, `M-W1`, `M-A1`, `M-C1`, `M-CE1`, `M-F1`, `C-B1`, and `CV-H1`.
+
+Only the Bucket/Can pilot is structured-editable in PAU Run 2. Non-migrated targets remain read-only semantic context with source ownership/tests/diagnostics and a **CODE CHANGE REQUIRED** handoff rather than unsafe fake controls.
+
+The canonical Studio workflow and current limitations live in `docs/NOCLIP_STUDIO.md`.
+
+## PAU Run 1 / Run 2 pilot boundary
 
 Migrated presentation targets:
 
@@ -283,4 +325,4 @@ Preserved world facts:
 - non-solid route-clear behavior;
 - generation versions and save schema.
 
-A-A1, P-A1, topology, Regions, streaming architecture, static batching, lighting architecture, audio runtime and the rest of the renderer are intentionally not migrated wholesale in this run.
+PAU Run 2 adds authoring and preview tooling around those migrated representations; it does not widen world-generation ownership. A-A1, P-A1, topology, Regions, streaming architecture, static batching, lighting architecture, audio runtime and the rest of the renderer are intentionally not migrated wholesale in this run.

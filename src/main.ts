@@ -17,6 +17,15 @@ mountDevelopmentVersionIndicator();
 const game = new ProjectNoclipGame();
 installRegionDepthLab(game);
 installRenderSettingsLab(game);
+if (import.meta.env.DEV) {
+  void Promise.all([
+    import('./dev/studioBridgeClient.js'),
+    import('./dev/worldLabStudioIntegration.js')
+  ]).then(([bridge, worldLab]) => {
+    bridge.installStudioBridgeClient(game);
+    worldLab.installWorldLabStudioIntegration();
+  }).catch((error) => console.warn('[Noclip Studio] local bridge unavailable', error));
+}
 void game.initialize().then(() => {
   const params = new URLSearchParams(window.location.search);
   if (params.has('autostart')) (document.querySelector('[data-action="new"]') as HTMLButtonElement | null)?.click();
