@@ -104,7 +104,6 @@ function lightlessBlackMaterial(cache: RegionPresentationCache): pc.StandardMate
   const existing = cache.materials.get('hole:deep-occluder');
   if (existing) return existing;
   const created = makeMaterial([0, 0, 0]);
-  created.specular = new pc.Color(0, 0, 0);
   created.gloss = 0;
   created.update();
   cache.materials.set('hole:deep-occluder', created);
