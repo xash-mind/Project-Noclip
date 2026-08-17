@@ -1,6 +1,6 @@
 # Project Noclip Terminology Map
 
-Code-facing glossary for conversation, Issues, prompts, developer tooling, and implementation. `WORLD.md` is the canonical world bible; `src/world/terminology.ts` is the typed short-address registry; `docs/CODE_MAP.md` maps concepts to files; `docs/PRESENTATION_ARCHITECTURE.md` is the canonical PAU/LCG/NAL architecture reference.
+Code-facing glossary for conversation, Issues, prompts, developer tooling, and implementation. `WORLD.md` is the canonical world bible; `src/world/terminology.ts` is the typed short-address registry; `docs/CODE_MAP.md` maps concepts to files; `docs/PRESENTATION_ARCHITECTURE.md` is the canonical PAU/LCG/NAL architecture reference; `docs/NOCLIP_STUDIO.md` owns the local Studio workflow.
 
 ## Identity rule
 
@@ -133,7 +133,7 @@ render-only curve/bridges  -> src/renderer/level0RegionPresentation.ts
 surface/wallpaper finish   -> src/renderer/level0SurfacePresentation.ts + level0Wallpaper.ts
 ```
 
-Piece addresses name conceptual parts even when the renderer builds them from multiple meshes/segments. A-A1 itself is not migrated wholesale to PAU in Run 1.
+Piece addresses name conceptual parts even when the renderer builds them from multiple meshes/segments. A-A1 itself is not yet structured-editable through PAU; Studio exposes semantic read-only inspection and code-change handoff.
 
 ## Canonical world categories
 
@@ -176,8 +176,6 @@ The renderer should consume resolved presentation data rather than make semantic
 
 A **Representation** is a presentation identity describing how a semantic target should be represented. Its `RepresentationId` is presentation identity only.
 
-Example:
-
 ```text
 Medium Bucket                         semantic design target
   -> bucket.default                  Representation ID
@@ -190,6 +188,8 @@ Changing `bucket.default` to a custom mesh Representation must not create a new 
 ### Representation Definition
 
 A **RepresentationDefinition** is machine-readable metadata for one Representation: human name/category, Geometry ID, material IDs, Asset IDs, parameters, editable metadata, LCG class, collision mode, fallback, owner/source/test references and diagnostics.
+
+For PAU Run 2's structured pilot, the human-authored source lives in `src/presentation/definitions/level0-features.json`; `scripts/build-presentation-definitions.mjs` validates it and generates the typed source consumed by the existing registry.
 
 ### Representation Binding
 
@@ -304,7 +304,25 @@ ChangeReceipt       = evidence of what changed after an operation
 ## Noclip Studio / World Lab
 
 - **World Lab** — in-game runtime inspection, QA and forcing surface. It is not a filesystem editor, Git client, source editor or asset build system.
-- **Noclip Studio** — planned source-backed development/authoring surface. Studio consumes PAU machine-readable metadata instead of scraping source line numbers. It is not implemented in PAU Run 1.
+- **Noclip Studio** — local source-backed development/authoring companion implemented as the PAU Run 2 candidate under `tools/studio/`. It consumes PAU machine-readable metadata and canonical DevelopmentContext/ChangeReceipt contracts. It is not gameplay and is excluded from production privileged runtime.
+
+### Studio change modes
+
+- **Runtime Preview** — temporary in-memory parameter or Representation Binding override above canonical PAU values. No source write; no world/save persistence.
+- **Structured Project Change** — PAU-controlled edit that writes only the canonical structured owner, regenerates required outputs, runs focused validation, exposes a source diff, and produces a ChangeReceipt.
+- **Code Change** — requested behavior that current PAU contracts cannot express. Studio does not perform arbitrary autonomous code edits; it produces high-signal DevelopmentContext / Full Development Prompt handoff.
+
+### Studio design target vs runtime instance
+
+Studio always selects a semantic **design target**. A **runtime instance** is added only when the running game can supply a real stable generated instance identity. A disposable showcase or ambiguous scene primitive must not be presented as a deterministic runtime instance.
+
+### Unsaved Preview
+
+**UNSAVED PREVIEW** is visible Studio state where one or more runtime-only PAU overrides differ from canonical source. Revert Preview or Clear All Previews returns presentation resolution to canonical values without changing generated world descriptors or Journey saves.
+
+### Studio local history
+
+`.noclip-studio/receipts/` is a gitignored developer-convenience log of Studio ChangeReceipt envelopes and targeted-revert evidence. It is safe to delete and is never the source of truth; Git and canonical PAU/NAL sources remain authoritative.
 
 ## Generation 3 engine vocabulary
 
@@ -345,12 +363,12 @@ From `src/world/types.ts`:
 ## Renderer vocabulary and ownership
 
 - **WorldRenderer** — streamed scene ownership, collision registry, Hole floor segmentation, interactions/marks, and sampled-light-field bridge.
-- **cellBuilder** — converts `CellDescriptor` into base PlayCanvas entities; in PAU Run 1 its legacy prop path remains for non-pilot objects and as compatibility code.
-- **Level 0 Feature presentation** — `src/renderer/level0FeaturePresentation.ts`; PlayCanvas adapter for the PAU Run 1 Bucket/Can pilot.
-- **PAU Feature presentation pilot bridge** — `src/renderer/pauFeaturePresentationPilot.ts`; installed before game construction and intercepts only Bucket/Can before the legacy `cellBuilder` prop presentation path.
+- **cellBuilder** — converts `CellDescriptor` into base PlayCanvas entities; legacy prop path remains for non-pilot objects and compatibility.
+- **Level 0 Feature presentation** — `src/renderer/level0FeaturePresentation.ts`; PlayCanvas adapter for the PAU Bucket/Can pilot and the development-only Studio preview overlay.
+- **PAU Feature presentation pilot bridge** — `src/renderer/pauFeaturePresentationPilot.ts`; intercepts only Bucket/Can before the legacy `cellBuilder` prop presentation path.
 - **Level 0 surface presentation** — `src/renderer/level0SurfacePresentation.ts`; wallpaper-based surfaces, pillar faces, fixture mesh material presentation and current floor-reaching Arch collider filter.
 - **Level 0 Region presentation** — `src/renderer/level0RegionPresentation.ts`; Region carpet finish, Hole depth bands and render-only Arch curves/bridges.
-- **Fixture lighting** — `src/renderer/fixtureLighting.ts`; every rendered fluorescent fixture owns one real downward PlayCanvas spot. Cells own lifetime only; player position does not select lights.
+- **Fixture lighting** — `src/renderer/fixtureLighting.ts`; every rendered fluorescent fixture owns its real light/shadow behavior. Cells own lifetime only; player position does not select lights.
 - **Sampled light field** — `sampleLightField` in `src/world/lighting.ts`; ambience/diagnostics only, not physical light allocation.
 - **Static batching** — `src/renderer/StaticWorldBatching.ts`; per-Cell render-only batching after presentation/lighting installers.
 - **Wallpaper phase** — world-space UV phase that must not reset at Cell seams.
@@ -365,7 +383,7 @@ From `src/world/types.ts`:
 - **migration** — schema conversion while preserving generation identity.
 - **save delta/runtime mutation** — persisted changes layered over deterministic generated baseline.
 
-Source Assets, runtime asset paths, DevelopmentContext and ChangeReceipt are development/presentation data and are not embedded into ordinary save identity.
+Source Assets, runtime asset paths, Studio preview state, DevelopmentContext and ChangeReceipt are development/presentation data and are not embedded into ordinary save identity.
 
 ## Legacy Generation 2 vocabulary
 
