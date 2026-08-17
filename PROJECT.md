@@ -19,6 +19,7 @@ Project Noclip is a living, persistent browser-first recreation of the Backrooms
 - Rare human presence: ordinary Level 0 isolates; the Manila Room is the intended rendezvous exception.
 - Time changes access: World Day and Exposure Day gate Regions, Transitions and events.
 - Renderer-independent world state: canonical generation and persistence remain pure TypeScript data where practical.
+- Presentation-independent identity: changing a Representation, material, image, audio source or mesh must not silently change generated world identity, seed results, topology, stable IDs, Journey identity or save identity.
 - Progressive fidelity: visual richness must not compromise world scale, deterministic identity, or stable performance.
 - Spatial law is part of world generation: **Geometry is either Euclidean or Non-Euclidean**. Non-Euclidean behaviour must be deterministic and save-safe rather than a one-off visual trick.
 
@@ -35,15 +36,17 @@ Project Noclip is a living, persistent browser-first recreation of the Backrooms
 - IndexedDB persistence with migrations and recovery
 - Developer diagnostics and World Lab tooling
 - Performance-conscious streaming and rendering
+- Presentation Architecture Upgrade (PAU) foundations for Representation bindings, Low-Complexity Geometry, the Noclip Asset Library, DevelopmentContext and ChangeReceipt contracts
 
 ### Explicitly excluded for now
 
 - Hundreds of implemented levels
 - Production multiplayer or authoritative trading
-- Voice, subscriptions, or user-uploaded images
+- Voice, subscriptions, or player-facing user-uploaded images
 - Routine monsters, combat loops, or constant chase design
 - Monetization
 - Large content expansion before the Level 0 vertical slice is stable
+- Noclip Studio until its dedicated PAU Run 2 foundation
 
 ## Architecture summary
 
@@ -56,6 +59,8 @@ Project Noclip is a living, persistent browser-first recreation of the Backrooms
 - Existing pre-versioned journeys migrate to a frozen `gen2` compatibility path and are never silently regenerated.
 - `ZoneId`, room archetypes, spatial profiles, and structural components are no longer new-world design inputs; they remain compatibility metadata for Gen2 saves and a narrow renderer adapter only.
 - Cells remain streaming/computation units and must not become player-visible room boundaries.
+- PAU establishes the presentation pipeline **World Truth → Semantic Object → Representation Binding → Representation Definition → Geometry/Asset Registries + Material Definitions → Presentation Data → Renderer**. See `docs/PRESENTATION_ARCHITECTURE.md`.
+- The renderer should increasingly consume resolved presentation information instead of deciding semantic world design or hard-coding arbitrary source-asset paths.
 
 ## World vocabulary and catalog
 
@@ -91,6 +96,8 @@ High-frequency short addresses such as `L0`, `O`, `P`, `A`, `C-B1`, `CV-H1`, and
 
 `Field`, `Cell`, seed domains, cache radius, and generation version are engine vocabulary. `District`, `ZoneId`, room archetype, spatial profile, component, and generic Prop are Gen2 compatibility vocabulary rather than peer design categories.
 
+Presentation vocabulary such as PAU, Representation, Representation Binding, LCG, NAL, Asset ID, DevelopmentContext and ChangeReceipt describes how semantic world truth is presented or edited. It never replaces world identity.
+
 Simplification rules:
 
 - no separate `Distorted` Geometry category;
@@ -100,9 +107,10 @@ Simplification rules:
 - `rare` is a Structure property, not a separate Structure type;
 - purely spatial impossibility belongs under Non-Euclidean Geometry, not a duplicate Anomaly category;
 - short addresses are aliases, never save/runtime identity;
+- presentation IDs and Asset IDs are presentation/content identity, never generated world/save identity;
 - do not assign permanent IDs to every render primitive; use an Architecture Pattern piece address only when humans need to refer to that conceptual part independently.
 
-Any accepted world-content or worldgen change that materially changes the catalog must update `WORLD.md` in the same pull request. Durable short-address or Architecture Pattern changes must also update `src/world/terminology.ts` and `docs/TERMINOLOGY.md`.
+Any accepted world-content or worldgen change that materially changes the catalog must update `WORLD.md` in the same pull request. Durable short-address or Architecture Pattern changes must also update `src/world/terminology.ts` and `docs/TERMINOLOGY.md`. Presentation-only changes do not require `WORLD.md` churn when world laws and semantic identity are unchanged.
 
 Generation 3 migration direction lives in GitHub Issue #31. `WORLD.md` is the catalog; Issue #31 is the implementation roadmap.
 
@@ -121,6 +129,9 @@ This keeps design conversation small while repository instructions carry the per
 - Tune Regions against crossing-time distributions and player-visible fidelity, not raw Cell counts.
 - Preserve save compatibility or provide tested migrations.
 - Preserve deterministic topology/connectivity laws for Euclidean Geometry; define equally deterministic laws before introducing any Non-Euclidean behaviour.
+- A presentation rebind or Asset replacement must not alter world seed outcomes, semantic world IDs, Region/Condition/Carver/Structure identity, topology, world position, stable generated IDs, Journey identity, or save identity.
+- Source assets must pass through NAL definitions/validation before becoming runtime content; world/game code must not depend on arbitrary source-file paths.
+- Canonical ordinary geometry should remain identical across Low/Medium/High/Ultra; render presets scale rendering cost rather than silently changing the world.
 - Keep offline and future connected-world authority separate.
 - Do not weaken timeline gates for convenience; use developer bypasses for testing.
 - Treat performance, persistence, and real-browser behaviour as product requirements.
@@ -134,6 +145,7 @@ This keeps design conversation small while repository instructions carry the per
 - World vocabulary/catalog: `WORLD.md`
 - Code-facing terminology: `docs/TERMINOLOGY.md`
 - Code navigation: `docs/CODE_MAP.md`
+- Presentation architecture: `docs/PRESENTATION_ARCHITECTURE.md`
 - Typed short-address registry: `src/world/terminology.ts`
 - Shared operations: https://github.com/xash-mind/project-operations
 - Vision details: `docs/VISION.md`

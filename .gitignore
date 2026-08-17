@@ -3,6 +3,7 @@ dist/
 .test-dist/
 .local-dist/
 .vercel/
+public/assets/runtime/
 *.log
 .DS_Store
 coverage/

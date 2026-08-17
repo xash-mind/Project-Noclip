@@ -16,6 +16,7 @@
     "src/persistence/types.ts",
     "src/simulation/**/*.ts",
     "src/physics/**/*.ts",
+    "src/presentation/**/*.ts",
     "src/playcanvas-compat.d.ts",
     "src/renderer/objectCatalog.ts",
     "src/renderer/fixtureVisualOwnership.ts",
