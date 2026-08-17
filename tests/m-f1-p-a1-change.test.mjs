@@ -45,14 +45,14 @@ function edgeGap(firstMin, firstMax, secondMin, secondMax) {
   return 0;
 }
 
-test('P-A1 wallpaper skins fill corners without protruding beyond the rectangular exterior', () => {
-  assert.ok(presentationSource.includes('const cornerOverlap = thickness'));
-  assert.ok(presentationSource.includes('setMaterial(core, wallMaterial(cache, descriptor, northWall))'));
+test('P-A1 wallpaper presentation uses one rectangular visible solid without corner skins', () => {
+  assert.match(presentationSource, /function pillarWallpaperReferenceWall/);
+  assert.match(presentationSource, /setMaterial\(core, wallMaterial\(cache, descriptor, pillarWallpaperReferenceWall\(prop\)\)\)/);
+  assert.match(presentationSource, /child\.name\.startsWith\(`\$\{prop\.id\}:wallpaper:`\)/);
+  assert.equal(presentationSource.includes('cornerOverlap'), false);
+  assert.equal(presentationSource.includes("const faces = ['north', 'south', 'west', 'east']"), false);
+  assert.equal(presentationSource.includes('function addBox('), false);
   assert.equal(presentationSource.includes("entityByName(container, `${prop.id}:body`)?.destroy()"), false);
-  assert.ok(presentationSource.includes('sx: prop.scale.x + cornerOverlap'));
-  assert.ok(presentationSource.includes('sz: prop.scale.z + cornerOverlap'));
-  assert.equal(presentationSource.includes('sx: prop.scale.x + cornerOverlap * 2'), false);
-  assert.equal(presentationSource.includes('sz: prop.scale.z + cornerOverlap * 2'), false);
 });
 
 test('P-A1 piers are nudged into room interiors instead of hugging partition boundaries', () => {

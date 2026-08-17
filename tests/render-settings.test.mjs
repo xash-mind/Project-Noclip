@@ -12,8 +12,10 @@ const mainSource = await readFile(new URL('../src/main.ts', import.meta.url), 'u
 
 const {
   BLACKOUT_AMBIENT_FLOOR,
+  DEEP_BLACKOUT_FOG,
   DEFAULT_RENDER_SETTINGS,
   LEVEL0_AMBIENT,
+  ORDINARY_LEVEL0_FOG,
   RENDER_DISTANCE_PROFILES,
   RENDER_PRESETS,
   RENDER_SETTINGS_STORAGE_KEY,
@@ -103,21 +105,26 @@ test('graphics settings never enter deterministic generation inputs or alter wor
   assert.deepEqual(ultra, before);
 });
 
-test('accepted Level 0 ambient endpoints and fog linkage are deterministic', () => {
+test('accepted Level 0 ambient endpoints and bounded fog distances remain deterministic', () => {
   assert.deepEqual(level0AmbientForBlackout(0), LEVEL0_AMBIENT);
   assert.deepEqual(level0AmbientForBlackout(1), BLACKOUT_AMBIENT_FLOOR);
   assert.deepEqual(LEVEL0_AMBIENT, { r: 0.20, g: 0.187, b: 0.107 });
   assert.deepEqual(BLACKOUT_AMBIENT_FLOOR, { r: 0.09, g: 0.084, b: 0.048 });
+  assert.deepEqual(DEEP_BLACKOUT_FOG, { r: 0, g: 0, b: 0 });
+  assert.ok(ORDINARY_LEVEL0_FOG.r > LEVEL0_AMBIENT.r * 0.78);
+  assert.ok(ORDINARY_LEVEL0_FOG.g > LEVEL0_AMBIENT.g * 0.78);
+  assert.ok(ORDINARY_LEVEL0_FOG.b < LEVEL0_AMBIENT.b * 0.78);
   const ends = ['low', 'medium', 'high', 'ultra'].map((preset) => {
     const settings = settingsForPreset(preset);
     const fog = level0FogForSettings(settings, 0);
     assert.equal(fog.end, renderDistanceProfile(settings).fogEnd);
+    assert.deepEqual(fog.color, ORDINARY_LEVEL0_FOG);
     return fog.end;
   });
   assert.deepEqual([...ends].sort((a, b) => a - b), ends);
   const blackoutFog = level0FogForSettings(settingsForPreset('high'), 1);
   const ordinaryFog = level0FogForSettings(settingsForPreset('high'), 0);
-  assert.ok(blackoutFog.color.r < ordinaryFog.color.r);
+  assert.deepEqual(blackoutFog.color, DEEP_BLACKOUT_FOG);
   assert.equal(blackoutFog.end, ordinaryFog.end);
 });
 
@@ -132,10 +139,11 @@ test('M-F1 uses one canonical continuous flicker pulse and a one-to-one light/sh
   assert.match(fixtureSource, /runtime\.selected && runtime\.light\.enabled.*light\?\.castShadows/);
 });
 
-test('render runtime owns modern PlayCanvas FogParams and real Cell participation', () => {
+test('render runtime owns modern PlayCanvas FogParams and keeps camera clear color coupled to fog', () => {
   assert.match(runtimeSource, /scene\.fog\.type = pc\.FOG_LINEAR/);
   assert.match(runtimeSource, /scene\.fog\.start = fog\.start/);
   assert.match(runtimeSource, /scene\.fog\.end = fog\.end/);
+  assert.match(runtimeSource, /cameraComponent\.clearColor = new pc\.Color\(fog\.color\.r, fog\.color\.g, fog\.color\.b\)/);
   assert.match(runtimeSource, /reconcileStreaming\(this, force, radiusOverride\)/);
   assert.match(streamingSource, /visual\.root\.enabled = false/);
   assert.match(streamingSource, /distance <= profile\.retentionRadius/);

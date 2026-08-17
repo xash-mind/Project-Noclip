@@ -70,8 +70,6 @@ const ARCH_HEADER_BRIDGE_MAX_GAP = 4.1;
 const ARCH_UPPER_BOTTOM = 1.92;
 const ARCH_UPPER_TOP = WALL_HEIGHT - 0.24;
 const ARCH_CURVE_APEX = Math.min(ARCH_UPPER_TOP - 0.24, 2.46);
-const ARCH_CURVE_JOIN_HANDOFF = 0.018;
-const ARCH_PIER_BRIDGE_OVERLAP = 0.045;
 const ARCH_CELL_SEAM_HANDOFF = 0.012;
 const ARCH_PIER_DEPTH = WALL_THICKNESS + 0.10;
 const ARCH_UPPER_DEPTH = WALL_THICKNESS + 0.16;
@@ -100,6 +98,16 @@ function material(cache: RegionPresentationCache, key: string, tint: readonly [n
   if (existing) return existing;
   const created = makeMaterial([tint[0], tint[1], tint[2]]);
   cache.materials.set(key, created);
+  return created;
+}
+function lightlessBlackMaterial(cache: RegionPresentationCache): pc.StandardMaterial {
+  const existing = cache.materials.get('hole:deep-occluder');
+  if (existing) return existing;
+  const created = makeMaterial([0, 0, 0]);
+  created.specular = new pc.Color(0, 0, 0);
+  created.gloss = 0;
+  created.update();
+  cache.materials.set('hole:deep-occluder', created);
   return created;
 }
 function addBox(
@@ -176,9 +184,9 @@ function applyCarpetPresentation(visual: CellVisual): void {
 
 export function holeDepthBands(): readonly HoleDepthBand[] {
   return [
-    { key: 'upper', top: -0.02, bottom: -0.72, tint: [0.10, 0.085, 0.052] },
-    { key: 'middle', top: -0.72, bottom: -1.72, tint: [0.028, 0.024, 0.016] },
-    { key: 'deep', top: -1.72, bottom: -4.48, tint: [0.0045, 0.0042, 0.0035] }
+    { key: 'upper', top: -0.02, bottom: -0.82, tint: [0.145, 0.123, 0.072] },
+    { key: 'middle', top: -0.82, bottom: -2.0, tint: [0.028, 0.022, 0.012] },
+    { key: 'deep', top: -2.0, bottom: -8.4, tint: [0.0015, 0.0013, 0.001] }
   ];
 }
 
@@ -207,18 +215,24 @@ function replaceHoleDepth(renderer: WorldRenderer, visual: CellVisual): void {
   const cache = cacheFor(renderer);
   for (const hole of holes) {
     for (const name of [
-      `${hole.id}:depth`, `${hole.id}:north-side`, `${hole.id}:south-side`, `${hole.id}:west-side`, `${hole.id}:east-side`
+      `${hole.id}:void`, `${hole.id}:depth`, `${hole.id}:north-side`, `${hole.id}:south-side`, `${hole.id}:west-side`, `${hole.id}:east-side`
     ]) entityByName(visual.root, name)?.destroy();
     for (const child of childrenOf(visual.root)) {
-      if (child.name.startsWith(`${hole.id}:depth-band:`) || child.name === `${hole.id}:depth-void`) child.destroy();
+      if (
+        child.name.startsWith(`${hole.id}:depth-band:`)
+        || child.name === `${hole.id}:depth-void`
+        || child.name === `${hole.id}:depth-occluder`
+      ) child.destroy();
     }
-    for (const band of holeDepthBands()) addHoleBand(visual.root, hole, band, material(cache, `hole:${band.key}`, band.tint));
+    const bands = holeDepthBands();
+    for (const band of bands) addHoleBand(visual.root, hole, band, material(cache, `hole:${band.key}`, band.tint));
+    const deepBottom = bands[bands.length - 1]!.bottom;
     addBox(
-      `${hole.id}:depth-void`,
+      `${hole.id}:depth-occluder`,
       visual.root,
-      [hole.position.x, -4.52, hole.position.z],
-      [hole.scale.x * 0.96, 0.04, hole.scale.z * 0.96],
-      material(cache, 'hole:void', [0.0015, 0.0015, 0.0012])
+      [hole.position.x, deepBottom - 0.06, hole.position.z],
+      [hole.scale.x * 2.6, 0.14, hole.scale.z * 2.6],
+      lightlessBlackMaterial(cache)
     );
   }
 }
@@ -329,11 +343,11 @@ function curveWidthForBay(width: number): number {
 
 export function archFramePresentationProfile(): {
   upperBottom: number; upperTop: number; ceilingReveal: number; curveApex: number;
-  joinOverlap: number; cellSeamOverlap: number; pierDepth: number; upperDepth: number; shoulderSpanScale: number;
+  curveJoinHandoff: number; cellSeamHandoff: number; pierDepth: number; upperDepth: number; shoulderSpanScale: number;
 } {
   return {
     upperBottom: ARCH_UPPER_BOTTOM, upperTop: ARCH_UPPER_TOP, ceilingReveal: WALL_HEIGHT - ARCH_UPPER_TOP, curveApex: ARCH_CURVE_APEX,
-    joinOverlap: ARCH_CURVE_JOIN_HANDOFF, cellSeamOverlap: ARCH_CELL_SEAM_HANDOFF, pierDepth: ARCH_PIER_DEPTH, upperDepth: ARCH_UPPER_DEPTH,
+    curveJoinHandoff: 0, cellSeamHandoff: ARCH_CELL_SEAM_HANDOFF, pierDepth: ARCH_PIER_DEPTH, upperDepth: ARCH_UPPER_DEPTH,
     shoulderSpanScale: ARCH_SHOULDER_SPAN_SCALE
   };
 }
@@ -374,6 +388,14 @@ function frameBaysForLine(line: WorldArchLine): ArchFrameBay[] {
     }
   }
   return bays;
+}
+
+function rectangularUpperRuns(bays: readonly ArchFrameBay[], supports: readonly Interval[]): Interval[] {
+  const intervals: Interval[] = supports.map(([start, end]) => [start, end] as const);
+  for (const bay of bays) {
+    intervals.push([bay.start, bay.curveStart], [bay.curveEnd, bay.end]);
+  }
+  return mergeIntervals(intervals);
 }
 
 export function archFrameBaysForDescriptors(descriptors: readonly CellDescriptor[]): ArchFrameBay[] {
@@ -442,10 +464,9 @@ function cellOwnsLine(descriptor: CellDescriptor, orientation: WallSpec['orienta
 }
 function clippedInterval(descriptor: CellDescriptor, orientation: WallSpec['orientation'], start: number, end: number): Interval | undefined {
   const [cellStart, cellEnd] = cellAlongBounds(descriptor, orientation);
-  // One-sided Cell handoff: the preceding Cell owns the small overlap distance,
-  // and the following Cell begins exactly where that extension ends. This moves
-  // the join away from the Cell root boundary without drawing coplanar duplicate
-  // faces (which would z-fight).
+  // One-sided Cell handoff: the preceding Cell carries the run through the small
+  // handoff distance and the following Cell begins at that same shifted world
+  // coordinate. The join moves off the Cell root boundary without duplicate faces.
   const entersFromPreviousCell = start < cellStart - 0.0005;
   const continuesIntoNextCell = end > cellEnd + 0.0005;
   const clippedStart = Math.max(start, cellStart + (entersFromPreviousCell ? ARCH_CELL_SEAM_HANDOFF : 0));
@@ -558,15 +579,10 @@ function addCurveMeshClipped(
 ): void {
   const descriptor = visual.descriptor;
   if (!cellOwnsLine(descriptor, bay.orientation, bay.fixed)) return;
-  // Shoulder and curve surfaces hand off at one exact world coordinate rather
-  // than overlapping coplanar faces. The 18 mm inset is visually negligible but
-  // keeps the join hidden inside the shoulder footprint and eliminates z-fighting.
-  const clip = clippedInterval(
-    descriptor,
-    bay.orientation,
-    bay.curveStart + ARCH_CURVE_JOIN_HANDOFF,
-    bay.curveEnd - ARCH_CURVE_JOIN_HANDOFF
-  );
+  // The curve and its rectangular shoulders now share exact world-space boundary
+  // coordinates. Neither side extends across the boundary, so there is no
+  // coplanar seam patch or inset step to reveal while the camera moves.
+  const clip = clippedInterval(descriptor, bay.orientation, bay.curveStart, bay.curveEnd);
   if (!clip) return;
   const positions: number[] = [];
   const normals: number[] = [];
@@ -674,6 +690,7 @@ function renderArchFrames(renderer: WorldRenderer, targetCellIds?: ReadonlySet<s
     const bays = frameBaysForLine(line);
     const activeSupportIntervals = mergeIntervals(line.solids.map((wall) => [wall.start, wall.end] as const))
       .filter((support) => bays.some((bay) => Math.abs(support[1] - bay.start) < 0.08 || Math.abs(support[0] - bay.end) < 0.08));
+    const upperRuns = rectangularUpperRuns(bays, activeSupportIntervals);
     for (const visual of targetVisuals) {
       if (visual.descriptor.world.generationVersion !== 'gen3-v1') continue;
       for (let index = 0; index < activeSupportIntervals.length; index += 1) {
@@ -692,18 +709,15 @@ function renderArchFrames(renderer: WorldRenderer, targetCellIds?: ReadonlySet<s
         );
       }
       const shoulderHeight = ARCH_UPPER_TOP - ARCH_UPPER_BOTTOM;
-      for (let supportIndex = 0; supportIndex < activeSupportIntervals.length; supportIndex += 1) {
-        const support = activeSupportIntervals[supportIndex]!;
-        const connectsLeft = bays.some((bay) => Math.abs(bay.end - support[0]) < 0.08);
-        const connectsRight = bays.some((bay) => Math.abs(bay.start - support[1]) < 0.08);
-        if (!connectsLeft || !connectsRight) continue;
+      for (let index = 0; index < upperRuns.length; index += 1) {
+        const run = upperRuns[index]!;
         addWorldBoxClipped(
           visual,
-          `upper-through-pier:${line.key}:${supportIndex}`,
+          `upper-run:${line.key}:${index}`,
           line.orientation,
           line.fixed,
-          support[0] - ARCH_PIER_BRIDGE_OVERLAP,
-          support[1] + ARCH_PIER_BRIDGE_OVERLAP,
+          run[0],
+          run[1],
           ARCH_UPPER_BOTTOM + shoulderHeight / 2,
           shoulderHeight,
           ARCH_UPPER_DEPTH,
@@ -711,30 +725,6 @@ function renderArchFrames(renderer: WorldRenderer, targetCellIds?: ReadonlySet<s
         );
       }
       for (const bay of bays) {
-        addWorldBoxClipped(
-          visual,
-          `shoulder-left:${bay.id}`,
-          bay.orientation,
-          bay.fixed,
-          bay.start - ARCH_PIER_BRIDGE_OVERLAP,
-          bay.curveStart + ARCH_CURVE_JOIN_HANDOFF,
-          ARCH_UPPER_BOTTOM + shoulderHeight / 2,
-          shoulderHeight,
-          ARCH_UPPER_DEPTH,
-          upperMaterial
-        );
-        addWorldBoxClipped(
-          visual,
-          `shoulder-right:${bay.id}`,
-          bay.orientation,
-          bay.fixed,
-          bay.curveEnd - ARCH_CURVE_JOIN_HANDOFF,
-          bay.end + ARCH_PIER_BRIDGE_OVERLAP,
-          ARCH_UPPER_BOTTOM + shoulderHeight / 2,
-          shoulderHeight,
-          ARCH_UPPER_DEPTH,
-          upperMaterial
-        );
         addCurveMeshClipped(renderer, visual, bay, upperMaterial);
         if (!bay.route) {
           addWorldBoxClipped(

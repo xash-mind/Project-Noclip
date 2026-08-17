@@ -44,6 +44,8 @@ export interface Level0FogProfile {
 
 export const LEVEL0_AMBIENT = Object.freeze({ r: 0.20, g: 0.187, b: 0.107 });
 export const BLACKOUT_AMBIENT_FLOOR = Object.freeze({ r: 0.09, g: 0.084, b: 0.048 });
+export const ORDINARY_LEVEL0_FOG = Object.freeze({ r: 0.166, g: 0.157, b: 0.078 });
+export const DEEP_BLACKOUT_FOG = Object.freeze({ r: 0, g: 0, b: 0 });
 export const M_F1_LIGHT_SHADOW_SAFETY_CEILING = 128;
 export const RENDER_SETTINGS_STORAGE_KEY = 'project-noclip:render-settings:v1';
 
@@ -186,8 +188,6 @@ export function level0AmbientForBlackout(blackoutStrength: number): { r: number;
 export function level0FogForSettings(settings: RenderSettings, blackoutStrength: number): Level0FogProfile {
   const distance = renderDistanceProfile(settings);
   const blackout = clamp01(blackoutStrength);
-  const ordinaryFog = { r: LEVEL0_AMBIENT.r * 0.78, g: LEVEL0_AMBIENT.g * 0.78, b: LEVEL0_AMBIENT.b * 0.78 };
-  const blackoutFog = { r: BLACKOUT_AMBIENT_FLOOR.r * 0.28, g: BLACKOUT_AMBIENT_FLOOR.g * 0.28, b: BLACKOUT_AMBIENT_FLOOR.b * 0.28 };
   const colorMix = Math.pow(blackout, 1.4);
   const linkedStart = settings.fogBehavior === 'stronger' ? distance.fogStart * 0.78 : distance.fogStart;
   const blackoutStart = Math.max(4.5, linkedStart * 0.62);
@@ -195,9 +195,9 @@ export function level0FogForSettings(settings: RenderSettings, blackoutStrength:
     start: linkedStart + (blackoutStart - linkedStart) * blackout,
     end: distance.fogEnd,
     color: {
-      r: ordinaryFog.r + (blackoutFog.r - ordinaryFog.r) * colorMix,
-      g: ordinaryFog.g + (blackoutFog.g - ordinaryFog.g) * colorMix,
-      b: ordinaryFog.b + (blackoutFog.b - ordinaryFog.b) * colorMix
+      r: ORDINARY_LEVEL0_FOG.r + (DEEP_BLACKOUT_FOG.r - ORDINARY_LEVEL0_FOG.r) * colorMix,
+      g: ORDINARY_LEVEL0_FOG.g + (DEEP_BLACKOUT_FOG.g - ORDINARY_LEVEL0_FOG.g) * colorMix,
+      b: ORDINARY_LEVEL0_FOG.b + (DEEP_BLACKOUT_FOG.b - ORDINARY_LEVEL0_FOG.b) * colorMix
     }
   };
 }

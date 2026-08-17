@@ -12,6 +12,26 @@ import { color, type CellVisual, type ExitVisual, type InteractionVisual, type N
 export type MaterialFactory = (key: string, diffuse: [number, number, number], textureKind?: TextureKind, variant?: number, tiling?: [number, number], emissive?: [number, number, number], emissiveIntensity?: number, uvOffset?: [number, number]) => pc.StandardMaterial;
 export type BoxFactory = (name: string, parent: pc.Entity, position: [number, number, number], scale: [number, number, number], material: pc.StandardMaterial, rotationY?: number) => pc.Entity;
 
+type MeshPoint = readonly [number, number, number];
+interface SimpleMeshData {
+  positions: number[];
+  normals: number[];
+  uvs: number[];
+  indices: number[];
+}
+
+function appendMeshQuad(
+  data: SimpleMeshData,
+  points: readonly [MeshPoint, MeshPoint, MeshPoint, MeshPoint],
+  normal: MeshPoint
+): void {
+  const base = data.positions.length / 3;
+  for (const point of points) data.positions.push(point[0], point[1], point[2]);
+  for (let index = 0; index < 4; index += 1) data.normals.push(normal[0], normal[1], normal[2]);
+  data.uvs.push(0, 0, 1, 0, 1, 1, 0, 1);
+  data.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+}
+
 const CATALOG_PROP_SCALE: Record<PropSpec['kind'], [number, number, number]> = {
   table: [1.6, 0.78, 0.8],
   chair: [0.58, 0.9, 0.58],
@@ -158,6 +178,107 @@ export class RendererCellBuilder {
     }
   }
 
+  private meshEntity(name: string, parent: pc.Entity, data: SimpleMeshData, material: pc.StandardMaterial): pc.Entity {
+    const mesh = new pc.Mesh(this.app.graphicsDevice);
+    mesh.setPositions(data.positions);
+    mesh.setNormals(data.normals);
+    mesh.setUvs(0, data.uvs);
+    mesh.setIndices(data.indices);
+    mesh.update();
+    const entity = new pc.Entity(name);
+    entity.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, material)] });
+    parent.addChild(entity);
+    return entity;
+  }
+
+  private addOpenContainerGeometry(
+    container: pc.Entity,
+    prop: PropSpec,
+    material: pc.StandardMaterial,
+    isPaintCan: boolean
+  ): void {
+    const sx = prop.scale.x; const sy = prop.scale.y; const sz = prop.scale.z;
+    const sides = 8;
+    const step = Math.PI * 2 / sides;
+    const rimHeight = Math.max(0.025, sy * 0.055);
+    const bodyTop = sy / 2 - rimHeight;
+    const bodyBottom = -sy / 2;
+    const topRadiusX = sx * 0.455;
+    const topRadiusZ = sz * 0.455;
+    const bottomScale = isPaintCan ? 0.98 : 0.82;
+    const bottomRadiusX = topRadiusX * bottomScale;
+    const bottomRadiusZ = topRadiusZ * bottomScale;
+    const body: SimpleMeshData = { positions: [], normals: [], uvs: [], indices: [] };
+
+    for (let index = 0; index < sides; index += 1) {
+      const a0 = index * step - step / 2;
+      const a1 = index * step + step / 2;
+      const mid = index * step;
+      const p0: MeshPoint = [Math.sin(a0) * bottomRadiusX, bodyBottom, Math.cos(a0) * bottomRadiusZ];
+      const p1: MeshPoint = [Math.sin(a1) * bottomRadiusX, bodyBottom, Math.cos(a1) * bottomRadiusZ];
+      const p2: MeshPoint = [Math.sin(a1) * topRadiusX, bodyTop, Math.cos(a1) * topRadiusZ];
+      const p3: MeshPoint = [Math.sin(a0) * topRadiusX, bodyTop, Math.cos(a0) * topRadiusZ];
+      appendMeshQuad(body, [p0, p1, p2, p3], [Math.sin(mid), 0, Math.cos(mid)]);
+    }
+    this.meshEntity(`${prop.id}:body`, container, body, material);
+
+    const rimMaterial = this.getMaterial(
+      isPaintCan ? 'prop:paint-can-rim' : 'prop:bucket-rim',
+      isPaintCan ? [0.58, 0.59, 0.56] : [0.43, 0.41, 0.34],
+      'concrete',
+      1
+    );
+    const outerRadiusX = sx * 0.49;
+    const outerRadiusZ = sz * 0.49;
+    const innerRadiusX = sx * (isPaintCan ? 0.405 : 0.40);
+    const innerRadiusZ = sz * (isPaintCan ? 0.405 : 0.40);
+    const rimTop = sy / 2;
+    const rimBottom = bodyTop;
+    const rim: SimpleMeshData = { positions: [], normals: [], uvs: [], indices: [] };
+    for (let index = 0; index < sides; index += 1) {
+      const a0 = index * step - step / 2;
+      const a1 = index * step + step / 2;
+      const mid = index * step;
+      const outer0Top: MeshPoint = [Math.sin(a0) * outerRadiusX, rimTop, Math.cos(a0) * outerRadiusZ];
+      const outer1Top: MeshPoint = [Math.sin(a1) * outerRadiusX, rimTop, Math.cos(a1) * outerRadiusZ];
+      const outer0Bottom: MeshPoint = [Math.sin(a0) * outerRadiusX, rimBottom, Math.cos(a0) * outerRadiusZ];
+      const outer1Bottom: MeshPoint = [Math.sin(a1) * outerRadiusX, rimBottom, Math.cos(a1) * outerRadiusZ];
+      const inner0Top: MeshPoint = [Math.sin(a0) * innerRadiusX, rimTop, Math.cos(a0) * innerRadiusZ];
+      const inner1Top: MeshPoint = [Math.sin(a1) * innerRadiusX, rimTop, Math.cos(a1) * innerRadiusZ];
+      const inner0Bottom: MeshPoint = [Math.sin(a0) * innerRadiusX, rimBottom, Math.cos(a0) * innerRadiusZ];
+      const inner1Bottom: MeshPoint = [Math.sin(a1) * innerRadiusX, rimBottom, Math.cos(a1) * innerRadiusZ];
+      const radial: MeshPoint = [Math.sin(mid), 0, Math.cos(mid)];
+      appendMeshQuad(rim, [outer0Bottom, outer1Bottom, outer1Top, outer0Top], radial);
+      appendMeshQuad(rim, [inner1Bottom, inner0Bottom, inner0Top, inner1Top], [-radial[0], 0, -radial[2]]);
+      appendMeshQuad(rim, [inner0Top, outer0Top, outer1Top, inner1Top], [0, 1, 0]);
+    }
+    this.meshEntity(`${prop.id}:rim`, container, rim, rimMaterial);
+
+    const cavityMaterial = this.getMaterial('prop:open-container-cavity', [0.025, 0.026, 0.023]);
+    const cavity = new pc.Entity(`${prop.id}:interior`);
+    cavity.addComponent('render', { type: 'cylinder' });
+    cavity.setLocalPosition(0, rimBottom - rimHeight * 0.5, 0);
+    cavity.setLocalScale(innerRadiusX * 1.76, rimHeight * 0.18, innerRadiusZ * 1.76);
+    if (cavity.render) cavity.render.material = cavityMaterial;
+    container.addChild(cavity);
+
+    if (isPaintCan) {
+      const residue = this.getMaterial('prop:paint-can-label-residue', [0.57, 0.56, 0.49], 'paper', 0);
+      const frontFacet = topRadiusZ * Math.cos(step / 2);
+      const labelZ = -(frontFacet + 0.007);
+      this.box(`${prop.id}:label-residue`, container, [sx * 0.03, -sy * 0.03, labelZ], [sx * 0.46, sy * 0.33, 0.006], residue);
+      this.box(`${prop.id}:label-remnant`, container, [-sx * 0.18, -sy * 0.19, labelZ - 0.002], [sx * 0.10, sy * 0.07, 0.004], residue);
+    } else {
+      const handle = this.getMaterial('prop:bucket-handle', [0.24, 0.24, 0.21], 'concrete', 0);
+      const handleX = sx * 0.43;
+      this.box(`${prop.id}:handle-top`, container, [0, sy * 0.34, 0], [sx * 0.72, 0.025, 0.025], handle);
+      this.box(`${prop.id}:handle-left`, container, [-handleX, sy * 0.18, 0], [0.025, sy * 0.34, 0.025], handle);
+      this.box(`${prop.id}:handle-right`, container, [handleX, sy * 0.18, 0], [0.025, sy * 0.34, 0.025], handle);
+      this.box(`${prop.id}:handle-anchor-left`, container, [-handleX, sy * 0.03, 0], [0.045, 0.055, 0.045], handle);
+      this.box(`${prop.id}:handle-anchor-right`, container, [handleX, sy * 0.03, 0], [0.045, 0.055, 0.045], handle);
+    }
+  }
+
   private addPropGeometry(parent: pc.Entity, prop: PropSpec, profile: ZoneProfile): pc.Entity {
     const container = new pc.Entity(prop.id);
     container.setLocalPosition(prop.position.x, prop.position.y, prop.position.z);
@@ -192,34 +313,7 @@ export class RendererCellBuilder {
       const tape = this.getMaterial('prop:box-tape', [0.56, 0.49, 0.31]);
       this.box(`${prop.id}:tape`, container, [0, sy / 2 + 0.008, 0], [sx * 0.16, 0.016, sz], tape);
     } else if (prop.kind === 'bucket' || prop.kind === 'paint-can') {
-      const isPaintCan = prop.kind === 'paint-can';
-      const sides = 8;
-      const radiusX = sx * 0.46;
-      const radiusZ = sz * 0.46;
-      const sideWidth = Math.min(sx, sz) * (isPaintCan ? 0.34 : 0.32);
-      const wallDepth = Math.max(0.025, Math.min(sx, sz) * 0.055);
-      const rimHeight = Math.max(0.025, sy * 0.055);
-      const rimMaterial = this.getMaterial(isPaintCan ? 'prop:paint-can-rim' : 'prop:bucket-rim', isPaintCan ? [0.58, 0.59, 0.56] : [0.43, 0.41, 0.34], 'concrete', 1);
-      const cavity = this.getMaterial('prop:open-container-cavity', [0.025, 0.026, 0.023]);
-      for (let index = 0; index < sides; index += 1) {
-        const angle = index * 360 / sides;
-        const radians = angle * Math.PI / 180;
-        const x = Math.sin(radians) * radiusX;
-        const z = Math.cos(radians) * radiusZ;
-        this.box(`${prop.id}:side:${index}`, container, [x, -rimHeight / 2, z], [sideWidth, sy - rimHeight, wallDepth], material, angle);
-        this.box(`${prop.id}:rim:${index}`, container, [x, sy / 2 - rimHeight / 2, z], [sideWidth * 1.08, rimHeight, wallDepth * 1.5], rimMaterial, angle);
-      }
-      this.box(`${prop.id}:interior`, container, [0, sy / 2 - rimHeight * 2.4, 0], [sx * 0.72, rimHeight * 0.55, sz * 0.72], cavity);
-      if (isPaintCan) {
-        const residue = this.getMaterial('prop:paint-can-label-residue', [0.57, 0.56, 0.49], 'paper', 0);
-        this.box(`${prop.id}:label-residue`, container, [0.025, -sy * 0.03, -sz * 0.475], [sx * 0.48, sy * 0.34, 0.012], residue, -3);
-        this.box(`${prop.id}:label-tear`, container, [-sx * 0.17, -sy * 0.18, -sz * 0.482], [sx * 0.12, sy * 0.08, 0.014], material, 7);
-      } else {
-        const handle = this.getMaterial('prop:bucket-handle', [0.24, 0.24, 0.21], 'concrete', 0);
-        this.box(`${prop.id}:handle-top`, container, [0, sy * 0.34, 0], [sx * 0.72, 0.025, 0.025], handle);
-        this.box(`${prop.id}:handle-left`, container, [-sx * 0.36, sy * 0.18, 0], [0.025, sy * 0.34, 0.025], handle);
-        this.box(`${prop.id}:handle-right`, container, [sx * 0.36, sy * 0.18, 0], [0.025, sy * 0.34, 0.025], handle);
-      }
+      this.addOpenContainerGeometry(container, prop, material, prop.kind === 'paint-can');
     } else {
       this.box(`${prop.id}:body`, container, [0, 0, 0], [sx, sy, sz], material);
     }

@@ -76,22 +76,6 @@ function setMaterial(entity: pc.Entity | undefined, value: pc.StandardMaterial):
   if (entity?.render) entity.render.material = value;
 }
 
-function addBox(
-  name: string,
-  parent: pc.Entity,
-  position: [number, number, number],
-  scale: [number, number, number],
-  value: pc.StandardMaterial
-): pc.Entity {
-  const entity = new pc.Entity(name);
-  entity.addComponent('render', { type: 'box' });
-  entity.setLocalPosition(position[0], position[1], position[2]);
-  entity.setLocalScale(scale[0], scale[1], scale[2]);
-  if (entity.render) entity.render.material = value;
-  parent.addChild(entity);
-  return entity;
-}
-
 function wallMaterial(
   cache: SurfacePresentationCache,
   descriptor: CellDescriptor,
@@ -156,40 +140,16 @@ function fixtureMaterial(
   });
 }
 
-function pillarFaceWall(
-  prop: PropSpec,
-  face: 'north' | 'south' | 'west' | 'east'
-): WallSpec {
-  const thickness = 0.04;
-  // Each skin is centered on the structural face and therefore already extends
-  // half its thickness beyond the core. One total thickness of longitudinal
-  // allowance makes adjacent outer edges meet exactly; two caused the rejected
-  // tic-tac-toe-style protrusion beyond the rectangular silhouette.
-  const cornerOverlap = thickness;
-  if (face === 'north' || face === 'south') {
-    return {
-      id: `${prop.id}:wallpaper:${face}`,
-      cx: prop.position.x,
-      cy: prop.position.y,
-      cz: prop.position.z + (face === 'north' ? -prop.scale.z / 2 : prop.scale.z / 2),
-      sx: prop.scale.x + cornerOverlap,
-      sy: prop.scale.y,
-      sz: thickness,
-      orientation: 'z',
-      drawable: true,
-      materialId: 'level-0-wallpaper',
-      materialVariant: 0
-    };
-  }
+function pillarWallpaperReferenceWall(prop: PropSpec): WallSpec {
   return {
-    id: `${prop.id}:wallpaper:${face}`,
-    cx: prop.position.x + (face === 'west' ? -prop.scale.x / 2 : prop.scale.x / 2),
+    id: `${prop.id}:wallpaper`,
+    cx: prop.position.x,
     cy: prop.position.y,
-    cz: prop.position.z,
-    sx: thickness,
+    cz: prop.position.z - prop.scale.z / 2,
+    sx: prop.scale.x,
     sy: prop.scale.y,
-    sz: prop.scale.z + cornerOverlap,
-    orientation: 'x',
+    sz: 0.04,
+    orientation: 'z',
     drawable: true,
     materialId: 'level-0-wallpaper',
     materialVariant: 0
@@ -204,27 +164,12 @@ function replacePillarPresentation(
 ): void {
   const container = entityByName(root, prop.id);
   if (!container) return;
-
-  const northWall = pillarFaceWall(prop, 'north');
-  const core = entityByName(container, `${prop.id}:body`);
-  setMaterial(core, wallMaterial(cache, descriptor, northWall));
-
-  const faces = ['north', 'south', 'west', 'east'] as const;
-  for (const face of faces) {
-    const wall = face === 'north' ? northWall : pillarFaceWall(prop, face);
-    const value = wallMaterial(cache, descriptor, wall);
-    addBox(
-      `${prop.id}:wallpaper:${face}`,
-      container,
-      [
-        face === 'west' ? -prop.scale.x / 2 : face === 'east' ? prop.scale.x / 2 : 0,
-        0,
-        face === 'north' ? -prop.scale.z / 2 : face === 'south' ? prop.scale.z / 2 : 0
-      ],
-      [wall.sx, wall.sy, wall.sz],
-      value
-    );
+  for (const child of childrenOf(container)) {
+    if (child.name.startsWith(`${prop.id}:wallpaper:`)) child.destroy();
   }
+  const core = entityByName(container, `${prop.id}:body`);
+  if (!core) return;
+  setMaterial(core, wallMaterial(cache, descriptor, pillarWallpaperReferenceWall(prop)));
 }
 
 function setSurfaceMaterial(root: pc.Entity, kind: 'floor' | 'ceiling', value: pc.StandardMaterial): void {

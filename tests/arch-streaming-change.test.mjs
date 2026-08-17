@@ -6,11 +6,12 @@ const core = await import('../.test-dist/src/world/gen3ArchitectureCore.js');
 const { generateCell } = await import('../.test-dist/src/world/generator.js');
 const { DEFAULT_TUNING } = await import('../.test-dist/src/world/types.js');
 const { routeReservationEnvelopesForCell } = await import('../.test-dist/src/world/gen3SpaceTopologyBuild.js');
-const { archFramePresentationProfile } = await import('../.test-dist/src/renderer/level0RegionPresentation.js');
+const { archFramePresentationProfile, holeDepthBands } = await import('../.test-dist/src/renderer/level0RegionPresentation.js');
 const { OBJECT_CATALOG, validateObjectCatalog } = await import('../.test-dist/src/renderer/objectCatalog.js');
 const streamingSource = await readFile(new URL('../src/renderer/streamingScheduler.ts', import.meta.url), 'utf8');
 const batchingSource = await readFile(new URL('../src/renderer/StaticWorldBatching.ts', import.meta.url), 'utf8');
 const archPresentationSource = await readFile(new URL('../src/renderer/level0RegionPresentation.ts', import.meta.url), 'utf8');
+const cellBuilderSource = await readFile(new URL('../src/renderer/cellBuilder.ts', import.meta.url), 'utf8');
 
 function tuning(regionOverride) {
   return { ...DEFAULT_TUNING, regionOverride, conditionOverride: 'clear', carverOverride: 'none', structureOverride: 'none', gateBypass: true };
@@ -20,6 +21,10 @@ function cell(seed, x, z, regionOverride) {
 }
 function overlaps(left, right) {
   return left.maxX > right.minX && left.minX < right.maxX && left.maxZ > right.minZ && left.minZ < right.maxZ;
+}
+
+function tintEnergy(tint) {
+  return tint[0] + tint[1] + tint[2];
 }
 
 test('A-A1 halves each shoulder while preserving the accepted central curve', () => {
@@ -34,7 +39,7 @@ test('A-A1 halves each shoulder while preserving the accepted central curve', ()
   assert.ok(Math.max(...profiles.map((profile) => profile.pitch)) <= 3.56);
 });
 
-test('A-A1 visible upper assembly is translated down 0.10 m and stays deeper than its piers', () => {
+test('A-A1 visible upper assembly keeps accepted proportions with exact curve handoffs', () => {
   const profile = archFramePresentationProfile();
   assert.ok(Math.abs(profile.upperBottom - 1.92) < 1e-12);
   assert.ok(Math.abs(profile.upperTop - 2.96) < 1e-12);
@@ -42,8 +47,8 @@ test('A-A1 visible upper assembly is translated down 0.10 m and stays deeper tha
   assert.ok(Math.abs(profile.curveApex - 2.46) < 1e-12);
   assert.equal(profile.shoulderSpanScale, 0.5);
   assert.ok(profile.upperDepth > profile.pierDepth);
-  assert.ok(profile.joinOverlap >= 0.015 && profile.joinOverlap <= 0.02);
-  assert.ok(profile.cellSeamOverlap > 0);
+  assert.equal(profile.curveJoinHandoff, 0);
+  assert.ok(profile.cellSeamHandoff > 0);
 });
 
 test('Arch environmental props are deterministic, sparse, independent, exclusive, non-solid and route-clear', () => {
@@ -89,6 +94,30 @@ test('World Lab exposes both new Arch environmental prop visuals', () => {
   assert.ok(OBJECT_CATALOG.some((entry) => entry.propKind === 'paint-can'));
 });
 
+test('Medium Bucket and Small Grey Open Paint Can use continuous low-sided bodies and rims', () => {
+  assert.match(cellBuilderSource, /private addOpenContainerGeometry/);
+  assert.match(cellBuilderSource, /this\.meshEntity\(`\$\{prop\.id\}:body`/);
+  assert.match(cellBuilderSource, /this\.meshEntity\(`\$\{prop\.id\}:rim`/);
+  assert.match(cellBuilderSource, /mesh\.setUvs\(0, data\.uvs\)/);
+  assert.equal(cellBuilderSource.includes(':side:${index}'), false);
+  assert.equal(cellBuilderSource.includes(':rim:${index}'), false);
+  assert.match(cellBuilderSource, /const labelZ = -\(frontFacet \+ 0\.007\)/);
+  assert.match(cellBuilderSource, /label-remnant/);
+});
+
+test('CV-H1 depth bands preserve an illuminated upper shaft and hide the deep terminator', () => {
+  const bands = holeDepthBands();
+  assert.deepEqual(bands.map((band) => band.key), ['upper', 'middle', 'deep']);
+  assert.equal(bands[0].top, -0.02);
+  assert.ok(bands[2].bottom <= -8);
+  assert.ok(tintEnergy(bands[0].tint) > tintEnergy(bands[1].tint));
+  assert.ok(tintEnergy(bands[1].tint) > tintEnergy(bands[2].tint));
+  assert.match(archPresentationSource, /`\$\{hole\.id\}:void`/);
+  assert.match(archPresentationSource, /depth-occluder/);
+  assert.match(archPresentationSource, /hole\.scale\.x \* 2\.6/);
+  assert.match(archPresentationSource, /lightlessBlackMaterial/);
+});
+
 test('streaming scheduler predicts into only the existing retention ring and budgets heavy work', () => {
   assert.match(streamingSource, /predictiveExtraRings: 1/);
   assert.match(streamingSource, /workBudgetMs: 2\.25/);
@@ -101,13 +130,15 @@ test('streaming scheduler predicts into only the existing retention ring and bud
   assert.match(streamingSource, /visual\.root\.enabled = false/);
 });
 
-test('A-A1 seam handoffs avoid coplanar duplicate faces', () => {
+test('A-A1 shared-pier upper mass has canonical single-surface ownership', () => {
+  assert.match(archPresentationSource, /function rectangularUpperRuns/);
+  assert.match(archPresentationSource, /const upperRuns = rectangularUpperRuns\(bays, activeSupportIntervals\)/);
+  assert.match(archPresentationSource, /const clip = clippedInterval\(descriptor, bay\.orientation, bay\.curveStart, bay\.curveEnd\)/);
   assert.match(archPresentationSource, /entersFromPreviousCell/);
   assert.match(archPresentationSource, /continuesIntoNextCell/);
-  assert.match(archPresentationSource, /bay\.curveStart \+ ARCH_CURVE_JOIN_HANDOFF/);
-  assert.match(archPresentationSource, /bay\.curveEnd - ARCH_CURVE_JOIN_HANDOFF/);
-  assert.match(archPresentationSource, /support\[0\] - ARCH_PIER_BRIDGE_OVERLAP/);
-  assert.equal(archPresentationSource.includes('ARCH_JOIN_OVERLAP'), false);
+  assert.equal(archPresentationSource.includes('ARCH_PIER_BRIDGE_OVERLAP'), false);
+  assert.equal(archPresentationSource.includes('ARCH_CURVE_JOIN_HANDOFF'), false);
+  assert.equal(archPresentationSource.includes('upper-through-pier'), false);
 });
 
 test('static world batching is localized per Cell rather than one global dirty group', () => {
