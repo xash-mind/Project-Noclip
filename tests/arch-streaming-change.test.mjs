@@ -8,10 +8,15 @@ const { DEFAULT_TUNING } = await import('../.test-dist/src/world/types.js');
 const { routeReservationEnvelopesForCell } = await import('../.test-dist/src/world/gen3SpaceTopologyBuild.js');
 const { archFramePresentationProfile, holeDepthBands } = await import('../.test-dist/src/renderer/level0RegionPresentation.js');
 const { OBJECT_CATALOG, validateObjectCatalog } = await import('../.test-dist/src/renderer/objectCatalog.js');
+const { resolveGeometry, geometryIsFinite, hasDuplicateTriangles } = await import('../.test-dist/src/presentation/geometry.js');
+const { LEVEL0_FEATURE_PRESENTATION_REGISTRY, MEDIUM_BUCKET_TARGET, SMALL_GREY_OPEN_PAINT_CAN_TARGET } = await import('../.test-dist/src/presentation/level0FeatureRepresentations.js');
+const { resolveRepresentation } = await import('../.test-dist/src/presentation/registry.js');
 const streamingSource = await readFile(new URL('../src/renderer/streamingScheduler.ts', import.meta.url), 'utf8');
 const batchingSource = await readFile(new URL('../src/renderer/StaticWorldBatching.ts', import.meta.url), 'utf8');
 const archPresentationSource = await readFile(new URL('../src/renderer/level0RegionPresentation.ts', import.meta.url), 'utf8');
-const cellBuilderSource = await readFile(new URL('../src/renderer/cellBuilder.ts', import.meta.url), 'utf8');
+const featurePresentationSource = await readFile(new URL('../src/renderer/level0FeaturePresentation.ts', import.meta.url), 'utf8');
+const pauPilotSource = await readFile(new URL('../src/renderer/pauFeaturePresentationPilot.ts', import.meta.url), 'utf8');
+const mainSource = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
 
 function tuning(regionOverride) {
   return { ...DEFAULT_TUNING, regionOverride, conditionOverride: 'clear', carverOverride: 'none', structureOverride: 'none', gateBypass: true };
@@ -94,15 +99,25 @@ test('World Lab exposes both new Arch environmental prop visuals', () => {
   assert.ok(OBJECT_CATALOG.some((entry) => entry.propKind === 'paint-can'));
 });
 
-test('Medium Bucket and Small Grey Open Paint Can use continuous low-sided bodies and rims', () => {
-  assert.match(cellBuilderSource, /private addOpenContainerGeometry/);
-  assert.match(cellBuilderSource, /this\.meshEntity\(`\$\{prop\.id\}:body`/);
-  assert.match(cellBuilderSource, /this\.meshEntity\(`\$\{prop\.id\}:rim`/);
-  assert.match(cellBuilderSource, /mesh\.setUvs\(0, data\.uvs\)/);
-  assert.equal(cellBuilderSource.includes(':side:${index}'), false);
-  assert.equal(cellBuilderSource.includes(':rim:${index}'), false);
-  assert.match(cellBuilderSource, /const labelZ = -\(frontFacet \+ 0\.007\)/);
-  assert.match(cellBuilderSource, /label-remnant/);
+test('Medium Bucket and Small Grey Open Paint Can use the PAU registry and continuous LCG surface meshes', () => {
+  for (const [target, dimensions] of [
+    [MEDIUM_BUCKET_TARGET, [0.62, 0.58, 0.62]],
+    [SMALL_GREY_OPEN_PAINT_CAN_TARGET, [0.34, 0.38, 0.34]]
+  ]) {
+    const resolved = resolveRepresentation(target, LEVEL0_FEATURE_PRESENTATION_REGISTRY);
+    assert.ok(resolved?.definition.geometryId);
+    const mesh = resolveGeometry(resolved.definition.geometryId, { dimensions, parameters: resolved.definition.parameters });
+    assert.equal(geometryIsFinite(mesh), true);
+    assert.equal(hasDuplicateTriangles(mesh), false);
+  }
+  assert.match(pauPilotSource, /addLevel0PilotFeaturePresentation/);
+  assert.match(pauPilotSource, /original\.call\(this, parent, prop, profile\)/);
+  assert.match(mainSource, /installPauFeaturePresentationPilot\(\)/);
+  assert.match(featurePresentationSource, /resolveRepresentation\(\s*semanticTarget,\s*LEVEL0_FEATURE_PRESENTATION_REGISTRY,/);
+  assert.match(featurePresentationSource, /resolveGeometry\(resolved\.definition\.geometryId/);
+  assert.match(featurePresentationSource, /`\$\{prop\.id\}:surface`/);
+  assert.equal(featurePresentationSource.includes("addComponent('render', { type: 'cylinder' })"), false);
+  assert.match(pauPilotSource, /before the legacy cellBuilder presentation path runs/);
 });
 
 test('CV-H1 depth bands preserve an illuminated upper shaft and hide the deep terminator', () => {

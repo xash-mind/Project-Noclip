@@ -1,6 +1,6 @@
 # Project Noclip Terminology Map
 
-Code-facing glossary for conversation, Issues, prompts, and implementation. `WORLD.md` is the canonical world bible; `src/world/terminology.ts` is the typed short-address registry; `docs/CODE_MAP.md` maps these concepts to files.
+Code-facing glossary for conversation, Issues, prompts, developer tooling, and implementation. `WORLD.md` is the canonical world bible; `src/world/terminology.ts` is the typed short-address registry; `docs/CODE_MAP.md` maps concepts to files; `docs/PRESENTATION_ARCHITECTURE.md` is the canonical PAU/LCG/NAL architecture reference.
 
 ## Identity rule
 
@@ -15,6 +15,18 @@ Generation version: gen3-v1
 ```
 
 Historical-looking generated IDs such as `gen3-v5-*` are intentionally retained when they participate in deterministic identity. Stable identity is not cosmetic naming.
+
+PAU adds a second mandatory identity separation:
+
+```text
+WORLD IDENTITY
+!=
+VISUAL / AUDIO REPRESENTATION
+!=
+SOURCE ASSET
+```
+
+A generated Bucket remains the same Bucket when its Representation or source mesh changes. A wallpaper source image may change without changing the wall. An audio source may change without changing fixture/world identity.
 
 ## World hierarchy
 
@@ -121,7 +133,7 @@ render-only curve/bridges  -> src/renderer/level0RegionPresentation.ts
 surface/wallpaper finish   -> src/renderer/level0SurfacePresentation.ts + level0Wallpaper.ts
 ```
 
-Piece addresses name conceptual parts even when the renderer builds them from multiple meshes/segments.
+Piece addresses name conceptual parts even when the renderer builds them from multiple meshes/segments. A-A1 itself is not migrated wholesale to PAU in Run 1.
 
 ## Canonical world categories
 
@@ -129,8 +141,8 @@ Piece addresses name conceptual parts even when the renderer builds them from mu
 - **Region** — continuous geography inside a Level, driven by affinity Fields rather than Cells/hard districts. Current: `O`, `P`, `A`.
 - **Architecture Pattern** — reusable architectural grammar owned by a Region.
 - **Variant** — named subtype of a Region when stable identity is useful. Current named Variant: `O-V1`.
-- **Geometry** — spatial law only: Euclidean or Non-Euclidean.
-- **Material** — semantic surface/construction finish.
+- **Geometry** — spatial law only: Euclidean or Non-Euclidean. Do not confuse this world category with a PAU Geometry ID/builder.
+- **Material** — semantic surface/construction finish. A PAU presentation material definition may resolve how it looks without replacing this world identity.
 - **Condition** — state layered over geography/materials/fixtures/objects. Blackout is a Condition, never a Region.
 - **Feature** — small generated scenery; not a Region Architecture Pattern.
 - **Structure** — special generated location with standalone identity.
@@ -141,6 +153,158 @@ Piece addresses name conceptual parts even when the renderer builds them from mu
 - **Transition** — route/trigger toward another destination; distinct from an Exit Structure.
 
 Stable Item definition IDs remain: `flashlight`, `battery`, `almond-water`, `marker`, `paper-note`, `glow-stick`, `string-spool`, `empty-can`, `pry-tool`.
+
+## PAU — Presentation Architecture Upgrade
+
+**PAU** is the architectural program that separates generated world identity from visual/audio representation and optional source content.
+
+Canonical flow:
+
+```text
+WORLD TRUTH
+  -> SEMANTIC OBJECT
+  -> REPRESENTATION BINDING
+  -> REPRESENTATION DEFINITION
+  -> GEOMETRY REGISTRY / ASSET REGISTRY / MATERIAL DEFINITIONS
+  -> PRESENTATION DATA
+  -> RENDERER
+```
+
+The renderer should consume resolved presentation data rather than make semantic world-design decisions.
+
+### Representation
+
+A **Representation** is a presentation identity describing how a semantic target should be represented. Its `RepresentationId` is presentation identity only.
+
+Example:
+
+```text
+Medium Bucket                         semantic design target
+  -> bucket.default                  Representation ID
+  -> geometry.tapered-open-container Geometry ID
+  -> material.bucket.aged-neutral    presentation material ID
+```
+
+Changing `bucket.default` to a custom mesh Representation must not create a new generated Bucket.
+
+### Representation Definition
+
+A **RepresentationDefinition** is machine-readable metadata for one Representation: human name/category, Geometry ID, material IDs, Asset IDs, parameters, editable metadata, LCG class, collision mode, fallback, owner/source/test references and diagnostics.
+
+### Representation Binding
+
+A **RepresentationBinding** maps a semantic design target to a Representation ID. Rebinding is a presentation-only operation.
+
+### Representation Registry
+
+The **Representation Registry** is the canonical collection/resolution surface for RepresentationDefinitions and RepresentationBindings, including deterministic fallbacks.
+
+### Geometry ID / Geometry Registry
+
+A PAU **Geometry ID** identifies a reusable deterministic mesh builder/definition. The **Geometry Registry** resolves Geometry IDs to mesh-data builders. This is presentation construction vocabulary and must not be confused with the world `Geometry = Euclidean | Non-Euclidean` spatial-law category.
+
+### Presentation Material
+
+A **presentation material definition** is renderer-facing visual material metadata owned by PAU. It may correspond to a world Material but does not replace world semantic Material identity.
+
+## LCG — Low-Complexity Geometry
+
+**LCG** is the canonical Project Noclip procedural geometry construction standard. It is not the Low graphics preset, not a separate renderer and not a deliberately crude low-poly style.
+
+Core rule: use the fewest geometric elements required to preserve silhouette, structure, physical readability and atmosphere.
+
+Classes:
+- **LCG-0** — simple planar / structural geometry.
+- **LCG-1** — simple constructed object.
+- **LCG-2** — curved or silhouette-sensitive object.
+- **LCG-3** — distinctive / special object.
+- **LCG-X** — explicit justified exception.
+
+Use profile-specific recommended/warning budgets rather than one global triangle cap.
+
+LCG design rules:
+- few large shapes; very few tiny shapes;
+- clean silhouettes;
+- simple material structure;
+- lighting/materials carry most surface detail;
+- one physical object should own one canonical visible surface where practical;
+- no coplanar overlap patches, duplicate visible faces or z-fighting as a substitute for modelling;
+- hard structural edges stay hard; intentional curves may smooth;
+- architecture normally gets no explicit bevel geometry;
+- controlled irregularity must come from explicit deterministic presentation parameters, not broken geometry.
+
+## NAL — Noclip Asset Library
+
+**NAL** is the source/definition/build/runtime asset architecture for images, audio and meshes.
+
+### Asset / Asset ID
+
+An **Asset** is optional presentation content addressed by stable semantic `AssetId`. Asset identity is content/presentation identity, not generated world identity.
+
+### Content hash
+
+A **content hash** identifies the current source bytes for caching, duplicate/change detection, diagnostics and synchronization. It is deliberately separate from `AssetId`: replacing the source content may change the hash while preserving semantic Asset ID.
+
+### Source Asset vs Runtime Asset
+
+- **Source Asset** — human-provided content under `assets/source/`; never automatically trusted as runtime content.
+- **Asset Definition** — small human-readable metadata under `assets/definitions/`.
+- **Runtime Asset** — validated/generated runtime content under `public/assets/runtime/` plus generated registry metadata.
+
+Build flow:
+
+```text
+SOURCE FILE + DEFINITION
+  -> npm run assets:build
+  -> validation + SHA-256
+  -> generated runtime file + generated registry
+```
+
+### Asset Registry
+
+The **Asset Registry** resolves stable Asset IDs to validated runtime asset definitions and explicit fallback chains. World generation must not depend on arbitrary source-file paths.
+
+### Asset Profile
+
+An **Asset Profile** provides defaults/validation expectations for a recurring authoring role. Initial profiles: Wall Texture, Floor Texture, Ceiling Texture, Prop Texture, UI Image, Reference Image, Ambient Audio, Spatial Audio, UI Audio, Feature Mesh, Structure Mesh, Item Mesh, Entity Mesh.
+
+### Mesh import convention
+
+Canonical imported mesh format starts with GLB; project units metres; `+Y` up; `-Z` forward; normalized scale `1`; authored transforms baked at source; materials representation-owned; render triangles never automatic gameplay collision.
+
+### Collision mode
+
+PAU collision vocabulary: `none`, `box`, `capsule`, `simple-hull`, `authored-simple`. Environmental Features default to `none` unless gameplay explicitly needs collision.
+
+## DevelopmentContext
+
+**DevelopmentContext** is versioned structured engineering state for a PAU-controlled target. Current schema: `development-context-v1`.
+
+It explicitly distinguishes:
+- **design target** — semantic target such as Medium Bucket;
+- **runtime instance** — optional specific generated object at one deterministic location.
+
+It may carry repository/ref, category, stable runtime ID, seed/generation version/Region/Cell/world position, Representation/Geometry/material/Asset IDs, binding, LCG, collision, editable/current/preview values, ownership/source/test refs, diagnostics, deterministic/save invariants, warnings and optional user observation/requested change.
+
+Structured JSON is canonical. Human-readable packets are generated from the same object. Source dumps are not the contract.
+
+## ChangeReceipt
+
+**ChangeReceipt** is versioned machine-readable evidence of a development/Studio operation, not save data and not world identity. Current schema: `change-receipt-v1`.
+
+It records what changed, before/after values/bindings/assets, source/generated/files affected, preview/persistence state, validation/tests/typecheck/build, deterministic/save checks, warnings/diff summary and optional commit/PR/preview/revert references.
+
+Canonical relation:
+
+```text
+DevelopmentContext = state before/during engineering work
+ChangeReceipt       = evidence of what changed after an operation
+```
+
+## Noclip Studio / World Lab
+
+- **World Lab** — in-game runtime inspection, QA and forcing surface. It is not a filesystem editor, Git client, source editor or asset build system.
+- **Noclip Studio** — planned source-backed development/authoring surface. Studio consumes PAU machine-readable metadata instead of scraping source line numbers. It is not implemented in PAU Run 1.
 
 ## Generation 3 engine vocabulary
 
@@ -170,7 +334,7 @@ From `src/world/types.ts`:
 - `GeometryKind` — Euclidean or Non-Euclidean.
 - `RegionId`, `MaterialId`, `ConditionId`, `CarverId`, `StructureId` — stable semantic identifiers.
 - `WallSpec` — renderer-independent generated wall/partition fragment.
-- `PropSpec` — implementation object/scenery representation. Prefer canonical design vocabulary when one exists.
+- `PropSpec` — implementation object/scenery representation. Prefer canonical design vocabulary when one exists. `PropSpec.id` remains world/runtime identity; it is not a PAU Representation ID.
 - `FloorPatchSpec` — generated floor-local patch/Carver fragment such as damp/worn/dry/hole.
 - `LightState` — on/off/flicker deterministic fixture state.
 - `LightGroupSpec` — deterministic fixture group, placement, state and flicker data.
@@ -181,12 +345,14 @@ From `src/world/types.ts`:
 ## Renderer vocabulary and ownership
 
 - **WorldRenderer** — streamed scene ownership, collision registry, Hole floor segmentation, interactions/marks, and sampled-light-field bridge.
-- **cellBuilder** — converts `CellDescriptor` into base PlayCanvas entities.
-- **Level 0 surface presentation** — `src/renderer/level0SurfacePresentation.ts`; owns wallpaper-based surfaces, pillar faces, fixture mesh material presentation, and the current floor-reaching Arch collider filter.
-- **Level 0 Region presentation** — `src/renderer/level0RegionPresentation.ts`; owns Region carpet finish, Hole depth bands, and render-only Arch curves/bridges.
+- **cellBuilder** — converts `CellDescriptor` into base PlayCanvas entities; in PAU Run 1 its legacy prop path remains for non-pilot objects and as compatibility code.
+- **Level 0 Feature presentation** — `src/renderer/level0FeaturePresentation.ts`; PlayCanvas adapter for the PAU Run 1 Bucket/Can pilot.
+- **PAU Feature presentation pilot bridge** — `src/renderer/pauFeaturePresentationPilot.ts`; installed before game construction and intercepts only Bucket/Can before the legacy `cellBuilder` prop presentation path.
+- **Level 0 surface presentation** — `src/renderer/level0SurfacePresentation.ts`; wallpaper-based surfaces, pillar faces, fixture mesh material presentation and current floor-reaching Arch collider filter.
+- **Level 0 Region presentation** — `src/renderer/level0RegionPresentation.ts`; Region carpet finish, Hole depth bands and render-only Arch curves/bridges.
 - **Fixture lighting** — `src/renderer/fixtureLighting.ts`; every rendered fluorescent fixture owns one real downward PlayCanvas spot. Cells own lifetime only; player position does not select lights.
 - **Sampled light field** — `sampleLightField` in `src/world/lighting.ts`; ambience/diagnostics only, not physical light allocation.
-- **Static batching** — `src/renderer/StaticWorldBatching.ts`; render-only batching after presentation/lighting installers.
+- **Static batching** — `src/renderer/StaticWorldBatching.ts`; per-Cell render-only batching after presentation/lighting installers.
 - **Wallpaper phase** — world-space UV phase that must not reset at Cell seams.
 - **Arch render curve** — render-only geometry for `A-A1.curve`; semantic/collision pieces remain world-owned.
 - **Hole depth bands** — upper/middle/deep renderer presentation for `CV-H1`.
@@ -198,6 +364,8 @@ From `src/world/types.ts`:
 - **gen2** — frozen compatibility generation for old/unversioned saves.
 - **migration** — schema conversion while preserving generation identity.
 - **save delta/runtime mutation** — persisted changes layered over deterministic generated baseline.
+
+Source Assets, runtime asset paths, DevelopmentContext and ChangeReceipt are development/presentation data and are not embedded into ordinary save identity.
 
 ## Legacy Generation 2 vocabulary
 

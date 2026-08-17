@@ -20,18 +20,27 @@ world request
        -> src/world/gen3SpaceTopologyBuild.ts
        -> src/world/gen3Architecture.ts
        -> src/world/gen3ArchitectureCore.ts
-  -> CellDescriptor
+  -> CellDescriptor / semantic world truth
+  -> src/presentation/* when a migrated target has a PAU Representation Binding
+       -> Representation Registry
+       -> Geometry Registry / Asset Registry / Material Definitions
+       -> resolved presentation data
   -> src/renderer/WorldRenderer.ts
   -> src/renderer/cellBuilder.ts
-  -> Level 0 presentation layers
+  -> Level 0 presentation adapters
   -> PlayCanvas scene
 ```
+
+The PAU layer never participates in world generation. Presentation IDs are not generated world IDs.
 
 ## Canonical truth
 
 ```text
 WORLD.md
   accepted human-facing world laws/content
+
+PROJECT.md
+  product/architecture invariants
 
 src/world/types.ts
   canonical generated-data shapes and stable runtime IDs
@@ -42,11 +51,14 @@ src/world/terminology.ts
 docs/TERMINOLOGY.md
   canonical code-facing glossary + implementation owners
 
+docs/PRESENTATION_ARCHITECTURE.md
+  PAU / LCG / NAL / DevelopmentContext / ChangeReceipt contracts
+
 docs/CODE_MAP.md
   navigation only
 ```
 
-Short addresses never replace save/runtime identity.
+Short addresses, Representation IDs and Asset IDs never replace save/runtime identity.
 
 ## I want to change O-A1
 
@@ -64,7 +76,7 @@ O-A1 Default Wall
   visible surface presentation             -> src/renderer/level0SurfacePresentation.ts
 ```
 
-If rooms feel architecturally wrong, start with Space Topology. If topology is right and only the visible surface is wrong, start in renderer presentation.
+If rooms feel architecturally wrong, start with Space Topology. If topology is right and only the visible surface is wrong, start in presentation.
 
 ## I want to change P-A1
 
@@ -79,6 +91,8 @@ P-A1.pier
   visible finish       -> src/renderer/level0SurfacePresentation.ts
   wallpaper phase      -> src/renderer/level0Wallpaper.ts
 ```
+
+P-A1 is not migrated to PAU in Run 1.
 
 ## I want to change A-A1 or A-A1.curve
 
@@ -96,17 +110,125 @@ A-A1 pieces
   .curve
     render-only reconstruction -> src/renderer/level0RegionPresentation.ts
 
-Arch-only bucket / open paint-can Features
-  deterministic placement -> src/world/gen3SpaceTopologyBuild.ts
-  procedural prop geometry -> src/renderer/cellBuilder.ts
-  World Lab showcase       -> src/renderer/objectCatalog.ts
+Arch-only Bucket / Open Paint Can Features
+  deterministic placement + stable world IDs
+    -> src/world/gen3SpaceTopologyBuild.ts
+  semantic presentation targets + bindings/definitions
+    -> src/presentation/level0FeatureRepresentations.ts
+  reusable LCG mesh data
+    -> src/presentation/geometry.ts
+  presentation materials
+    -> src/presentation/materials.ts
+  PlayCanvas adapter
+    -> src/renderer/level0FeaturePresentation.ts
+  narrow PAU Run 1 migration bridge (installed before game construction)
+    -> src/renderer/pauFeaturePresentationPilot.ts
+  legacy/non-pilot base path
+    -> src/renderer/cellBuilder.ts
+  World Lab showcase catalog
+    -> src/renderer/objectCatalog.ts
 
 Arch surface finish
   -> src/renderer/level0SurfacePresentation.ts
   -> src/renderer/level0Wallpaper.ts
 ```
 
-If a route exists visually but is blocked, inspect world-owned semantic collision before changing renderer-only curves.
+If a route exists visually but is blocked, inspect world-owned semantic collision before changing renderer-only presentation.
+
+## I want to change PAU presentation metadata
+
+```text
+src/presentation/types.ts
+  RepresentationId / GeometryId / AssetId / material IDs
+  RepresentationDefinition / RepresentationBinding contracts
+  LCG / collision / editable metadata vocabulary
+
+src/presentation/registry.ts
+  binding validation + deterministic representation fallbacks
+
+src/presentation/level0FeatureRepresentations.ts
+  current PAU Run 1 pilot bindings and definitions
+
+src/presentation/materials.ts
+  presentation-owned material definitions
+
+src/presentation/developmentContext.ts
+  development-context-v1 design/runtime inspection contract
+
+src/presentation/changeReceipt.ts
+  change-receipt-v1 development evidence contract
+
+src/presentation/stableSerialization.ts
+  canonical stable JSON serialization
+```
+
+Do not make future Studio tooling scrape arbitrary TypeScript line numbers when this metadata can express the target directly.
+
+## I want to change LCG geometry
+
+```text
+src/presentation/geometry.ts
+  pure deterministic mesh-data builders + Geometry Registry
+  bounds / UVs / normals / winding / duplicate-surface diagnostics
+
+docs/PRESENTATION_ARCHITECTURE.md
+  LCG class, seam, normal and bevel policies
+```
+
+Current reusable builders: box, plane, prism, cylinder, open cylinder, tapered open container, strip, extruded profile and Arch/profile extrusion foundation.
+
+Do not use LCG to create a different Low-preset world geometry path.
+
+## I want to add or replace an asset (NAL)
+
+```text
+assets/source/{images,audio,meshes}/
+  source content only
+
+assets/definitions/*.json
+  small human-readable semantic definitions
+
+scripts/build-assets.mjs
+  definition validation + SHA-256 content hashing + runtime copy
+
+assets/generated/registry.json
+src/presentation/generatedAssetRegistry.ts
+  generated runtime registry evidence
+
+public/assets/runtime/
+  generated runtime content; gitignored
+
+src/presentation/assets.ts
+  Asset IDs, profiles, image/audio/mesh contracts, GLB convention,
+  source/runtime types, validation and runtime fallback resolution
+```
+
+World/game code should bind semantic Asset IDs through presentation definitions. Do not import arbitrary `assets/source/...` paths from world generation.
+
+## I want a Studio/agent context packet
+
+```text
+src/presentation/developmentContext.ts
+  DevelopmentContext source of truth
+  design target is explicit
+  runtime instance is optional and separately explicit
+
+src/presentation/stableSerialization.ts
+  stable versioned JSON packet serialization
+```
+
+Use source/test paths as references; do not dump whole source files into the context contract.
+
+## I want a structured edit receipt
+
+```text
+src/presentation/changeReceipt.ts
+  ChangeReceipt source of truth
+  before/after values, binding/assets/files, validation,
+  deterministic/save checks and optional commit/PR/preview/revert refs
+```
+
+DevelopmentContext describes state before/during work. ChangeReceipt records evidence after an operation.
 
 ## I want to change CV-H1
 
@@ -139,7 +261,7 @@ C-B1 / Blackout Condition
 
 Blackout is a Condition over recognizable Level 0 Geometry, not a Region.
 
-## I want to change fluorescent lighting
+## I want to change fluorescent lighting/audio
 
 ```text
 fixture generation/state/flicker
@@ -154,21 +276,30 @@ fixture mesh presentation
 accepted physical light ownership
   -> src/renderer/fixtureLighting.ts
 
+procedural ambience/hum runtime
+  -> src/audio/Ambience.ts
+
+future file-backed audio Asset contract
+  -> src/presentation/assets.ts
+
 runtime update call / flashlight
   -> src/app/ProjectNoclipGame.ts
 ```
 
-Current law: every rendered fluorescent fixture owns its real downward spot. The sampled light field is ambience/diagnostics only; no player-nearest realtime-light allocator exists.
+Current law: every rendered fluorescent fixture owns its real downward spot. The sampled light field is ambience/diagnostics only; no player-nearest realtime-light allocator exists. PAU Run 1 does not convert the procedural hum to a source Asset.
 
 ## I want to change materials
 
 ```text
-stable Material vocabulary -> src/world/types.ts + src/world/catalog.ts + WORLD.md
-base renderer materials     -> src/renderer/support.ts + src/renderer/cellBuilder.ts
-Level 0 wallpaper phase     -> src/renderer/level0Wallpaper.ts
-base surfaces/pillar faces  -> src/renderer/level0SurfacePresentation.ts
-Region carpet/Hole finish   -> src/renderer/level0RegionPresentation.ts
+stable world Material vocabulary -> src/world/types.ts + src/world/catalog.ts + WORLD.md
+PAU presentation materials       -> src/presentation/materials.ts
+base renderer materials          -> src/renderer/support.ts + src/renderer/cellBuilder.ts
+Level 0 wallpaper phase          -> src/renderer/level0Wallpaper.ts
+base surfaces/pillar faces       -> src/renderer/level0SurfacePresentation.ts
+Region carpet/Hole finish        -> src/renderer/level0RegionPresentation.ts
 ```
+
+A world Material ID and a PAU presentation material ID are different layers. Do not silently use a presentation rename to change world semantics.
 
 ## I want to change topology
 
@@ -189,7 +320,7 @@ src/world/gen3ArchitectureCore.ts
   shared Architecture Pattern dimensions/helpers
 ```
 
-Do not start in renderer files for a topology problem.
+Do not start in presentation/renderer files for a topology problem.
 
 ## I want to change collision
 
@@ -201,6 +332,10 @@ renderer Cell collider registration
   -> src/renderer/cellBuilder.ts
   -> src/renderer/WorldRenderer.ts
 
+PAU visual/import collision metadata
+  -> src/presentation/types.ts
+  -> src/presentation/assets.ts
+
 Arch floor-reaching presentation filter
   -> src/renderer/level0Wallpaper.ts
   -> src/renderer/level0SurfacePresentation.ts
@@ -209,6 +344,8 @@ movement solver
   -> src/physics/*
   -> src/app/ProjectNoclipGame.ts
 ```
+
+Imported render triangles are not automatic collision meshes.
 
 ## I want to change Cell streaming
 
@@ -221,7 +358,7 @@ retained fixture resources  -> src/renderer/fixtureLighting.ts
 localized static batches    -> src/renderer/StaticWorldBatching.ts
 ```
 
-Cells remain deterministic cache addresses. Streaming changes when a descriptor is prepared, never what that Cell is.
+Cells remain deterministic cache addresses. Streaming changes when a descriptor is prepared, never what that Cell is. PAU Run 1 does not change this architecture.
 
 ## I want to change saves
 
@@ -242,7 +379,7 @@ new journey          -> gen3-v1
 current schema       -> v2
 ```
 
-Never regenerate an old journey into Gen3 merely for cleanup.
+Presentation definitions, source Assets and runtime asset paths do not belong in save data. Never regenerate an old journey into Gen3 merely for presentation cleanup.
 
 ## I want to change World Lab
 
@@ -260,6 +397,8 @@ src/renderer/objectCatalog.ts
   disposable visual showcase
 ```
 
+World Lab remains runtime inspection / QA / forcing. Noclip Studio is the future source-backed authoring surface and is not implemented in PAU Run 1.
+
 ## I want to add a Region
 
 ```text
@@ -275,13 +414,14 @@ src/renderer/objectCatalog.ts
    architecture only if the Region owns it
 6. src/world/catalog.ts + src/world/terminology.ts
    catalog/short address when useful
-7. docs/TERMINOLOGY.md + docs/CODE_MAP.md
+7. presentation binding only if the Region needs independent representation metadata
+8. docs/TERMINOLOGY.md + docs/CODE_MAP.md
    navigation after ownership exists
-8. tests
+9. tests
    deterministic geography/topology/navigation/regression coverage
 ```
 
-Do not route new Regions through Gen2 `ZoneId`/district/archetype composition.
+Do not route new Regions through Gen2 `ZoneId`/district/archetype/component composition.
 
 ## I want to add a Carver
 
@@ -292,7 +432,7 @@ Do not route new Regions through Gen2 `ZoneId`/district/archetype composition.
    stable generated representation if needed
 3. src/world/gen3.ts / generator path
    deterministic placement/application
-4. renderer files only for presentation of generated output
+4. presentation/renderer only for representation of generated output
 5. tests
    deterministic placement + topology/collision/save invariants
 6. terminology/CODE_MAP only if the Carver deserves a durable human address
@@ -308,6 +448,37 @@ Transitions -> src/world/exits.ts + src/app/ProjectNoclipGame.ts
 
 A registered destination is not automatically a playable Level.
 
+## Presentation ownership
+
+```text
+src/presentation/types.ts
+  canonical PAU contracts and presentation identity types
+
+src/presentation/registry.ts
+  Representation Binding/Registry resolution + fallback
+
+src/presentation/geometry.ts
+  deterministic LCG Geometry Registry
+
+src/presentation/materials.ts
+  presentation Material Definitions
+
+src/presentation/assets.ts
+  NAL contracts/profiles/import convention + Asset Registry resolution
+
+src/presentation/generatedAssetRegistry.ts
+  generated runtime Asset registry
+
+src/presentation/level0FeatureRepresentations.ts
+  PAU Run 1 pilot Feature bindings/definitions
+
+src/presentation/developmentContext.ts
+  development-context-v1
+
+src/presentation/changeReceipt.ts
+  change-receipt-v1
+```
+
 ## Renderer ownership
 
 ```text
@@ -316,7 +487,13 @@ src/renderer/WorldRenderer.ts
   sampled light-field bridge, interactions/marks/showcase
 
 src/renderer/cellBuilder.ts
-  CellDescriptor -> base PlayCanvas entities
+  CellDescriptor -> base PlayCanvas entities; legacy non-pilot prop presentation remains intact
+
+src/renderer/pauFeaturePresentationPilot.ts
+  bounded startup interception for Bucket/Can before legacy prop presentation
+
+src/renderer/level0FeaturePresentation.ts
+  PlayCanvas translation for PAU Run 1 Bucket/Can resolved presentation
 
 src/renderer/level0Wallpaper.ts
   Level 0 wallpaper palette/tile/world phase + floor-reaching Gen3 wall rule
@@ -331,7 +508,7 @@ src/renderer/fixtureLighting.ts
   fixture-owned real fluorescent spots and pulse synchronization
 
 src/renderer/StaticWorldBatching.ts
-  installs Region presentation + fixture lighting, then batches static visuals
+  installs Region presentation + fixture lighting, then batches static visuals per Cell
 
 src/renderer/support.ts
   shared renderer helpers
@@ -343,21 +520,21 @@ src/renderer/objectCatalog.ts
 ## World-generation ownership
 
 ```text
-src/world/hash.ts                 deterministic hashing
-src/world/types.ts                generated-data types / stable IDs
-src/world/fields.ts               continuous Fields
-src/world/gen3.ts                 Gen3 semantic environment resolution
-src/world/gen3Architecture.ts     stable architecture public surface
-src/world/gen3ArchitectureCore.ts shared architecture constants/helpers
-src/world/gen3SpaceTopology.ts    topology public surface
+src/world/hash.ts                    deterministic hashing
+src/world/types.ts                   generated-data types / stable IDs
+src/world/fields.ts                  continuous Fields
+src/world/gen3.ts                    Gen3 semantic environment resolution
+src/world/gen3Architecture.ts        stable architecture public surface
+src/world/gen3ArchitectureCore.ts    shared architecture constants/helpers
+src/world/gen3SpaceTopology.ts       topology public surface
 src/world/gen3SpaceTopologyDomain.ts world-space topology decisions
 src/world/gen3SpaceTopologyBuild.ts  Cell realization / routes / Pillars / Arch semantic pieces
-src/world/generator.ts            Gen3 + frozen Gen2 dispatcher
-src/world/lighting.ts             deterministic fixture state + ambience light-field sampling
-src/world/exits.ts                Transitions
-src/world/structures.ts           Structures
-src/world/catalog.ts              semantic World Lab catalog
-src/world/terminology.ts          human short-address registry
+src/world/generator.ts               Gen3 + frozen Gen2 dispatcher
+src/world/lighting.ts                deterministic fixture state + ambience light-field sampling
+src/world/exits.ts                   Transitions
+src/world/structures.ts              Structures
+src/world/catalog.ts                 semantic World Lab catalog
+src/world/terminology.ts             human short-address registry
 ```
 
 Stable generated IDs containing historical strings such as `gen3-v5-*` are deterministic identity and are intentionally not cosmetic-renamed.
@@ -365,10 +542,11 @@ Stable generated IDs containing historical strings such as `gen3-v5-*` are deter
 ## Verification map
 
 ```text
-npm run typecheck -> strict TypeScript
-npm test          -> all tests/*.test.mjs deterministic/system coverage
-npm run benchmark -> generation/performance/topology gates
-npm run build     -> production build
+npm run assets:build -> NAL definition validation + content hashing + generated registries
+npm run typecheck    -> strict TypeScript
+npm test             -> all tests/*.test.mjs deterministic/system coverage
+npm run benchmark    -> generation/performance/topology gates
+npm run build        -> NAL build + production Vite build
 
 .github/workflows/ci.yml
   primary CI
