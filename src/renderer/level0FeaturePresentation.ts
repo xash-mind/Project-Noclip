@@ -3,6 +3,7 @@ import type { PropSpec } from '../world/types.js';
 import { resolveGeometry, type GeometryMeshData } from '../presentation/geometry.js';
 import { semanticTargetForPropKind, LEVEL0_FEATURE_PRESENTATION_REGISTRY, MEDIUM_BUCKET_TARGET, SMALL_GREY_OPEN_PAINT_CAN_TARGET } from '../presentation/level0FeatureRepresentations.js';
 import { presentationMaterial } from '../presentation/materials.js';
+import { resolvePreviewRepresentation } from '../presentation/previewOverrides.js';
 import { resolveRepresentation } from '../presentation/registry.js';
 import type { PresentationMaterialId, PresentationValue } from '../presentation/types.js';
 import type { TextureKind } from './support.js';
@@ -47,13 +48,7 @@ function resolveMaterial(host: Level0FeaturePresentationHost, id: PresentationMa
   );
 }
 
-function addBucketHandle(
-  container: pc.Entity,
-  prop: PropSpec,
-  parameters: Readonly<Record<string, PresentationValue>>,
-  material: pc.StandardMaterial,
-  box: PresentationBoxFactory
-): void {
+function addBucketHandle(container: pc.Entity, prop: PropSpec, parameters: Readonly<Record<string, PresentationValue>>, material: pc.StandardMaterial, box: PresentationBoxFactory): void {
   const sx = prop.scale.x;
   const sy = prop.scale.y;
   const handleWidth = sx * numberParameter(parameters, 'handleWidthRatio', 0.72);
@@ -67,13 +62,7 @@ function addBucketHandle(
   box(`${prop.id}:handle-right`, container, [handleHalf - bar / 2, lowerY, 0], [bar, verticalHeight, bar], material);
 }
 
-function addPaintCanLabel(
-  container: pc.Entity,
-  prop: PropSpec,
-  parameters: Readonly<Record<string, PresentationValue>>,
-  material: pc.StandardMaterial,
-  box: PresentationBoxFactory
-): void {
+function addPaintCanLabel(container: pc.Entity, prop: PropSpec, parameters: Readonly<Record<string, PresentationValue>>, material: pc.StandardMaterial, box: PresentationBoxFactory): void {
   const sx = prop.scale.x;
   const sy = prop.scale.y;
   const sz = prop.scale.z;
@@ -87,23 +76,16 @@ function addPaintCanLabel(
   box(`${prop.id}:label-remnant`, container, [-sx * 0.18, -sy * 0.19, labelZ - 0.002], [sx * 0.10, sy * 0.07, 0.004], material);
 }
 
-/**
- * PAU Run 1 pilot adapter. It resolves semantic Feature -> Representation ->
- * Geometry/Material data and translates only the resolved presentation into
- * PlayCanvas entities. It never mutates PropSpec or world identity.
- */
-export function addLevel0PilotFeaturePresentation(
-  parent: pc.Entity,
-  prop: PropSpec,
-  host: Level0FeaturePresentationHost
-): pc.Entity | undefined {
+/** Resolves semantic Feature -> PAU representation plus temporary Studio preview -> PlayCanvas. */
+export function addLevel0PilotFeaturePresentation(parent: pc.Entity, prop: PropSpec, host: Level0FeaturePresentationHost): pc.Entity | undefined {
   const semanticTarget = semanticTargetForPropKind(prop.kind);
   if (!semanticTarget) return undefined;
-  const resolved = resolveRepresentation(
+  const canonical = resolveRepresentation(
     semanticTarget,
     LEVEL0_FEATURE_PRESENTATION_REGISTRY,
     (definition) => Boolean(definition.geometryId)
   );
+  const resolved = resolvePreviewRepresentation(semanticTarget, (definition) => Boolean(definition.geometryId)) ?? canonical;
   if (!resolved?.definition.geometryId) return undefined;
 
   const container = new pc.Entity(prop.id);

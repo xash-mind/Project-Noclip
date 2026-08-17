@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {"noEmit":false,"outDir":".studio-dist","rootDir":".","module":"NodeNext","moduleResolution":"NodeNext","strict":true,"skipLibCheck":true},
+  "include": [
+    "src/presentation/types.ts","src/presentation/registry.ts","src/presentation/stableSerialization.ts","src/presentation/assets.ts","src/presentation/generatedLevel0FeatureDefinitions.ts","src/presentation/level0FeatureRepresentations.ts","src/presentation/readOnlyPresentationMetadata.ts","src/presentation/projectPresentationRegistry.ts","src/presentation/studioTargets.ts","src/presentation/developmentContext.ts","src/presentation/developmentContextExports.ts","src/presentation/changeReceipt.ts","src/presentation/changeReceiptExports.ts","src/presentation/previewOverrides.ts","src/world/types.ts"
+  ]
+}

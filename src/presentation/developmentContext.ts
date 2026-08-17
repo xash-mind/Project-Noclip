@@ -1,6 +1,7 @@
 import { CELL_SIZE, type CellDescriptor, type PropSpec } from '../world/types.js';
+import { semanticTargetForPropKind } from './level0FeatureRepresentations.js';
+import { PROJECT_PRESENTATION_REGISTRY } from './projectPresentationRegistry.js';
 import { resolveRepresentation } from './registry.js';
-import { semanticTargetForPropKind, LEVEL0_FEATURE_PRESENTATION_REGISTRY } from './level0FeatureRepresentations.js';
 import { stableSerialize } from './stableSerialization.js';
 import type { AssetId, CollisionMode, DeterministicPresentationVariation, GeometryId, LcgClassification, PresentationCategory, PresentationMaterialId, PresentationValue, RepresentationBinding, RepresentationId, SemanticPresentationTargetId } from './types.js';
 
@@ -17,6 +18,7 @@ export interface DevelopmentContextRuntimeInstance {
   worldSeed: string;
   generationVersion: string;
   regionId: string;
+  conditionIds?: readonly string[];
   cell: { id: string; x: number; z: number };
   worldPosition: { x: number; y: number; z: number };
 }
@@ -55,11 +57,8 @@ export interface DevelopmentContextOptions {
   requestedChange?: string;
 }
 
-function developmentContextForTarget(
-  semanticTargetId: SemanticPresentationTargetId,
-  options: DevelopmentContextOptions
-): DevelopmentContext | undefined {
-  const resolved = resolveRepresentation(semanticTargetId, LEVEL0_FEATURE_PRESENTATION_REGISTRY);
+function developmentContextForTarget(semanticTargetId: SemanticPresentationTargetId, options: DevelopmentContextOptions): DevelopmentContext | undefined {
+  const resolved = resolveRepresentation(semanticTargetId, PROJECT_PRESENTATION_REGISTRY);
   if (!resolved) return undefined;
   return {
     schema: DEVELOPMENT_CONTEXT_SCHEMA,
@@ -93,11 +92,12 @@ function developmentContextForTarget(
   };
 }
 
-export function developmentContextForDesignTarget(
-  semanticTargetId: SemanticPresentationTargetId,
-  options: DevelopmentContextOptions = {}
-): DevelopmentContext | undefined {
+export function developmentContextForDesignTarget(semanticTargetId: SemanticPresentationTargetId, options: DevelopmentContextOptions = {}): DevelopmentContext | undefined {
   return developmentContextForTarget(semanticTargetId, options);
+}
+
+export function developmentContextForDesignTargetId(semanticTargetId: string, options: DevelopmentContextOptions = {}): DevelopmentContext | undefined {
+  return developmentContextForTarget(semanticTargetId as SemanticPresentationTargetId, options);
 }
 
 export function developmentContextForProp(descriptor: CellDescriptor, prop: PropSpec, options: DevelopmentContextOptions = {}): DevelopmentContext | undefined {
@@ -117,6 +117,7 @@ export function developmentContextForProp(descriptor: CellDescriptor, prop: Prop
       worldSeed: descriptor.address.worldSeed,
       generationVersion: descriptor.address.generationVersion,
       regionId: descriptor.world.regionId,
+      conditionIds: descriptor.world.conditionIds,
       cell: { id: descriptor.id, x: descriptor.address.cellX, z: descriptor.address.cellZ },
       worldPosition
     }

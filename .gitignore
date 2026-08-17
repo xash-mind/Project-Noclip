@@ -1,7 +1,9 @@
 node_modules/
 dist/
 .test-dist/
+.studio-dist/
 .local-dist/
+.noclip-studio/
 .vercel/
 public/assets/runtime/
 *.log

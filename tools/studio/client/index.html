@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Noclip Studio</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div><span class="eyebrow">PROJECT NOCLIP / LOCAL DEVELOPMENT</span><h1>NOCLIP STUDIO</h1></div>
+    <div class="repo-state"><strong id="branch">branch —</strong><span id="dirty">loading repository…</span></div>
+  </header>
+  <main class="layout">
+    <aside class="sidebar panel">
+      <h2>Semantic targets</h2>
+      <input id="target-search" type="search" placeholder="A-A1, Bucket, M-F1…" />
+      <div id="target-list" class="target-list"></div>
+      <hr />
+      <button data-tab="assets">Asset Library</button>
+      <button data-tab="history">Change receipts</button>
+      <button data-tab="git">Git / validation</button>
+    </aside>
+
+    <section class="workspace">
+      <section class="panel" id="target-panel">
+        <div class="section-head"><div><span class="eyebrow" id="target-category"></span><h2 id="target-name">Select a target</h2><code id="target-id"></code></div><span id="editability" class="pill"></span></div>
+        <div class="actions runtime-actions">
+          <button id="locate">Locate</button><button id="isolate">Isolate</button><button id="showcase">Spawn showcase</button>
+        </div>
+        <div id="preview-banner" class="preview-banner" hidden><strong>UNSAVED PREVIEW</strong><span>Runtime presentation differs from canonical PAU source.</span></div>
+        <div class="inspector-grid">
+          <article><h3>World / instance</h3><div id="world-inspector" class="kv"></div></article>
+          <article><h3>Presentation</h3><div id="presentation-inspector" class="kv"></div></article>
+          <article><h3>Source ownership</h3><div id="source-inspector" class="stack"></div></article>
+          <article><h3>Diagnostics</h3><div id="diagnostics" class="stack"></div></article>
+        </div>
+      </section>
+
+      <section class="panel" id="editor-panel">
+        <div class="section-head"><div><span class="eyebrow">PAU STRUCTURED AUTHORING</span><h2>Editable presentation</h2></div><span id="code-required" class="warning" hidden>CODE CHANGE REQUIRED</span></div>
+        <div id="fields" class="field-grid"></div>
+        <label>Representation Binding<select id="representation"></select></label>
+        <div class="actions"><button class="primary" id="preview">Apply Runtime Preview</button><button id="revert-preview">Revert Preview</button><button id="clear-previews">Clear All Previews</button><button class="save" id="save">Save to Project</button></div>
+      </section>
+
+      <section class="panel">
+        <span class="eyebrow">AGENT HANDOFF</span><h2>Development context</h2>
+        <div class="two-col">
+          <label>Observation<textarea id="observation" rows="4" placeholder="What do you see?"></textarea></label>
+          <label>Requested change<textarea id="request" rows="4" placeholder="What should change while preserving the invariants?"></textarea></label>
+        </div>
+        <div class="actions wrap"><button id="copy-context">Copy Context</button><button id="copy-context-json">Copy Context JSON</button><button id="copy-observation">Copy Context + Observation</button><button id="copy-request">Copy Context + Change Request</button><button class="primary" id="copy-prompt">Copy Full Development Prompt</button></div>
+      </section>
+
+      <section class="panel" id="receipt-panel" hidden>
+        <span class="eyebrow">CHANGE SAVED</span><h2>ChangeReceipt</h2><pre id="receipt-human"></pre>
+        <div class="actions"><button id="copy-receipt">Copy Change Receipt</button><button id="copy-receipt-json">Copy Receipt JSON</button><button id="view-receipt-diff">View Diff</button><button class="danger" id="revert-change">Revert Studio Change</button></div>
+      </section>
+
+      <section class="panel tab-panel" id="assets-panel" hidden>
+        <div class="section-head"><div><span class="eyebrow">NAL</span><h2>Asset Library</h2></div><div class="tabs"><button data-asset-type="image">Images</button><button data-asset-type="audio">Audio</button><button data-asset-type="mesh">Meshes</button></div></div>
+        <div id="asset-list" class="asset-grid"></div>
+        <h3>Import asset</h3>
+        <div class="field-grid"><label>File<input id="asset-file" type="file" /></label><label>Asset ID<input id="asset-id" placeholder="level0.wallpaper.custom01" /></label><label>Profile<select id="asset-profile"></select></label></div>
+        <p class="muted">Imports are copied only into canonical NAL source directories, validated, hashed and built. GLB visual rendering inside Studio is not yet available; mesh cards show authoritative metadata and warnings.</p>
+        <button class="save" id="import-asset">Validate + Import</button>
+      </section>
+
+      <section class="panel tab-panel" id="history-panel" hidden><span class="eyebrow">LOCAL EVIDENCE</span><h2>Recent Studio operations</h2><div id="history"></div></section>
+      <section class="panel tab-panel" id="git-panel" hidden>
+        <span class="eyebrow">WORKTREE SAFETY</span><h2>Git / diff / validation</h2><div id="git-state" class="kv"></div>
+        <div class="actions wrap"><button data-validate="target">Validate Target</button><button data-validate="typecheck">Run Typecheck</button><button data-validate="tests">Run Tests</button><button data-validate="build">Run Build</button><button data-validate="full">Run Full Project Check</button></div>
+        <pre id="validation-output"></pre><h3>Studio-owned source diff</h3><pre id="diff"></pre>
+      </section>
+    </section>
+  </main>
+  <div id="toast" role="status"></div>
+  <script type="module" src="/studio.js"></script>
+</body>
+</html>
