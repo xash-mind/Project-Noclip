@@ -310,6 +310,18 @@ function descriptorTouchesArchFrame(descriptor: CellDescriptor): boolean {
     && descriptor.walls.some((wall) => isArchHeader(wall) || isArchLower(wall) || isArchVerticalSolid(wall));
 }
 
+function descriptorIsInArchRebuildNeighborhood(
+  renderer: WorldRenderer,
+  descriptor: CellDescriptor
+): boolean {
+  if (descriptorTouchesArchFrame(descriptor)) return true;
+  return [...renderer.loaded.values()].some((visual) =>
+    descriptorTouchesArchFrame(visual.descriptor)
+    && Math.abs(visual.descriptor.address.cellX - descriptor.address.cellX) <= 1
+    && Math.abs(visual.descriptor.address.cellZ - descriptor.address.cellZ) <= 1
+  );
+}
+
 function toWorldArchWall(descriptor: CellDescriptor, wall: WallSpec): WorldArchWall {
   const baseX = descriptor.address.cellX * CELL_SIZE;
   const baseZ = descriptor.address.cellZ * CELL_SIZE;
@@ -803,9 +815,10 @@ const pendingArchCells = new WeakMap<WorldRenderer, Set<string>>();
 const scheduledArchFlush = new WeakSet<WorldRenderer>();
 
 function markNearbyArchCells(renderer: WorldRenderer, descriptor: CellDescriptor): void {
-  // Unrelated streamed Cells cannot alter an A-A1 line. Avoid rescanning and
-  // rebuilding nearby Arch meshes for every ordinary Cell load/unload.
-  if (!descriptorTouchesArchFrame(descriptor)) return;
+  // Rebuild only when the changed Cell carries A-A1 semantics or sits directly
+  // beside loaded A-A1 geometry that can clip into it. This preserves cross-Cell
+  // handoff ownership without making every ordinary Cell stream event rescan A-A1.
+  if (!descriptorIsInArchRebuildNeighborhood(renderer, descriptor)) return;
 
   const pending = pendingArchCells.get(renderer) ?? new Set<string>();
   for (const visual of renderer.loaded.values()) {
