@@ -11,10 +11,22 @@ interface StudioGameAccess{save?:{seed:string;generationVersion:string};currentC
 function showcaseId(targetId:string):string|undefined{if(targetId==='feature.medium-bucket')return'prop:bucket';if(targetId==='feature.small-grey-open-paint-can')return'prop:paint-can';}
 function targetRegion(targetId:string):RegionId|undefined{if(targetId==='architecture.a-a1'||targetId==='feature.medium-bucket'||targetId==='feature.small-grey-open-paint-can'||targetId==='material.arch-pale-wallpaper')return'arch-rooms';if(targetId==='architecture.p-a1')return'pillar-field';if(targetId==='material.level-0-wallpaper'||targetId==='material.level-0-carpet'||targetId==='material.level-0-ceiling'||targetId==='material.fluorescent-panel')return'ordinary-level-0';}
 async function bridgeFetch(path:string,token:string,init:RequestInit={}):Promise<Response>{return fetch(`${STUDIO_ORIGIN}${path}`,{...init,headers:{'Content-Type':'application/json','X-Noclip-Studio-Token':token,...(init.headers??{})}});}
+function studioClientId():string{
+  const cryptoApi=globalThis.crypto;
+  if(cryptoApi&&typeof cryptoApi.randomUUID==='function')return`game-${cryptoApi.randomUUID()}`;
+  if(cryptoApi&&typeof cryptoApi.getRandomValues==='function'){
+    const bytes=new Uint8Array(16);cryptoApi.getRandomValues(bytes);bytes[6]=(bytes[6]&0x0f)|0x40;bytes[8]=(bytes[8]&0x3f)|0x80;
+    const hex=[...bytes].map((value)=>value.toString(16).padStart(2,'0')).join('');
+    return`game-${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+  }
+  // This ID only correlates one local bridge client; the privileged bridge is
+  // authenticated independently by the per-run token generated in Node.
+  return`game-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,12)}`;
+}
 
 export function installStudioBridgeClient(game:unknown):void{
   const token=import.meta.env.VITE_NOCLIP_STUDIO_TOKEN;if(!token){console.info('[Noclip Studio] bridge disabled; start with npm run studio to enable local authoring.');return;}
-  const access=game as StudioGameAccess;const clientId=`game-${crypto.randomUUID()}`;let selectedTargetId='feature.medium-bucket';let lastCommand=0;let branchOrRef:string|undefined;let stopped=false;
+  const access=game as StudioGameAccess;const clientId=studioClientId();let selectedTargetId='feature.medium-bucket';let lastCommand=0;let branchOrRef:string|undefined;let stopped=false;
   const refresh=():void=>access.updateStreaming(true);
   const context=()=>{const cell=access.currentCell;if(cell&&(selectedTargetId==='feature.medium-bucket'||selectedTargetId==='feature.small-grey-open-paint-can')){const prop=cell.props.find((candidate)=>semanticTargetForPropKind(candidate.kind)===selectedTargetId);if(prop)return developmentContextForProp(cell,prop,{branchOrRef,activePreviewOverrides:presentationPreviewParameters(semanticPresentationTargetId(selectedTargetId))});}return developmentContextForDesignTargetId(selectedTargetId,{branchOrRef,activePreviewOverrides:presentationPreviewParameters(semanticPresentationTargetId(selectedTargetId))});};
   const snapshot=():StudioRuntimeSnapshot=>{const cell=access.currentCell;const position=access.camera?.getPosition();return{clientId,connectedAt:new Date().toISOString(),selectedTargetId,seed:access.save?.seed,generationVersion:access.save?.generationVersion,regionId:cell?.world.regionId,conditionIds:cell?.world.conditionIds??[],cell:cell?{id:cell.id,x:cell.address.cellX,z:cell.address.cellZ}:undefined,playerPosition:position?{x:position.x,y:position.y,z:position.z}:undefined,developmentContext:context(),previewState:presentationPreviewSnapshot(),diagnostics:cell?[`runtime Cell ${cell.id}`,`props ${cell.props.length}`]:['journey not started']};};
