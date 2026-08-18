@@ -1,0 +1,71 @@
+name: Finalize Arch Lifecycle Recovery
+
+on:
+  push:
+    branches: [fix/arch-region-locator-lifecycle]
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: fix/arch-region-locator-lifecycle
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply verified recovery and remove temporary harness
+        run: |
+          set -euo pipefail
+          python .github/arch-lifecycle-recovery.py
+          python .github/arch-lifecycle-recovery-v2.py
+          python .github/arch-lifecycle-recovery-v3.py
+          python .github/arch-lifecycle-recovery-v4.py
+          rm .github/arch-lifecycle-recovery.py .github/arch-lifecycle-recovery-v2.py .github/arch-lifecycle-recovery-v3.py .github/arch-lifecycle-recovery-v4.py
+          rm -f .github/arch-lifecycle-trigger .github/arch-lifecycle-failure.log
+          rm -f .github/workflows/arch-lifecycle-recovery.yml .github/workflows/arch-lifecycle-finalize.yml
+          git diff --check
+      - name: Install
+        run: npm install --no-audit --no-fund
+      - name: Strict TypeScript
+        run: npm run typecheck
+      - name: Tests
+        run: npm test
+      - name: Descriptor identity
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/arch-final
+          node scripts/arch-descriptor-snapshot.mjs > /tmp/arch-final/after.json
+          git worktree add --detach /tmp/noclip-start 58c6452b1765e1021f0d63c6770b68b3332f5d79
+          ln -s "$GITHUB_WORKSPACE/node_modules" /tmp/noclip-start/node_modules
+          (cd /tmp/noclip-start && node scripts/build-presentation-definitions.mjs && "$GITHUB_WORKSPACE/node_modules/.bin/tsc" -p tsconfig.test.json && node "$GITHUB_WORKSPACE/scripts/arch-descriptor-snapshot.mjs" > /tmp/arch-final/before.json)
+          diff -u /tmp/arch-final/before.json /tmp/arch-final/after.json
+          git worktree remove /tmp/noclip-start --force
+      - name: Benchmark and build
+        run: npm run benchmark && npm run build
+      - name: Real Chromium locator regression
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check selenium==4.46.0
+          npm run preview > /tmp/project-noclip-preview.log 2>&1 &
+          PID=$!
+          trap 'kill "$PID" 2>/dev/null || true' EXIT
+          for i in {1..30}; do curl --fail --silent http://127.0.0.1:4173/ >/dev/null && break; sleep 1; done
+          NOCLIP_ARCH_LOCATOR_ARTIFACTS=/tmp/arch-final/browser python scripts/arch-locator-smoke.py
+          kill "$PID" 2>/dev/null || true
+          wait "$PID" 2>/dev/null || true
+          trap - EXIT
+      - name: Commit verified recovery
+        run: |
+          set -euo pipefail
+          rm -rf artifacts .test-dist dist
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Recover Arch locator renderer lifecycle"
+          git push origin HEAD:fix/arch-region-locator-lifecycle
