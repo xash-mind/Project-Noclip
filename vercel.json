@@ -3,7 +3,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "cleanUrls": true,
-  "ignoreCommand": "git diff --quiet \"${VERCEL_GIT_PREVIOUS_SHA:-HEAD^}\" HEAD -- src package.json package-lock.json VERSION vite.config.ts index.html vercel.json scripts/build.mjs scripts/preview.mjs",
+  "ignoreCommand": "git fetch --depth=1 origin \"${VERCEL_GIT_PREVIOUS_SHA:-HEAD^}\" >/dev/null 2>&1 || true; git diff --quiet \"${VERCEL_GIT_PREVIOUS_SHA:-HEAD^}\" HEAD -- src package.json package-lock.json VERSION vite.config.ts index.html vercel.json scripts/build.mjs scripts/preview.mjs || exit 1",
   "headers": [
     {
       "source": "/assets/(.*)",
