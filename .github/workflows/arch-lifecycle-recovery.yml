@@ -1,4 +1,4 @@
-# recovery-run: scheduler-owner-v2
+# recovery-run: phased-scheduler-owner-v3
 name: Arch Lifecycle Recovery
 
 on:
@@ -28,8 +28,11 @@ jobs:
           set -euo pipefail
           python .github/arch-lifecycle-recovery.py
           python .github/arch-lifecycle-recovery-v2.py
+          python .github/arch-lifecycle-recovery-v3.py
           rm .github/arch-lifecycle-recovery.py
           rm .github/arch-lifecycle-recovery-v2.py
+          rm .github/arch-lifecycle-recovery-v3.py
+          rm -f .github/arch-lifecycle-trigger
           rm .github/workflows/arch-lifecycle-recovery.yml
           git diff --check
           git status --short
