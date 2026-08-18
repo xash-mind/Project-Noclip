@@ -37,6 +37,7 @@ Project Noclip is a living, persistent browser-first recreation of the Backrooms
 - Developer diagnostics and World Lab tooling
 - Performance-conscious streaming and rendering
 - Presentation Architecture Upgrade (PAU) foundations for Representation bindings, Low-Complexity Geometry, the Noclip Asset Library, DevelopmentContext and ChangeReceipt contracts
+- Noclip Studio foundation and its development-only secure bridge boundary from PAU Run 2; continuous-sync remains future work
 
 ### Explicitly excluded for now
 
@@ -46,7 +47,7 @@ Project Noclip is a living, persistent browser-first recreation of the Backrooms
 - Routine monsters, combat loops, or constant chase design
 - Monetization
 - Large content expansion before the Level 0 vertical slice is stable
-- Noclip Studio until its dedicated PAU Run 2 foundation
+- Noclip Studio continuous-sync / live-edit workflow expansion beyond the retained foundation
 
 ## Architecture summary
 
@@ -60,6 +61,7 @@ Project Noclip is a living, persistent browser-first recreation of the Backrooms
 - `ZoneId`, room archetypes, spatial profiles, and structural components are no longer new-world design inputs; they remain compatibility metadata for Gen2 saves and a narrow renderer adapter only.
 - Cells remain streaming/computation units and must not become player-visible room boundaries.
 - PAU establishes the presentation pipeline **World Truth → Semantic Object → Representation Binding → Representation Definition → Geometry/Asset Registries + Material Definitions → Presentation Data → Renderer**. See `docs/PRESENTATION_ARCHITECTURE.md`.
+- Noclip Studio builds on PAU through development-only semantic editing/bridge foundations; production bundles must exclude privileged Studio bridge/write capability.
 - The renderer should increasingly consume resolved presentation information instead of deciding semantic world design or hard-coding arbitrary source-asset paths.
 
 ## World vocabulary and catalog
@@ -116,7 +118,7 @@ Generation 3 migration direction lives in GitHub Issue #31. `WORLD.md` is the ca
 
 ## Work communication
 
-Noclip work uses four bounded modes: `LOOK`, `AUDIT`, `CHANGE`, and `RELEASE`. A normal request names `TARGET`, optional `OBSERVATIONS`, `CHANGE` when applicable, `PRESERVE`, and `VERIFY`. Everything outside the named target is preserved by default. Acceptance uses `PASS`, `PASS WITH GAP`, `FAIL`, and `UNVERIFIED`.
+Noclip work uses four bounded modes: `LOOK`, `AUDIT`, `CHANGE`, and `RELEASE`. A normal request names `TARGET`, optional `OBSERVATIONS`, `CHANGE` when applicable, `PRESERVE`, and `VERIFY`. Everything outside `TARGET` is preserved by default. Acceptance uses `PASS`, `PASS WITH GAP`, `FAIL`, and `UNVERIFIED`.
 
 This keeps design conversation small while repository instructions carry the permanent engineering/release rules. See `AGENTS.md` and `docs/TERMINOLOGY.md`.
 
