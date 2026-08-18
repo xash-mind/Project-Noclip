@@ -105,9 +105,16 @@ jobs:
           root = Path('artifacts/renderer-compare')
           before = json.loads((root / 'before' / 'profile.json').read_text(encoding='utf-8'))
           after = json.loads((root / 'after' / 'profile.json').read_text(encoding='utf-8'))
+
+          # Dev.7 production predates the accepted post-PAU fixture renderer in
+          # which every active M-F1 Omni also casts its own shadow. Dev.8 keeps
+          # that one-to-one shadow architecture deliberately, so the old radius-1
+          # Hole Carver cap of 160 draw calls is not a valid recovery boundary.
+          # These absolute caps bound the clean post-PAU renderer without asking a
+          # recovery release to disable or decouple shadows merely to match Dev.7.
           scenarios = {
               'defaultSpawn': {'drawCalls': 220, 'colliders': 1200, 'interactions': 160},
-              'holeCarverRadius1': {'drawCalls': 160, 'colliders': 600, 'interactions': 120},
+              'holeCarverRadius1': {'drawCalls': 220, 'colliders': 600, 'interactions': 120},
               'worldLabShowcase': {'drawCalls': 280, 'colliders': 1400, 'interactions': 260},
           }
           comparison = {'scenarios': {}, 'catalogCount': after['catalogCount']}
@@ -121,6 +128,11 @@ jobs:
               for metric in ('drawCalls', 'colliders', 'interactions'):
                   value = int(after_metrics[metric])
                   assert value <= caps[metric], f"{key} {metric} {value} exceeds absolute cap {caps[metric]}"
+              active_omnis = int(after_metrics.get('activeOmnis') or 0)
+              shadowed_omnis = int(after_metrics.get('shadowedOmnis') or 0)
+              assert active_omnis == shadowed_omnis, (
+                  f"{key} violated the fixture light/shadow invariant: {active_omnis} active vs {shadowed_omnis} shadowed"
+              )
               before_draw = int(before_metrics['drawCalls'])
               after_draw = int(after_metrics['drawCalls'])
               comparison['scenarios'][key] = {
