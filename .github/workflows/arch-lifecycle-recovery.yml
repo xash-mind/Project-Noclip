@@ -11,6 +11,8 @@ on:
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   recover:
@@ -96,6 +98,25 @@ jobs:
           wait "$SERVER_PID" 2>/dev/null || true
           trap - EXIT
           echo '=== BLOCKING RECOVERY VERIFICATION PASSED ==='
+
+      - name: Post failed verification tail to draft PR
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '### Arch lifecycle recovery — failed verification tail'
+            echo
+            echo 'Run: `${{ github.run_id }}` · Head: `${{ github.sha }}`'
+            echo
+            echo '```text'
+            tail -n 260 /tmp/arch-lifecycle-run.log || true
+            echo '```'
+          } > /tmp/arch-lifecycle-failure-comment.md
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/arch-lifecycle-failure-comment.md
 
       - name: Compare historical locator runtime around smooth-correction install
         if: success()
