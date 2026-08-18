@@ -43,7 +43,7 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           python -m pip install --disable-pip-version-check selenium==4.46.0
-      - name: Profile accepted production baseline
+      - name: Profile canonical production baseline when it matches main
         shell: bash
         run: |
           set -euo pipefail
@@ -53,7 +53,39 @@ jobs:
           baseline_version="v$(git show origin/main:VERSION | tr -d '[:space:]')"
           test -n "$baseline_commit"
           test -n "$baseline_version"
-          echo "Resolved accepted production baseline from main: ${baseline_commit} / ${baseline_version}"
+          deployed_version="$(python - <<'PY'
+          import shutil
+          from selenium import webdriver
+          from selenium.webdriver.common.by import By
+          from selenium.webdriver.support.ui import WebDriverWait
+
+          options = webdriver.ChromeOptions()
+          options.add_argument('--headless=new')
+          options.add_argument('--window-size=1280,720')
+          options.add_argument('--disable-dev-shm-usage')
+          options.add_argument('--no-sandbox')
+          chrome_binary = shutil.which('google-chrome') or shutil.which('chromium') or shutil.which('chromium-browser')
+          if chrome_binary:
+              options.binary_location = chrome_binary
+          driver = webdriver.Chrome(options=options)
+          try:
+              driver.get('https://project-noclip.vercel.app')
+              element = WebDriverWait(driver, 20).until(
+                  lambda current: current.find_element(By.CSS_SELECTOR, '[data-ui="version-indicator"]')
+              )
+              print((element.get_attribute('textContent') or '').strip())
+          finally:
+              driver.quit()
+          PY
+          )"
+          test -n "$deployed_version"
+          if [ "$deployed_version" != "$baseline_version" ]; then
+            printf '%s\n' "production comparison unavailable: canonical production ${deployed_version}; main ${baseline_version}" \
+              > artifacts/renderer-compare/before/status.txt
+            echo "Canonical production is ${deployed_version} while main is ${baseline_version}; continuing with absolute candidate budgets during the release gap."
+            exit 0
+          fi
+          echo "Resolved matching canonical production baseline: ${baseline_commit} / ${baseline_version}"
           NOCLIP_BASE_URL="https://project-noclip.vercel.app" \
           NOCLIP_DEPLOYMENT_COMMIT="$baseline_commit" \
           NOCLIP_DEPLOYMENT_ID="canonical-production-${baseline_version}" \
@@ -95,26 +127,28 @@ jobs:
           from pathlib import Path
 
           root = Path('artifacts/renderer-compare')
-          before = json.loads((root / 'before' / 'profile.json').read_text(encoding='utf-8'))
+          before_path = root / 'before' / 'profile.json'
+          before = json.loads(before_path.read_text(encoding='utf-8')) if before_path.exists() else None
           after = json.loads((root / 'after' / 'profile.json').read_text(encoding='utf-8'))
 
-          # Dev.7 production predates the accepted post-PAU fixture renderer in
-          # which every active M-F1 Omni also casts its own shadow. Dev.8 keeps
-          # that one-to-one shadow architecture deliberately, so the old radius-1
-          # Hole Carver cap of 160 draw calls is not a valid recovery boundary.
-          # These absolute caps bound the clean post-PAU renderer without asking a
-          # recovery release to disable or decouple shadows merely to match Dev.7.
+          # Dev.8 deliberately retains the post-PAU one-to-one fixture shadow
+          # architecture. Absolute budgets and deterministic streaming cardinality
+          # therefore remain authoritative even while canonical production is
+          # temporarily one release behind main during promotion.
           scenarios = {
-              'defaultSpawn': {'drawCalls': 220, 'colliders': 1200, 'interactions': 160},
-              'holeCarverRadius1': {'drawCalls': 220, 'colliders': 600, 'interactions': 120},
-              'worldLabShowcase': {'drawCalls': 280, 'colliders': 1400, 'interactions': 260},
+              'defaultSpawn': {'loadedCells': 49, 'drawCalls': 220, 'colliders': 1200, 'interactions': 160},
+              'holeCarverRadius1': {'loadedCells': 9, 'drawCalls': 220, 'colliders': 600, 'interactions': 120},
+              'worldLabShowcase': {'loadedCells': 49, 'drawCalls': 280, 'colliders': 1400, 'interactions': 260},
           }
-          comparison = {'scenarios': {}, 'catalogCount': after['catalogCount']}
+          comparison = {
+              'productionComparisonAvailable': before is not None,
+              'scenarios': {},
+              'catalogCount': after['catalogCount'],
+          }
           for key, caps in scenarios.items():
-              before_metrics = before['scenarios'][key]['worldMetricsAfter']
               after_metrics = after['scenarios'][key]['worldMetricsAfter']
-              assert after_metrics['loadedCells'] == before_metrics['loadedCells'], (
-                  f"{key} active streaming cardinality changed: {before_metrics['loadedCells']} -> {after_metrics['loadedCells']}"
+              assert int(after_metrics['loadedCells']) == caps['loadedCells'], (
+                  f"{key} active streaming cardinality {after_metrics['loadedCells']} != {caps['loadedCells']}"
               )
               assert after_metrics.get('generation') == 'gen3-v1', f"{key} did not profile Generation 3"
               for metric in ('drawCalls', 'colliders', 'interactions'):
@@ -125,12 +159,21 @@ jobs:
               assert active_omnis == shadowed_omnis, (
                   f"{key} violated the fixture light/shadow invariant: {active_omnis} active vs {shadowed_omnis} shadowed"
               )
-              before_draw = int(before_metrics['drawCalls'])
-              after_draw = int(after_metrics['drawCalls'])
+              production = None
+              draw_delta = None
+              if before is not None:
+                  before_metrics = before['scenarios'][key]['worldMetricsAfter']
+                  assert after_metrics['loadedCells'] == before_metrics['loadedCells'], (
+                      f"{key} active streaming cardinality changed: {before_metrics['loadedCells']} -> {after_metrics['loadedCells']}"
+                  )
+                  before_draw = int(before_metrics['drawCalls'])
+                  after_draw = int(after_metrics['drawCalls'])
+                  production = {name: before_metrics.get(name) for name in ('drawCalls', 'loadedCells', 'colliders', 'interactions')}
+                  draw_delta = round((after_draw - before_draw) * 100 / max(1, before_draw), 2)
               comparison['scenarios'][key] = {
-                  'production': {name: before_metrics.get(name) for name in ('drawCalls', 'loadedCells', 'colliders', 'interactions')},
+                  'production': production,
                   'candidate': {name: after_metrics.get(name) for name in ('drawCalls', 'loadedCells', 'retainedCells', 'colliders', 'interactions', 'activeOmnis', 'shadowedOmnis')},
-                  'drawDeltaPct': round((after_draw - before_draw) * 100 / max(1, before_draw), 2),
+                  'drawDeltaPct': draw_delta,
                   'caps': caps,
               }
           hole_metrics = after['scenarios']['holeCarverRadius1']['worldMetricsAfter']
