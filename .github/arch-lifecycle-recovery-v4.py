@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import runpy
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -86,5 +87,11 @@ replace_once(
     '  const refresh=():void=>access.updateStreaming(true);',
     "  const refresh=():void=>access.updateStreaming({reason:'presentation-refresh',refreshUnchanged:true});"
 )
+
+# Chain the focused test-contract refinement, then remove its temporary script so
+# a successful recovery still leaves no harness files behind.
+v5_path = ROOT / '.github/arch-lifecycle-recovery-v5.py'
+runpy.run_path(str(v5_path), run_name='__main__')
+v5_path.unlink()
 
 print('Arch lifecycle recovery v4 TypeScript/Studio bridge refinement applied successfully.')
