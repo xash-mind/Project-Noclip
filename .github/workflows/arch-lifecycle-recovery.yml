@@ -26,9 +26,15 @@ jobs:
         with:
           node-version: 22
 
-      - name: Apply bounded renderer lifecycle recovery
+      - name: Apply and verify bounded recovery
+        id: verify
+        shell: bash
         run: |
           set -euo pipefail
+          exec > >(tee /tmp/arch-lifecycle-run.log) 2>&1
+          rm -f .github/arch-lifecycle-failure.log
+
+          echo '=== APPLY TRANSFORMS ==='
           python .github/arch-lifecycle-recovery.py
           python .github/arch-lifecycle-recovery-v2.py
           python .github/arch-lifecycle-recovery-v3.py
@@ -40,22 +46,18 @@ jobs:
           git diff --check
           git status --short
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+          echo '=== INSTALL ==='
+          npm install --no-audit --no-fund
 
-      - name: Strict TypeScript
-        run: npm run typecheck
+          echo '=== STRICT TYPESCRIPT ==='
+          npm run typecheck
 
-      - name: Full test suite
-        run: npm test
+          echo '=== FULL TEST SUITE ==='
+          npm test
 
-      - name: Prove representative Arch descriptors are unchanged
-        shell: bash
-        run: |
-          set -euo pipefail
+          echo '=== WORLD DESCRIPTOR IDENTITY ==='
           mkdir -p artifacts/arch-lifecycle
           node scripts/arch-descriptor-snapshot.mjs > artifacts/arch-lifecycle/descriptors-after.json
-
           git worktree add --detach /tmp/noclip-start 58c6452b1765e1021f0d63c6770b68b3332f5d79
           ln -s "$GITHUB_WORKSPACE/node_modules" /tmp/noclip-start/node_modules
           (
@@ -67,19 +69,14 @@ jobs:
           diff -u artifacts/arch-lifecycle/descriptors-before.json artifacts/arch-lifecycle/descriptors-after.json | tee artifacts/arch-lifecycle/descriptor-diff.txt
           git worktree remove /tmp/noclip-start --force
 
-      - name: Renderer benchmark
-        run: npm run benchmark
+          echo '=== RENDERER BENCHMARK ==='
+          npm run benchmark
 
-      - name: Production build
-        run: npm run build
+          echo '=== PRODUCTION BUILD ==='
+          npm run build
 
-      - name: Install browser regression driver
-        run: python -m pip install --disable-pip-version-check selenium==4.46.0
-
-      - name: Run real Chromium Arch locator lifecycle regression
-        shell: bash
-        run: |
-          set -euo pipefail
+          echo '=== REAL CHROMIUM ARCH LOCATOR REGRESSION ==='
+          python -m pip install --disable-pip-version-check selenium==4.46.0
           npm run preview > /tmp/project-noclip-preview.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true; cat /tmp/project-noclip-preview.log || true' EXIT
@@ -88,7 +85,7 @@ jobs:
               break
             fi
             if [ "$attempt" -eq 30 ]; then
-              echo "Preview server did not become ready" >&2
+              echo 'Preview server did not become ready' >&2
               exit 1
             fi
             sleep 1
@@ -97,6 +94,7 @@ jobs:
           kill "$SERVER_PID" 2>/dev/null || true
           wait "$SERVER_PID" 2>/dev/null || true
           trap - EXIT
+          echo '=== BLOCKING RECOVERY VERIFICATION PASSED ==='
 
       - name: Compare historical locator runtime around smooth-correction install
         if: success() && github.event_name == 'push'
@@ -115,14 +113,14 @@ jobs:
             WORKTREE="/tmp/noclip-${LABEL}"
             echo "=== ${LABEL} ${REF} ===" | tee -a artifacts/arch-lifecycle/historical-runtime.txt
             if ! git worktree add --detach "$WORKTREE" "$REF" >> artifacts/arch-lifecycle/historical-runtime.txt 2>&1; then
-              echo "WORKTREE_UNVERIFIED" | tee -a artifacts/arch-lifecycle/historical-runtime.txt
+              echo 'WORKTREE_UNVERIFIED' | tee -a artifacts/arch-lifecycle/historical-runtime.txt
               continue
             fi
             ln -s "$GITHUB_WORKSPACE/node_modules" "$WORKTREE/node_modules" 2>/dev/null || true
             (
               cd "$WORKTREE"
               if ! npm run build >> "$GITHUB_WORKSPACE/artifacts/arch-lifecycle/historical-runtime.txt" 2>&1; then
-                echo "BUILD_UNVERIFIED" >> "$GITHUB_WORKSPACE/artifacts/arch-lifecycle/historical-runtime.txt"
+                echo 'BUILD_UNVERIFIED' >> "$GITHUB_WORKSPACE/artifacts/arch-lifecycle/historical-runtime.txt"
                 exit 0
               fi
               npm run preview > "/tmp/${LABEL}-preview.log" 2>&1 &
@@ -133,7 +131,7 @@ jobs:
                 sleep 1
               done
               if [ "$READY" -ne 1 ]; then
-                echo "PREVIEW_UNVERIFIED" >> "$GITHUB_WORKSPACE/artifacts/arch-lifecycle/historical-runtime.txt"
+                echo 'PREVIEW_UNVERIFIED' >> "$GITHUB_WORKSPACE/artifacts/arch-lifecycle/historical-runtime.txt"
                 kill "$PID" 2>/dev/null || true
                 exit 0
               fi
@@ -157,8 +155,24 @@ jobs:
             artifacts/arch-locator-smoke
             artifacts/historical-pre-smooth-install
             artifacts/historical-smooth-installed
+            /tmp/arch-lifecycle-run.log
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Record failed recovery evidence on branch
+        if: failure() && github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/arch-lifecycle-run.log /tmp/arch-lifecycle-failure.log
+          git reset --hard HEAD
+          git clean -fd
+          cp /tmp/arch-lifecycle-failure.log .github/arch-lifecycle-failure.log
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/arch-lifecycle-failure.log
+          git commit -m "Record Arch lifecycle recovery harness failure"
+          git push origin HEAD:fix/arch-region-locator-lifecycle
 
       - name: Commit verified recovery to branch
         if: success() && github.event_name == 'push'
@@ -170,7 +184,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           if git diff --cached --quiet; then
-            echo "No recovery changes remained to commit" >&2
+            echo 'No recovery changes remained to commit' >&2
             exit 1
           fi
           git commit -m "Recover Arch locator renderer lifecycle"
