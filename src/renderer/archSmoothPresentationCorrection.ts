@@ -10,7 +10,7 @@ import { makeMaterial, type CellVisual } from './support.js';
 
 type Vec3Tuple = readonly [number, number, number];
 
-type RendererAccess = WorldRenderer & { app: pc.Application };
+interface RendererAccess { app: pc.Application; }
 
 interface SmoothCurveCache {
   mesh?: pc.Mesh;
@@ -27,7 +27,7 @@ const SMOOTH_CURVE_PREFIX = 'arch-frame:smooth-curve:';
 const UPPER_PIER_STUB_PREFIX = 'arch-frame:pier-ceiling-stub:';
 const PIER_PREFIX = 'arch-frame:pier:';
 const UPPER_RUN_PREFIX = 'arch-frame:upper-run:';
-const FALLBACK_UPPER_TINT: readonly [number, number, number] = [0.955, 0.945, 0.885];
+const FALLBACK_UPPER_TINT: [number, number, number] = [0.955, 0.945, 0.885];
 
 function childrenOf(entity: pc.Entity): pc.Entity[] {
   return [...(entity as pc.Entity & { children: readonly pc.Entity[] }).children];
@@ -149,7 +149,7 @@ function smoothCurveMesh(renderer: WorldRenderer): pc.Mesh {
     [0.5, profile.upperTop, -halfDepth]
   ], [0, 1, 0]);
 
-  const app = (renderer as RendererAccess).app;
+  const app = (renderer as unknown as RendererAccess).app;
   const mesh = new pc.Mesh(app.graphicsDevice);
   mesh.setPositions(positions);
   mesh.setNormals(normals);
