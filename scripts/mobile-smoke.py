@@ -350,8 +350,13 @@ def main() -> None:
         checks.append("Marker touch action enters draw mode and Look-area drag creates a persistent wall mark")
 
         screenshot = ARTIFACT_DIR / "mobile-landscape.png"
-        driver.save_screenshot(str(screenshot))
-        report["screenshot"] = str(screenshot)
+        try:
+            driver.save_screenshot(str(screenshot))
+            report["screenshot"] = str(screenshot)
+        except TimeoutException as error:
+            warning = f"final mobile screenshot timed out in headless SwiftShader; functional assertions remain authoritative: {str(error).splitlines()[0]}"
+            report.setdefault("warnings", []).append(warning)
+            print(f"WARNING: {warning}")
 
         errors = [entry for entry in driver.get_log("browser") if entry.get("level") == "SEVERE" and "favicon.ico" not in entry.get("message", "")]
         report["browserErrors"] = errors
