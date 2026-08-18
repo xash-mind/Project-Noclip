@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import time
 from pathlib import Path
@@ -37,6 +38,27 @@ def wait_for_text(driver: webdriver.Chrome, selector: str, fragments: tuple[str,
         value = text_content(current, selector)
         return value if all(fragment in value for fragment in fragments) else False
     return str(wait_for(driver, predicate, timeout=timeout, message=message))
+
+
+def metric_number(metrics: str, label: str) -> int:
+    match = re.search(rf"^{re.escape(label)}\s+(\d+)", metrics, flags=re.MULTILINE)
+    if not match:
+        raise AssertionError(f"Missing numeric metric {label!r}: {metrics}")
+    return int(match.group(1))
+
+
+def draw_call_count(metrics: str) -> int:
+    match = re.search(r"^draw calls\s+(\d+)", metrics, flags=re.MULTILINE)
+    if not match:
+        raise AssertionError(f"Missing numeric draw-call metric: {metrics}")
+    return int(match.group(1))
+
+
+def fixture_light_counts(metrics: str) -> tuple[int, int]:
+    match = re.search(r"^fixture lights\s+(\d+)/(\d+) active/real", metrics, flags=re.MULTILINE)
+    if not match:
+        raise AssertionError(f"Missing fixture-light metric: {metrics}")
+    return int(match.group(1)), int(match.group(2))
 
 
 def build_driver() -> webdriver.Chrome:
@@ -96,8 +118,40 @@ def capture_screenshot(driver: webdriver.Chrome, path: Path, report: dict[str, A
         return False
 
 
+def assert_complete_scene(metrics: str, label: str) -> dict[str, int]:
+    loaded = metric_number(metrics, "loaded cells")
+    colliders = metric_number(metrics, "colliders")
+    draw_calls = draw_call_count(metrics)
+    active_lights, real_lights = fixture_light_counts(metrics)
+    assert loaded > 0, f"{label} has no loaded Cells"
+    assert colliders > 0, f"{label} has no ordinary/static collider geometry; possible lights-only scene"
+    assert draw_calls > 0, f"{label} has no rendered draw calls; possible blank scene"
+    assert 0 <= active_lights <= real_lights, f"{label} fixture ownership is invalid: {active_lights}/{real_lights} active/real"
+    return {"loadedCells": loaded, "colliders": colliders, "drawCalls": draw_calls, "activeFixtureLights": active_lights, "realFixtureLights": real_lights}
+
+
+def locate_region(driver: webdriver.Chrome, region_id: str, label: str, report: dict[str, Any], sequence_index: int) -> None:
+    if not lab_visible(driver):
+        toggle_lab(driver)
+        wait_for(driver, lambda current: lab_visible(current), message=f"World Lab open before {label}")
+    dispatch_change(driver, '[data-lab="region"]', region_id)
+    driver.execute_script("arguments[0].click();", driver.find_element(By.CSS_SELECTOR, '[data-action="locate-region"]'))
+    metrics = wait_for_text(driver, '[data-ui="metrics"]', ("generation     gen3-v1", f"region         {label}"), timeout=40, message=f"located {label}")
+    lab_metrics = assert_complete_scene(metrics, f"{label} while World Lab open")
+    toggle_lab(driver)
+    wait_for(driver, lambda current: not lab_visible(current), message=f"World Lab close after {label}")
+    time.sleep(1.4)
+    metrics = wait_for_text(driver, '[data-ui="metrics"]', ("generation     gen3-v1", f"region         {label}"), timeout=20, message=f"settled {label}")
+    settled_metrics = assert_complete_scene(metrics, f"{label} after rendered settle")
+    errors = browser_errors(driver)
+    assert not errors, f"Blocking browser console errors after locating {label}: {errors}"
+    report.setdefault("transitions", []).append({"index": sequence_index, "regionId": region_id, "label": label, "labMetrics": lab_metrics, "settledMetrics": settled_metrics})
+    if label == "Arch Rooms":
+        capture_screenshot(driver, ARTIFACT_DIR / f"arch-{sequence_index:02d}.png", report, f"Arch Rooms transition {sequence_index}")
+
+
 def main() -> None:
-    report: dict[str, Any] = {"baseUrl": BASE_URL, "seed": SPARSE_SEED, "checks": [], "warnings": []}
+    report: dict[str, Any] = {"baseUrl": BASE_URL, "seed": SPARSE_SEED, "checks": [], "warnings": [], "transitions": []}
     driver = build_driver()
     driver.set_page_load_timeout(60)
     try:
@@ -118,9 +172,10 @@ def main() -> None:
             driver.execute_script("arguments[0].click();", resume)
             time.sleep(1)
         watch = wait_for_text(driver, '[data-ui="watch"]', ("PROJECT NOCLIP", "LEVEL 0", "Ordinary Level 0"), timeout=15, message="Generation 3 ordinary Level 0 watch label")
-        ordinary_metrics = wait_for_text(driver, '[data-ui="metrics"]', ("generation", "gen3-v1", "region", "Ordinary Level 0"), timeout=15, message="Generation 3 ordinary metrics")
+        ordinary_metrics = wait_for_text(driver, '[data-ui="metrics"]', ("generation     gen3-v1", "region         Ordinary Level 0"), timeout=15, message="Generation 3 ordinary metrics")
         report["ordinaryWatch"] = watch
         report["ordinaryMetrics"] = ordinary_metrics
+        report["ordinaryScene"] = assert_complete_scene(ordinary_metrics, "initial Ordinary Level 0")
         capture_screenshot(driver, ARTIFACT_DIR / "01-gen3-ordinary-level-0.png", report, "Ordinary Level 0")
         report["checks"].append("fixed sparse-1 origin exercised continuous ordinary Generation 3 Level 0 in the normal renderer path")
 
@@ -128,25 +183,24 @@ def main() -> None:
         wait_for(driver, lambda current: lab_visible(current), message="World Lab open")
         dispatch_change(driver, '[data-lab="radius"]', "1")
         dispatch_change(driver, '[data-lab="bypass"]', True)
-        dispatch_change(driver, '[data-lab="region"]', "arch-rooms")
-        driver.execute_script("arguments[0].click();", driver.find_element(By.CSS_SELECTOR, '[data-action="locate-region"]'))
-        metrics = wait_for_text(driver, '[data-ui="metrics"]', ("generation", "gen3-v1", "region", "Arch Rooms"), timeout=30, message="located Arch Rooms Region")
-        report["archMetrics"] = metrics
-        capture_screenshot(driver, ARTIFACT_DIR / "02-located-arch-rooms-lab.png", report, "Arch Rooms Lab")
-        report["checks"].append("World Lab located a natural Arch Rooms Region through kilometre-scale Region geography")
 
-        toggle_lab(driver)
-        wait_for(driver, lambda current: not lab_visible(current), message="World Lab close")
-        time.sleep(2)
-        if capture_screenshot(driver, ARTIFACT_DIR / "03-arch-rooms-region.png", report, "Arch Rooms scene"):
-            report["checks"].append("Arch Rooms browser view captured to guard continuous pale divider architecture")
-        else:
-            report["checks"].append("Arch Rooms functional Region assertions passed; dedicated WebGL fidelity workflow owns release-blocking Arch imagery")
+        sequence = [
+            ("arch-rooms", "Arch Rooms"),
+            ("pillar-field", "Pillar Field"),
+            ("arch-rooms", "Arch Rooms"),
+            ("ordinary-level-0", "Ordinary Level 0"),
+            ("arch-rooms", "Arch Rooms"),
+        ]
+        for index, (region_id, label) in enumerate(sequence, start=1):
+            locate_region(driver, region_id, label, report, index)
+
+        report["checks"].append("World Lab survived repeated Ordinary/Arch/Pillar Region relocation with complete loaded geometry and subsequent rendered frames")
+        report["checks"].append("every Arch relocation retained nonzero loaded Cells, colliders and draw calls; no floating-fixture-only scene was observed")
 
         errors = browser_errors(driver)
         report["browserErrors"] = errors
         assert not errors, f"Blocking browser console errors: {errors}"
-        report["checks"].append("world-cohesion browser evidence recorded no blocking console errors")
+        report["checks"].append("world-cohesion browser evidence recorded no blocking console errors, including PlayCanvas shadow/render-target exceptions")
     except Exception as error:
         report["failure"] = f"{type(error).__name__}: {error}"
         try:
