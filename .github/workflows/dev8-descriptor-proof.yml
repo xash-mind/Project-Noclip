@@ -1,0 +1,52 @@
+name: Dev.8 Descriptor Identity Proof
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  descriptor-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: release/dev8-post-pau-recovery
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Build candidate test modules
+        run: |
+          node scripts/build-presentation-definitions.mjs
+          ./node_modules/.bin/tsc -p tsconfig.test.json
+      - name: Snapshot candidate Arch descriptors
+        run: |
+          mkdir -p artifacts/dev8-descriptor-proof
+          node scripts/arch-descriptor-snapshot.mjs > artifacts/dev8-descriptor-proof/candidate.json
+      - name: Snapshot recovery-anchor Arch descriptors
+        shell: bash
+        run: |
+          set -euo pipefail
+          git worktree add --detach /tmp/noclip-dev8-anchor 4e96157bb9a85564ff9ab381ce19370fe0f3373d
+          ln -s "$GITHUB_WORKSPACE/node_modules" /tmp/noclip-dev8-anchor/node_modules
+          (
+            cd /tmp/noclip-dev8-anchor
+            node scripts/build-presentation-definitions.mjs
+            "$GITHUB_WORKSPACE/node_modules/.bin/tsc" -p tsconfig.test.json
+            node "$GITHUB_WORKSPACE/scripts/arch-descriptor-snapshot.mjs" > "$GITHUB_WORKSPACE/artifacts/dev8-descriptor-proof/anchor.json"
+          )
+          diff -u artifacts/dev8-descriptor-proof/anchor.json artifacts/dev8-descriptor-proof/candidate.json | tee artifacts/dev8-descriptor-proof/diff.txt
+          git worktree remove /tmp/noclip-dev8-anchor --force
+      - name: Upload descriptor evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev8-descriptor-proof-${{ github.sha }}
+          path: artifacts/dev8-descriptor-proof
+          if-no-files-found: error
+          retention-days: 30
