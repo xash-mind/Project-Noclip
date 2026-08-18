@@ -26,7 +26,9 @@ jobs:
         run: |
           set -euo pipefail
           python .github/arch-lifecycle-recovery.py
+          python .github/arch-lifecycle-recovery-v2.py
           rm .github/arch-lifecycle-recovery.py
+          rm .github/arch-lifecycle-recovery-v2.py
           rm .github/workflows/arch-lifecycle-recovery.yml
           git diff --check
           git status --short
