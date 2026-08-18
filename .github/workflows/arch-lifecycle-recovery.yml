@@ -1,0 +1,168 @@
+name: Arch Lifecycle Recovery
+
+on:
+  push:
+    branches:
+      - fix/arch-region-locator-lifecycle
+
+permissions:
+  contents: write
+
+jobs:
+  recover:
+    if: contains(github.event.head_commit.message, '[arch-lifecycle-run]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Apply bounded renderer lifecycle recovery
+        run: |
+          set -euo pipefail
+          python .github/arch-lifecycle-recovery.py
+          rm .github/arch-lifecycle-recovery.py
+          rm .github/workflows/arch-lifecycle-recovery.yml
+          git diff --check
+          git status --short
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Strict TypeScript
+        run: npm run typecheck
+
+      - name: Full test suite
+        run: npm test
+
+      - name: Prove representative Arch descriptors are unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/arch-lifecycle
+          node scripts/arch-descriptor-snapshot.mjs > artifacts/arch-lifecycle/descriptors-after.json
+
+          git worktree add --detach /tmp/noclip-start 58c6452b1765e1021f0d63c6770b68b3332f5d79
+          ln -s "$GITHUB_WORKSPACE/node_modules" /tmp/noclip-start/node_modules
+          (
+            cd /tmp/noclip-start
+            node scripts/build-presentation-definitions.mjs
+            "$GITHUB_WORKSPACE/node_modules/.bin/tsc" -p tsconfig.test.json
+            node "$GITHUB_WORKSPACE/scripts/arch-descriptor-snapshot.mjs" > "$GITHUB_WORKSPACE/artifacts/arch-lifecycle/descriptors-before.json"
+          )
+          diff -u artifacts/arch-lifecycle/descriptors-before.json artifacts/arch-lifecycle/descriptors-after.json | tee artifacts/arch-lifecycle/descriptor-diff.txt
+          git worktree remove /tmp/noclip-start --force
+
+      - name: Renderer benchmark
+        run: npm run benchmark
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install browser regression driver
+        run: python -m pip install --disable-pip-version-check selenium==4.46.0
+
+      - name: Run real Chromium Arch locator lifecycle regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview > /tmp/project-noclip-preview.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; cat /tmp/project-noclip-preview.log || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              echo "Preview server did not become ready" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          NOCLIP_ARCH_LOCATOR_ARTIFACTS="artifacts/arch-locator-smoke" python scripts/arch-locator-smoke.py
+          kill "$SERVER_PID" 2>/dev/null || true
+          wait "$SERVER_PID" 2>/dev/null || true
+          trap - EXIT
+
+      - name: Compare historical locator runtime around smooth-correction install
+        if: success()
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -u
+          mkdir -p artifacts/arch-lifecycle
+          : > artifacts/arch-lifecycle/historical-runtime.txt
+          for entry in \
+            "dd0d919f3f5935f1ddc0ef2d832bccb55f012775 pre-smooth-install" \
+            "ee3be744e6557b29d1299042aea1b4b4d75ec781 smooth-installed"; do
+            set -- $entry
+            REF="$1"
+            LABEL="$2"
+            WORKTREE="/tmp/noclip-${LABEL}"
+            echo "=== ${LABEL} ${REF} ===" | tee -a artifacts/arch-lifecycle/historical-runtime.txt
+            if ! git worktree add --detach "$WORKTREE" "$REF" >> artifacts/arch-lifecycle/historical-runtime.txt 2>&1; then
+              echo "WORKTREE_UNVERIFIED" | tee -a artifacts/arch-lifecycle/historical-runtime.txt
+              continue
+            fi
+            ln -s "$GITHUB_WORKSPACE/node_modules" "$WORKTREE/node_modules" 2>/dev/null || true
+            (
+              cd "$WORKTREE"
+              if ! npm run build >> "$GITHUB_WORKSPACE/artifacts/arch-lifecycle/historical-runtime.txt" 2>&1; then
+                echo "BUILD_UNVERIFIED" >> "$GITHUB_WORKSPACE/artifacts/arch-lifecycle/historical-runtime.txt"
+                exit 0
+              fi
+              npm run preview > "/tmp/${LABEL}-preview.log" 2>&1 &
+              PID=$!
+              READY=0
+              for attempt in {1..30}; do
+                if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then READY=1; break; fi
+                sleep 1
+              done
+              if [ "$READY" -ne 1 ]; then
+                echo "PREVIEW_UNVERIFIED" >> "$GITHUB_WORKSPACE/artifacts/arch-lifecycle/historical-runtime.txt"
+                kill "$PID" 2>/dev/null || true
+                exit 0
+              fi
+              NOCLIP_COHESION_ARTIFACTS="$GITHUB_WORKSPACE/artifacts/historical-${LABEL}" python scripts/world-cohesion-smoke.py
+              STATUS=$?
+              echo "LOCATOR_EXIT=${STATUS}" >> "$GITHUB_WORKSPACE/artifacts/arch-lifecycle/historical-runtime.txt"
+              kill "$PID" 2>/dev/null || true
+              wait "$PID" 2>/dev/null || true
+              exit 0
+            ) || true
+            git worktree remove "$WORKTREE" --force >> artifacts/arch-lifecycle/historical-runtime.txt 2>&1 || true
+          done
+
+      - name: Upload recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arch-lifecycle-recovery-${{ github.sha }}
+          path: |
+            artifacts/arch-lifecycle
+            artifacts/arch-locator-smoke
+            artifacts/historical-pre-smooth-install
+            artifacts/historical-smooth-installed
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Commit verified recovery to branch
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf artifacts .test-dist dist
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No recovery changes remained to commit" >&2
+            exit 1
+          fi
+          git commit -m "Recover Arch locator renderer lifecycle"
+          git push origin HEAD:fix/arch-region-locator-lifecycle
