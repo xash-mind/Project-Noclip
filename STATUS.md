@@ -1,11 +1,13 @@
 # Project Status
 
-**Last reconciled:** 2026-08-14 (Asia/Kolkata)  
+**Last reconciled:** 2026-08-18 (Asia/Kolkata)  
 **Canonical production:** https://project-noclip.vercel.app  
-**Production release commit:** `8fe71c43b6050ab69b00711116c896f3e52a9337`  
-**Visible deployed version:** `v0.3.0-dev.7`  
-**Accepted production baseline:** `v0.3.0-dev.7` / `8fe71c43b6050ab69b00711116c896f3e52a9337`  
-**Completed bounded correction:** GitHub Issue #53 / PR #54 — fixture-owned fluorescent lighting  
+**Visible release version:** `v0.3.0-dev.8`  
+**Release checkpoint:** **DEV.8 — POST-PAU CLEAN RECOVERY CHECKPOINT**  
+**Recovery anchor:** `4e96157bb9a85564ff9ab381ce19370fe0f3373d`  
+**Release PR:** GitHub PR #61 — `release/dev8-post-pau-recovery`  
+**Previous production baseline:** `v0.3.0-dev.7` / `8fe71c43b6050ab69b00711116c896f3e52a9337`  
+**Production release evidence:** the exact promoted commit and deployment verification are recorded on PR #61 by the release/production-smoke path after promotion  
 **Save schema:** `v2`  
 **New-journey generation:** `gen3-v1`  
 **Architecture direction:** Generation 3 — GitHub Issue #31  
@@ -13,71 +15,85 @@
 
 ## Current accepted release
 
-Dev.7 keeps the accepted dev.6 topology/Pillar/Arch/flashlight baseline and replaces only its rejected fluorescent-light ownership model. Dev.6 used a fixed player-nearest realtime-light pool while a Cell-center sampled light field changed floor/ceiling emission, which made illumination ownership player-relative and could expose Cell-scale brightness patches.
+Dev.8 is an intentionally conservative recovery checkpoint. It restores Project Noclip to the clean post-PAU / Noclip Studio architecture at `4e96157bb9a85564ff9ab381ce19370fe0f3373d`, then adds only release-verification/documentation compatibility work that does not alter deterministic world truth or the recovered renderer runtime.
 
-PR #54 is merged and Issue #53 is closed. Canonical Vercel production is READY from runtime release commit `8fe71c43b6050ab69b00711116c896f3e52a9337`.
+Dev.8 deliberately **does not preserve the latest A-A1 visual redesign**. The later Arch repair/reconstruction chain is abandoned for this checkpoint because it introduced overlapping presentation ownership and eventually reproduced a real PlayCanvas shadow/render-target failure under World Lab Region relocation.
 
-The accepted runtime law is:
+The recovered release keeps:
 
-- every rendered fluorescent fixture owns one real broad downward PlayCanvas spot for the lifetime of its streamed Cell;
-- there is no app-level fixed eight-light pool and no player-nearest light ownership loop;
-- fixture `off` means zero mesh emission and zero emitted light;
-- fixture `flicker` uses the same deterministic pulse for the visible panel and its real spot;
-- Reduced Flicker makes that pulse steady through the existing `lightFlickerValue` law;
-- Blackout cores still generate no local fluorescent groups;
-- the camera flashlight remains an independent spot light;
-- ambient Level 0 light is reduced so real fixture falloff carries more of the room illumination;
-- the existing sampled light field remains available for ambience/diagnostics but no longer owns visible surface illumination in the corrected runtime path.
+- PAU Run 1 presentation architecture and Representation bindings;
+- PAU Run 2 / Noclip Studio foundation;
+- DevelopmentContext and ChangeReceipt contracts;
+- asset validation/fallback architecture and production Studio bridge exclusion;
+- deterministic Generation 3 world identity and frozen Generation 2 save compatibility;
+- the clean anchor's Arch presentation/collision behavior;
+- the clean post-PAU streaming/static-batching implementation;
+- the retained fixture-light architecture in which active M-F1 Omnis and active shadow-casting M-F1 Omnis remain one-to-one.
 
-Fixture spot profile for dev.7: 10.5 m range, 48° inner cone, 68° outer cone, shadows disabled initially. No arbitrary realtime fixture cap is introduced.
+The discarded post-anchor A-A1 chain includes the reconstruction/correction sequence beginning at `f3fd36e1a527ebb6cd1ec98802526a2bbda4daa3`, through `dd841f747cb3f028bd3c15d366589e945ec2be5e`, `dd0d919f3f5935f1ddc0ef2d832bccb55f012775`, `6c17f6789dd3023083dedfa33c2425de2327ef2e`, `ee3be744e6557b29d1299042aea1b4b4d75ec781`, and the later `studio-test` repair work. `archSmoothPresentationCorrection.ts` is not part of Dev.8.
 
-## Release evidence
+## Recovery evidence
 
-- TypeScript/typecheck, full deterministic/system tests, 10,000-Cell generation benchmark and production build passed on the runtime candidate.
-- Renderer comparison at the default 49-Cell scene observed 160 rendered fixtures and 160 real fixture lights; draw calls improved from 148 on dev.6 to 138 on dev.7.
-- World Lab comparison observed 160/160 fixture lights and draw calls improved from 185 to 173.
-- Hole-carver radius-1 inspection observed 9 Cells and 25/25 fixture lights.
-- Browser/runtime evidence recorded no severe browser errors and preserved schema-v2/gen3-v1 save identity and position across reload.
-- Flashlight remained independently effective in ordinary and Blackout scenes.
-- The visual traversal harness was corrected to stop asserting the deleted player-owned `sourceIds` model and to use reachable capture milestones; these were test-harness corrections, not runtime lighting changes.
-- Final branch CI, Renderer Regression and Production Profile completed successfully. Visual Coherence remained red in the pre-existing Arch-route traversal stage before its fixture-lighting capture: its artifact completed all Pillar captures and wrote `arch-route-before.png`, then left the Arch and lighting report sections empty. Treat that as an unresolved non-lighting visual-workflow signal rather than green lighting evidence.
-- Release discipline produced one useful PR preview and one production deployment; documentation/test-only follow-up pushes were skipped/canceled by the repository Vercel ignore policy.
+- Exact recovery anchor `4e96157` passed the real Chromium Region-locator journey that exposed the regression: Ordinary → Arch → Pillar → Arch → Ordinary → Arch.
+- That anchor run preserved ordinary loaded Cell geometry/colliders through the transitions and produced no blocking PlayCanvas ShadowRenderer/render-target exception.
+- Representative generated descriptor snapshots for the Dev.8 recovery candidate are byte-identical to the recovery anchor, including the located Arch occurrence and surrounding Cells.
+- World seed outcomes, `generationVersion`, save schema, Cell identities, Region geography, generated wall/Feature identity and topology remain unchanged by the recovery.
+- No renderer, world-generation, lighting, movement, gameplay, save, static-batching or A-A1 runtime implementation is changed from the recovery anchor by the release-record work itself.
+
+## Verification contract
+
+Dev.8 release acceptance requires the exact final release candidate to pass:
+
+- strict TypeScript;
+- the full deterministic/system test suite;
+- PAU validation;
+- Studio validation and bridge/security checks;
+- Generation 2 deterministic/save compatibility tests;
+- Generation 3 deterministic/world-identity tests;
+- Region generation/locator and Arch route/collision tests;
+- fixture-light, render-settings and streaming/static-batching tests;
+- the 10,000-Cell generator benchmark;
+- production build and production Studio-boundary check;
+- real Chromium desktop/mobile/world-cohesion journeys, including repeated Arch/Pillar/Ordinary Region relocation with no severe browser errors;
+- Renderer Regression under the post-PAU shadow-aware budget, explicitly requiring `activeOmnis == shadowedOmnis`;
+- blocking World/Region + fidelity browser evidence;
+- main-branch CI and bounded production smoke after promotion.
+
+The exact Actions/deployment evidence is kept on PR #61 and its release artifacts so the repository does not need a post-release code commit merely to backfill a deployment SHA.
+
+## Verification calibration retained for Dev.8
+
+Dev.7-era renderer and visual workflows contained assumptions that predated the retained post-PAU renderer. Dev.8 keeps the useful checks while avoiding unrelated visual redesign during recovery:
+
+- Renderer Regression uses bounded post-PAU draw-call budgets and blocks any violation of the active-light/shadow one-to-one invariant rather than disabling shadows to match the older Dev.7 budget.
+- World/Region and fidelity browser evidence remains blocking.
+- Legacy headless luminance, pulse-timing and screenshot calibration is retained as diagnostic evidence rather than a reason to retune Level 0 during this recovery checkpoint.
 
 ## Preserved accepted direction
 
 - `gen3-v1` and schema-v2 save compatibility;
-- player-approved dev.5 Space Topology and intentional small/one-entry spaces;
-- continuous Pillar Region depth and accepted Arch correction from dev.6;
-- Euclidean Geometry unless explicitly scoped otherwise;
 - deterministic stable identities and world laws;
+- Euclidean Geometry unless explicitly scoped otherwise;
 - Cells as streaming/cache units only, never player-visible room or illumination units;
-- Manila/Transition laws, frozen Gen2 save isolation and existing flashlight behavior.
+- Presentation truth separated from deterministic world identity;
+- PAU as the canonical representation/asset architecture;
+- Noclip Studio foundation retained behind development/security boundaries;
+- Manila/Transition laws, frozen Gen2 isolation and existing movement/gameplay behavior.
 
 ## Remaining known gaps
 
-- Physical Android/iOS GPU cost for one real spot per rendered fixture still requires real-device playtesting.
-- Fixture shadows remain disabled, so wall-light leakage must be judged in the player test before enabling costly shadowing or another occlusion strategy.
-- Dormant legacy spatial-light selection helpers and the old dev.6 Cell-surface field implementation remain source-level compatibility/presentation code, but the accepted runtime no longer calls the player-owned spatial-light wrapper that activates that field and gives neither path real-light ownership.
-- `WORLD.md` still contains one stale presentation sentence describing bounded realtime fixture slots/hysteresis; runtime and this STATUS are authoritative for dev.7 until that documentation sentence is surgically reconciled.
-- Hole Carver density/terminal-fall work, content variants and all other non-lighting expansion remain outside this correction.
+- The latest accepted smooth A-A1 appearance is intentionally deferred. Future Arch work must rebuild it directly in the authoritative A-A1 presentation owner from Dev.8 rather than restoring the discarded correction chain.
+- Noclip Studio continuous-sync remains future work and is not part of Dev.8.
+- Physical Android/iOS GPU cost for the retained shadowed fixture-light architecture still requires real-device playtesting.
+- Legacy headless visual-calibration diagnostics can remain runner-sensitive; they are evidence aids, not substitutes for the blocking world/fidelity and production browser journeys.
 - Perceptual audio quality remains unverified unless actually listened to.
-
-## Player acceptance checklist
-
-1. Visible active fixtures illuminate their surroundings before the player approaches.
-2. Walking through ordinary Level 0 produces smooth falloff rather than room-wide slot pops.
-3. Carpet/ceiling illumination does not reveal 14 m Cell squares.
-4. Dead fixtures are genuinely dark with no panel/light disagreement.
-5. Flickering panels and surrounding illumination pulse together; Reduced Flicker is steady.
-6. Blackout cores have no local fluorescent contribution and the flashlight remains useful independently.
-7. Watch specifically for wall bleed and sustained frame-time degradation while Cells load/unload.
 
 ## Important links
 
 - Repository: https://github.com/xash-mind/Project-Noclip
+- Dev.8 release PR: https://github.com/xash-mind/Project-Noclip/pull/61
+- Superseded forward-recovery PR: https://github.com/xash-mind/Project-Noclip/pull/60
 - Production: https://project-noclip.vercel.app
 - Generation 3 architecture: https://github.com/xash-mind/Project-Noclip/issues/31
 - Level 0 fidelity: https://github.com/xash-mind/Project-Noclip/issues/37
-- Dev.6 baseline correction: https://github.com/xash-mind/Project-Noclip/issues/50
-- Fixture lighting correction: https://github.com/xash-mind/Project-Noclip/issues/53
-- Fixture lighting PR: https://github.com/xash-mind/Project-Noclip/pull/54
+- Presentation architecture: `docs/PRESENTATION_ARCHITECTURE.md`
