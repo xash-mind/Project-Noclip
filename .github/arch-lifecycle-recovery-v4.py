@@ -88,10 +88,11 @@ replace_once(
     "  const refresh=():void=>access.updateStreaming({reason:'presentation-refresh',refreshUnchanged:true});"
 )
 
-# Chain the focused test-contract refinement, then remove its temporary script so
-# a successful recovery still leaves no harness files behind.
-v5_path = ROOT / '.github/arch-lifecycle-recovery-v5.py'
-runpy.run_path(str(v5_path), run_name='__main__')
-v5_path.unlink()
+# Chain the focused test-contract and real-browser harness refinements, then
+# remove their temporary scripts so a successful recovery leaves no harness.
+for script_name in ['arch-lifecycle-recovery-v5.py', 'arch-lifecycle-recovery-v6.py']:
+    script_path = ROOT / '.github' / script_name
+    runpy.run_path(str(script_path), run_name='__main__')
+    script_path.unlink()
 
 print('Arch lifecycle recovery v4 TypeScript/Studio bridge refinement applied successfully.')
