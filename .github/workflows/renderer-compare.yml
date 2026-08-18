@@ -31,6 +31,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -46,26 +48,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts/renderer-compare/before artifacts/renderer-compare/after
-          readarray -t baseline < <(python - <<'PY'
-          import re
-          from pathlib import Path
-
-          status = Path('STATUS.md').read_text(encoding='utf-8')
-          commit = re.search(r'^\*\*Production release commit:\*\* `([^`]+)`', status, re.MULTILINE)
-          version = re.search(r'^\*\*Visible deployed version:\*\* `([^`]+)`', status, re.MULTILINE)
-          if not commit or not version:
-              raise RuntimeError('STATUS.md does not expose the accepted production commit/version contract')
-          print(commit.group(1))
-          print(version.group(1))
-          PY
-          )
-          test -n "${baseline[0]:-}"
-          test -n "${baseline[1]:-}"
-          echo "Resolved accepted production baseline: ${baseline[0]} / ${baseline[1]}"
+          git fetch origin main --depth=1
+          baseline_commit="$(git rev-parse origin/main)"
+          baseline_version="v$(git show origin/main:VERSION | tr -d '[:space:]')"
+          test -n "$baseline_commit"
+          test -n "$baseline_version"
+          echo "Resolved accepted production baseline from main: ${baseline_commit} / ${baseline_version}"
           NOCLIP_BASE_URL="https://project-noclip.vercel.app" \
-          NOCLIP_DEPLOYMENT_COMMIT="${baseline[0]}" \
-          NOCLIP_DEPLOYMENT_ID="canonical-production-${baseline[1]}" \
-          NOCLIP_EXPECTED_VERSION="${baseline[1]}" \
+          NOCLIP_DEPLOYMENT_COMMIT="$baseline_commit" \
+          NOCLIP_DEPLOYMENT_ID="canonical-production-${baseline_version}" \
+          NOCLIP_EXPECTED_VERSION="$baseline_version" \
           NOCLIP_PROFILE_ARTIFACTS="artifacts/renderer-compare/before" \
           python scripts/profile-production.py
       - name: Build and serve candidate
