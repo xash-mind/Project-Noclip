@@ -1,0 +1,72 @@
+name: Project Noclip Production Region Locator Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Public deployment URL to verify
+        required: false
+        default: https://project-noclip.vercel.app
+  push:
+    branches: [main]
+    paths:
+      - src/**
+      - VERSION
+      - index.html
+      - vite.config.ts
+      - vercel.json
+      - scripts/build.mjs
+      - scripts/preview.mjs
+      - scripts/version-smoke.py
+      - scripts/world-cohesion-smoke.py
+      - .github/workflows/production-region-locator-smoke.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: project-noclip-production-region-locator-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify-region-locator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install browser driver
+        run: python -m pip install --disable-pip-version-check selenium==4.46.0
+      - name: Resolve production URL
+        env:
+          REQUESTED_BASE_URL: ${{ github.event.inputs.base_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "NOCLIP_TARGET_URL=${REQUESTED_BASE_URL:-https://project-noclip.vercel.app}" >> "$GITHUB_ENV"
+      - name: Wait for exact visible release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/production-region-locator
+          NOCLIP_BASE_URL="${NOCLIP_TARGET_URL}" \
+          NOCLIP_VERSION_WAIT_SECONDS="420" \
+          NOCLIP_VERSION_ARTIFACTS="artifacts/production-region-locator" \
+          python scripts/version-smoke.py
+      - name: Run repeated Region locator Chromium regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          NOCLIP_BASE_URL="${NOCLIP_TARGET_URL}" \
+          NOCLIP_COHESION_ARTIFACTS="artifacts/production-region-locator" \
+          python scripts/world-cohesion-smoke.py
+      - name: Upload Region locator evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-region-locator-${{ github.sha }}
+          path: artifacts/production-region-locator
+          if-no-files-found: error
+          retention-days: 30
