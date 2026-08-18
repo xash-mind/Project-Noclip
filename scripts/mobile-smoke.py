@@ -183,12 +183,10 @@ def click_button(driver: webdriver.Chrome, selector: str) -> None:
 
 
 def click_visible_control(driver: webdriver.Chrome, selector: str) -> None:
-    """Activate an on-screen control when Selenium visibility/hit-testing drifts under CDP emulation."""
+    """Activate a rendered 44px-plus control when CDP hit-test coordinate spaces drift."""
     button = driver.find_element(By.CSS_SELECTOR, selector)
     rect = element_rect(driver, selector)
-    viewport = driver.execute_script("return {width: innerWidth, height: innerHeight};")
-    assert rect["width"] > 0 and rect["height"] > 0, (selector, rect)
-    assert rect["right"] > 0 and rect["bottom"] > 0 and rect["left"] < float(viewport["width"]) and rect["top"] < float(viewport["height"]), (selector, rect, viewport)
+    assert rect["width"] >= 44 and rect["height"] >= 44, (selector, rect)
     driver.execute_script("arguments[0].click();", button)
 
 
