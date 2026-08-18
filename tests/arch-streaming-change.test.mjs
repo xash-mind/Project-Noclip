@@ -160,7 +160,9 @@ test('A-A1 shared-pier upper mass has canonical single-surface ownership', () =>
 test('A-A1 streaming reconstruction avoids transient custom meshes and unrelated Cell churn', () => {
   assert.match(archPresentationSource, /const ARCH_CURVE_SEGMENTS = 12/);
   assert.match(archPresentationSource, /function descriptorTouchesArchFrame/);
-  assert.match(archPresentationSource, /if \(!descriptorTouchesArchFrame\(descriptor\)\) return/);
+  assert.match(archPresentationSource, /function descriptorIsInArchRebuildNeighborhood/);
+  assert.match(archPresentationSource, /if \(!descriptorIsInArchRebuildNeighborhood\(renderer, descriptor\)\) return/);
+  assert.match(archPresentationSource, /descriptorTouchesArchFrame\(visual\.descriptor\)/);
   assert.equal(archPresentationSource.includes('new pc.Mesh('), false);
   assert.equal(archPresentationSource.includes('new pc.MeshInstance('), false);
 });
