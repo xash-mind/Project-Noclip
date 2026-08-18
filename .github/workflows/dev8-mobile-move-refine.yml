@@ -1,0 +1,39 @@
+name: Dev.8 Mobile Movement Smoke Refinement
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  refine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/dev8-post-pau-recovery
+      - name: Make touch movement collision-robust
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/mobile-smoke.py')
+          text = path.read_text(encoding='utf-8')
+          old_move = '''def touch_move_until(driver: webdriver.Chrome, selector: str, dx: float, dy: float, start_position: tuple[float, float], threshold: float, timeout: float = 10.0) -> tuple[float, float]:\n    point = center_point(driver, selector, 1)\n    x = float(point[\"x\"]); y = float(point[\"y\"])\n    touch_event(driver, \"touchStart\", [point])\n    deadline = time.time() + timeout\n    try:\n        index = 0\n        while time.time() < deadline:\n            index += 1\n            touch_event(driver, \"touchMove\", [{**point, \"x\": x + dx, \"y\": y + dy}])\n            time.sleep(0.08)\n            current = metrics_position(driver)\n            if current and math.hypot(current[0] - start_position[0], current[1] - start_position[1]) >= threshold:\n                return current\n            if index % 5 == 0:\n                touch_event(driver, \"touchMove\", [{**point, \"x\": x + dx * 0.94, \"y\": y + dy * 0.94}])\n                time.sleep(0.04)\n    finally:\n        touch_event(driver, \"touchEnd\", [])\n    raise AssertionError(f\"Touch movement did not move player at least {threshold} m from {start_position}\")\n'''
+          new_move = '''def touch_move_until(driver: webdriver.Chrome, selector: str, dx: float, dy: float, start_position: tuple[float, float], threshold: float, timeout: float = 10.0) -> tuple[float, float]:\n    point = center_point(driver, selector, 1)\n    x = float(point[\"x\"]); y = float(point[\"y\"])\n    vectors = [(dx, dy), (-dy, dx), (dy, -dx), (-dx, -dy)]\n    per_vector = max(1.5, timeout / len(vectors))\n    for move_dx, move_dy in vectors:\n        touch_event(driver, \"touchStart\", [point])\n        deadline = time.time() + per_vector\n        try:\n            index = 0\n            while time.time() < deadline:\n                index += 1\n                touch_event(driver, \"touchMove\", [{**point, \"x\": x + move_dx, \"y\": y + move_dy}])\n                time.sleep(0.08)\n                current = metrics_position(driver)\n                if current and math.hypot(current[0] - start_position[0], current[1] - start_position[1]) >= threshold:\n                    return current\n                if index % 5 == 0:\n                    touch_event(driver, \"touchMove\", [{**point, \"x\": x + move_dx * 0.94, \"y\": y + move_dy * 0.94}])\n                    time.sleep(0.04)\n        finally:\n            touch_event(driver, \"touchEnd\", [])\n            time.sleep(0.08)\n    raise AssertionError(f\"Touch movement did not move player at least {threshold} m from {start_position} in any cardinal direction\")\n'''
+          old_sprint = '''def touch_sprint_move_until(driver: webdriver.Chrome, start_position: tuple[float, float], timeout: float = 12.0) -> tuple[float, float]:\n    move = center_point(driver, '[data-touch=\"move\"]', 1)\n    sprint = center_point(driver, '[data-action=\"touch-sprint\"]', 2)\n    move_x = float(move[\"x\"]); move_y = float(move[\"y\"])\n    held_move = {**move, \"y\": move_y - 43}\n    touch_event(driver, \"touchStart\", [move])\n    touch_event(driver, \"touchMove\", [held_move])\n    touch_event(driver, \"touchStart\", [held_move, sprint])\n    try:\n        wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action=\"touch-sprint\"]').get_attribute(\"aria-pressed\") == \"true\", timeout=3, message=\"Sprint held state\")\n        return wait_for(\n            driver,\n            lambda current: (\n                (position := metrics_position(current))\n                and math.hypot(position[0] - start_position[0], position[1] - start_position[1]) >= 0.45\n                and position\n            ),\n            timeout=timeout,\n            message=\"Sprint plus movement while both controls remain held\",\n        )\n    finally:\n        touch_event(driver, \"touchEnd\", [])\n        wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action=\"touch-sprint\"]').get_attribute(\"aria-pressed\") == \"false\", timeout=3, message=\"Sprint released state\")\n'''
+          new_sprint = '''def touch_sprint_move_until(driver: webdriver.Chrome, start_position: tuple[float, float], timeout: float = 12.0) -> tuple[float, float]:\n    move = center_point(driver, '[data-touch=\"move\"]', 1)\n    sprint = center_point(driver, '[data-action=\"touch-sprint\"]', 2)\n    move_x = float(move[\"x\"]); move_y = float(move[\"y\"])\n    vectors = [(0, -43), (43, 0), (-43, 0), (0, 43)]\n    per_vector = max(2.0, timeout / len(vectors))\n    for dx, dy in vectors:\n        held_move = {**move, \"x\": move_x + dx, \"y\": move_y + dy}\n        touch_event(driver, \"touchStart\", [move])\n        touch_event(driver, \"touchMove\", [held_move])\n        touch_event(driver, \"touchStart\", [held_move, sprint])\n        try:\n            wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action=\"touch-sprint\"]').get_attribute(\"aria-pressed\") == \"true\", timeout=2, message=\"Sprint held state\")\n            try:\n                return wait_for(\n                    driver,\n                    lambda current: (\n                        (position := metrics_position(current))\n                        and math.hypot(position[0] - start_position[0], position[1] - start_position[1]) >= 0.45\n                        and position\n                    ),\n                    timeout=per_vector,\n                    message=\"Sprint plus movement while both controls remain held\",\n                )\n            except AssertionError:\n                pass\n        finally:\n            touch_event(driver, \"touchEnd\", [])\n            wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action=\"touch-sprint\"]').get_attribute(\"aria-pressed\") == \"false\", timeout=3, message=\"Sprint released state\")\n            time.sleep(0.08)\n    raise AssertionError(f\"Sprint plus touch movement did not move player from {start_position} in any cardinal direction\")\n'''
+          if old_move not in text or old_sprint not in text:
+              raise SystemExit('expected mobile movement blocks not found')
+          text = text.replace(old_move, new_move, 1).replace(old_sprint, new_sprint, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/mobile-smoke.py
+          git commit -m "Make mobile movement smoke collision-robust"
+          git push origin HEAD:release/dev8-post-pau-recovery
