@@ -148,12 +148,21 @@ test('streaming scheduler predicts into only the existing retention ring and bud
 test('A-A1 shared-pier upper mass has canonical single-surface ownership', () => {
   assert.match(archPresentationSource, /function rectangularUpperRuns/);
   assert.match(archPresentationSource, /const upperRuns = rectangularUpperRuns\(bays, activeSupportIntervals\)/);
-  assert.match(archPresentationSource, /const clip = clippedInterval\(descriptor, bay\.orientation, bay\.curveStart, bay\.curveEnd\)/);
+  assert.match(archPresentationSource, /function addCurveSegmentsClipped/);
+  assert.match(archPresentationSource, /addWorldBoxClipped\(/);
   assert.match(archPresentationSource, /entersFromPreviousCell/);
   assert.match(archPresentationSource, /continuesIntoNextCell/);
   assert.equal(archPresentationSource.includes('ARCH_PIER_BRIDGE_OVERLAP'), false);
   assert.equal(archPresentationSource.includes('ARCH_CURVE_JOIN_HANDOFF'), false);
   assert.equal(archPresentationSource.includes('upper-through-pier'), false);
+});
+
+test('A-A1 streaming reconstruction avoids transient custom meshes and unrelated Cell churn', () => {
+  assert.match(archPresentationSource, /const ARCH_CURVE_SEGMENTS = 12/);
+  assert.match(archPresentationSource, /function descriptorTouchesArchFrame/);
+  assert.match(archPresentationSource, /if \(!descriptorTouchesArchFrame\(descriptor\)\) return/);
+  assert.equal(archPresentationSource.includes('new pc.Mesh('), false);
+  assert.equal(archPresentationSource.includes('new pc.MeshInstance('), false);
 });
 
 test('static world batching is localized per Cell rather than one global dirty group', () => {
