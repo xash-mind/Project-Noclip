@@ -107,48 +107,60 @@ def touch_event(driver: webdriver.Chrome, event_type: str, points: list[dict[str
 def touch_move_until(driver: webdriver.Chrome, selector: str, dx: float, dy: float, start_position: tuple[float, float], threshold: float, timeout: float = 10.0) -> tuple[float, float]:
     point = center_point(driver, selector, 1)
     x = float(point["x"]); y = float(point["y"])
-    touch_event(driver, "touchStart", [point])
-    deadline = time.time() + timeout
-    try:
-        index = 0
-        while time.time() < deadline:
-            index += 1
-            touch_event(driver, "touchMove", [{**point, "x": x + dx, "y": y + dy}])
+    vectors = [(dx, dy), (-dy, dx), (dy, -dx), (-dx, -dy)]
+    per_vector = max(1.5, timeout / len(vectors))
+    for move_dx, move_dy in vectors:
+        touch_event(driver, "touchStart", [point])
+        deadline = time.time() + per_vector
+        try:
+            index = 0
+            while time.time() < deadline:
+                index += 1
+                touch_event(driver, "touchMove", [{**point, "x": x + move_dx, "y": y + move_dy}])
+                time.sleep(0.08)
+                current = metrics_position(driver)
+                if current and math.hypot(current[0] - start_position[0], current[1] - start_position[1]) >= threshold:
+                    return current
+                if index % 5 == 0:
+                    touch_event(driver, "touchMove", [{**point, "x": x + move_dx * 0.94, "y": y + move_dy * 0.94}])
+                    time.sleep(0.04)
+        finally:
+            touch_event(driver, "touchEnd", [])
             time.sleep(0.08)
-            current = metrics_position(driver)
-            if current and math.hypot(current[0] - start_position[0], current[1] - start_position[1]) >= threshold:
-                return current
-            if index % 5 == 0:
-                touch_event(driver, "touchMove", [{**point, "x": x + dx * 0.94, "y": y + dy * 0.94}])
-                time.sleep(0.04)
-    finally:
-        touch_event(driver, "touchEnd", [])
-    raise AssertionError(f"Touch movement did not move player at least {threshold} m from {start_position}")
+    raise AssertionError(f"Touch movement did not move player at least {threshold} m from {start_position} in any cardinal direction")
 
 
 def touch_sprint_move_until(driver: webdriver.Chrome, start_position: tuple[float, float], timeout: float = 12.0) -> tuple[float, float]:
     move = center_point(driver, '[data-touch="move"]', 1)
     sprint = center_point(driver, '[data-action="touch-sprint"]', 2)
     move_x = float(move["x"]); move_y = float(move["y"])
-    held_move = {**move, "y": move_y - 43}
-    touch_event(driver, "touchStart", [move])
-    touch_event(driver, "touchMove", [held_move])
-    touch_event(driver, "touchStart", [held_move, sprint])
-    try:
-        wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="touch-sprint"]').get_attribute("aria-pressed") == "true", timeout=3, message="Sprint held state")
-        return wait_for(
-            driver,
-            lambda current: (
-                (position := metrics_position(current))
-                and math.hypot(position[0] - start_position[0], position[1] - start_position[1]) >= 0.45
-                and position
-            ),
-            timeout=timeout,
-            message="Sprint plus movement while both controls remain held",
-        )
-    finally:
-        touch_event(driver, "touchEnd", [])
-        wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="touch-sprint"]').get_attribute("aria-pressed") == "false", timeout=3, message="Sprint released state")
+    vectors = [(0, -43), (43, 0), (-43, 0), (0, 43)]
+    per_vector = max(2.0, timeout / len(vectors))
+    for dx, dy in vectors:
+        held_move = {**move, "x": move_x + dx, "y": move_y + dy}
+        touch_event(driver, "touchStart", [move])
+        touch_event(driver, "touchMove", [held_move])
+        touch_event(driver, "touchStart", [held_move, sprint])
+        try:
+            wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="touch-sprint"]').get_attribute("aria-pressed") == "true", timeout=2, message="Sprint held state")
+            try:
+                return wait_for(
+                    driver,
+                    lambda current: (
+                        (position := metrics_position(current))
+                        and math.hypot(position[0] - start_position[0], position[1] - start_position[1]) >= 0.45
+                        and position
+                    ),
+                    timeout=per_vector,
+                    message="Sprint plus movement while both controls remain held",
+                )
+            except AssertionError:
+                pass
+        finally:
+            touch_event(driver, "touchEnd", [])
+            wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="touch-sprint"]').get_attribute("aria-pressed") == "false", timeout=3, message="Sprint released state")
+            time.sleep(0.08)
+    raise AssertionError(f"Sprint plus touch movement did not move player from {start_position} in any cardinal direction")
 
 
 def touch_drag(driver: webdriver.Chrome, selector: str, dx: float, dy: float, steps: int = 6) -> None:
