@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { networkInterfaces } from 'node:os';
 
 const token = randomBytes(24).toString('hex');
 const server = spawn(process.execPath, ['tools/studio/server.mjs'], {
@@ -22,6 +23,15 @@ async function waitFor(url) {
   throw new Error(`Studio server did not become ready.\n${output}`);
 }
 
+function sameHostDevOrigin() {
+  for (const addresses of Object.values(networkInterfaces())) {
+    for (const address of addresses ?? []) {
+      if (address.family === 'IPv4' && !address.internal) return `http://${address.address}:5173`;
+    }
+  }
+  return 'http://127.0.0.1:5173';
+}
+
 try {
   const bootstrap = await (await waitFor('http://127.0.0.1:4311/api/bootstrap')).json();
   if (!Array.isArray(bootstrap.targets) || !bootstrap.targets.some((target) => target.semanticTargetId === 'feature.medium-bucket')) {
@@ -33,7 +43,33 @@ try {
   if (context.context?.schema !== 'development-context-v1' || context.context?.representation?.id !== 'bucket.default') {
     throw new Error('Studio context endpoint is not consuming canonical PAU DevelopmentContext');
   }
-  console.log('[Studio smoke] bootstrap, client shell and canonical context endpoint PASS');
+
+  const origin = sameHostDevOrigin();
+  const preflight = await fetch('http://127.0.0.1:4311/api/bridge/state', {
+    method: 'OPTIONS',
+    headers: {
+      Origin: origin,
+      'Access-Control-Request-Method': 'POST',
+      'Access-Control-Request-Headers': 'content-type,x-noclip-studio-token',
+      'Access-Control-Request-Private-Network': 'true'
+    }
+  });
+  if (preflight.status !== 204) throw new Error(`Studio LAN bridge preflight returned ${preflight.status}`);
+  if (preflight.headers.get('access-control-allow-origin') !== origin) throw new Error('Studio LAN bridge did not echo the same-host development origin');
+  if (preflight.headers.get('access-control-allow-private-network') !== 'true') throw new Error('Studio LAN bridge did not allow Chrome private-network access');
+
+  const bridge = await fetch('http://127.0.0.1:4311/api/bridge/state', {
+    method: 'POST',
+    headers: {
+      Origin: origin,
+      'Content-Type': 'application/json',
+      'X-Noclip-Studio-Token': token
+    },
+    body: JSON.stringify({ clientId: 'studio-smoke-client' })
+  });
+  if (!bridge.ok || bridge.headers.get('access-control-allow-origin') !== origin) throw new Error('Studio LAN bridge state request was not accepted');
+
+  console.log(`[Studio smoke] bootstrap, canonical context and same-host LAN bridge PASS (${origin})`);
 } finally {
   server.kill('SIGTERM');
 }
