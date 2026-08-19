@@ -5,6 +5,8 @@ on:
     paths:
       - dev/dev8-corrective.patch
       - .github/workflows/dev8-apply-corrective.yml
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
