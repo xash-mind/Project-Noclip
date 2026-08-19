@@ -20,11 +20,8 @@ jobs:
         with:
           ref: dev8-traversal-aa1-ownership
           fetch-depth: 0
-      - name: Apply bounded source patch
-        run: |
-          set -euo pipefail
-          git apply --check dev/dev8-corrective.patch
-          git apply dev/dev8-corrective.patch
+      - name: Apply bounded source transforms
+        run: bash dev/dev8-corrective.patch
       - uses: actions/setup-node@v4
         with:
           node-version: 22
