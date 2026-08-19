@@ -106,6 +106,11 @@ replace_once(
 path = 'tests/dev8-runtime-diagnostics.test.mjs'
 replace_once(
     path,
+    "  assert.match(updateBody, /light\\.intensity = selected/);\n",
+    "  assert.match(updateBody, /const intensity = selected/);\n"
+)
+replace_once(
+    path,
     "  assert.match(updateBody, /fixtureDiagnostics\\.shadowUpdateRequests \\+= 1/);\n});",
     "  assert.match(updateBody, /fixtureDiagnostics\\.shadowUpdateRequests \\+= 1/);\n  assert.match(updateBody, /runtime\\.mesh\\.render\\.material !== material/);\n  assert.match(updateBody, /Math\\.abs\\(light\\.intensity - intensity\\) > 0\\.000001/);\n  assert.match(updateBody, /runtime\\.light\\.enabled !== enabled/);\n  assert.match(updateBody, /fixtureDiagnostics\\.maxUpdateMs/);\n});"
 )
