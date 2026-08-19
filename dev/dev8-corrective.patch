@@ -1,570 +1,421 @@
-diff --git a/src/renderer/level0RegionPresentation.ts b/src/renderer/level0RegionPresentation.ts
-index 62da15a..0000000 100644
---- a/src/renderer/level0RegionPresentation.ts
-+++ b/src/renderer/level0RegionPresentation.ts
-@@ -64,7 +64,6 @@ const carpetClones = new WeakMap<pc.StandardMaterial, Map<string, pc.StandardMat
- let installed = false;
- const CARPET_REPEAT_METERS = CELL_SIZE / 5;
- const ARCH_CURVE_SEGMENTS = 18;
--const ARCH_HEADER_BRIDGE_MAX_GAP = 4.1;
- const ARCH_UPPER_BOTTOM = 1.92;
- const ARCH_UPPER_TOP = WALL_HEIGHT - 0.24;
- const ARCH_CURVE_APEX = Math.min(ARCH_UPPER_TOP - 0.24, 2.46);
-@@ -251,10 +250,11 @@ function isArchLower(wall: WallSpec): boolean {
-     && Math.abs(wall.sy - ARCH_LOWER_HEIGHT) < 0.065
-     && wallMinY(wall) <= 0.045;
- }
--function isArchVerticalSolid(wall: WallSpec): boolean {
-+function isArchPierSupport(wall: WallSpec): boolean {
-   const headerBottom = WALL_HEIGHT - ARCH_HEADER_HEIGHT;
-   return wall.materialId === 'arch-pale-wallpaper'
-+    && wallMinY(wall) > 0.04
-     && wallMinY(wall) <= ARCH_LOWER_HEIGHT + 0.065
-     && wallMaxY(wall) >= headerBottom - 0.045
-     && wall.sy > 1.35;
-@@ -292,7 +292,7 @@ function archLinesForDescriptors(descriptors: readonly CellDescriptor[]): Map<st
-   for (const descriptor of descriptors) {
-     if (descriptor.world.generationVersion !== 'gen3-v1') continue;
-     for (const wall of descriptor.walls) {
--      if (!isArchLower(wall) && !isArchVerticalSolid(wall)) continue;
-+      if (!isArchLower(wall) && !isArchPierSupport(wall)) continue;
-       const world = toWorldArchWall(descriptor, wall);
-       const key = `${world.orientation}:${world.fixed.toFixed(3)}`;
-       const line = lines.get(key);
-@@ -300,22 +300,13 @@ function archLinesForDescriptors(descriptors: readonly CellDescriptor[]): Map<st
-       const headerIntervals = mergeIntervals(line.headers.map((header) => [header.start, header.end] as const));
-       if (!headerIntervals.some((header) => overlapsInterval(header, [world.start, world.end]))) continue;
-       if (isArchLower(wall)) line.lowers.push(world);
--      if (isArchVerticalSolid(wall)) line.solids.push(world);
-+      if (isArchPierSupport(wall)) line.solids.push(world);
-     }
-   }
-   return lines;
- }
- 
- function mergedHeaderRuns(line: WorldArchLine): Interval[] {
--  const raw = mergeIntervals(line.headers.map((header) => [header.start, header.end] as const));
--  if (raw.length < 2) return raw;
--  const bridged: Array<[number, number]> = [];
--  for (const interval of raw) {
--    const previous = bridged[bridged.length - 1];
--    const gap = previous ? interval[0] - previous[1] : Number.POSITIVE_INFINITY;
--    if (previous && gap > 0.03 && gap <= ARCH_HEADER_BRIDGE_MAX_GAP) previous[1] = interval[1];
--    else bridged.push([interval[0], interval[1]]);
--  }
--  return bridged;
-+  // Real Cell seams already meet within mergeIntervals' 3 cm continuity
-+  // tolerance. Never bridge a larger semantic gap: route/termination cuts are
-+  // world truth and must not be reinterpreted as an Arch header continuation.
-+  return mergeIntervals(line.headers.map((header) => [header.start, header.end] as const));
- }
-@@ -365,6 +356,53 @@ function rectangularUpperRuns(bays: readonly ArchFrameBay[], supports: readonly
-   return mergeIntervals(intervals);
- }
- 
-+export interface ArchFrameVisibleVolume {
-+  id: string;
-+  role: 'pier-lower' | 'upper-mass' | 'pier-upper';
-+  lineKey: string;
-+  start: number;
-+  end: number;
-+  minY: number;
-+  maxY: number;
-+}
-+
-+/** Pure geometry ownership view used by regression tests and diagnostics. */
-+export function archFrameVisibleVolumesForDescriptors(descriptors: readonly CellDescriptor[]): ArchFrameVisibleVolume[] {
-+  const volumes: ArchFrameVisibleVolume[] = [];
-+  for (const line of archLinesForDescriptors(descriptors).values()) {
-+    const bays = frameBaysForLine(line);
-+    const supports = mergeIntervals(line.solids.map((wall) => [wall.start, wall.end] as const))
-+      .filter((support) => bays.some((bay) => Math.abs(support[1] - bay.start) < 0.08 || Math.abs(support[0] - bay.end) < 0.08));
-+    const upperRuns = rectangularUpperRuns(bays, supports);
-+    supports.forEach((support, index) => {
-+      volumes.push({
-+        id: `${line.key}:pier-lower:${index}`,
-+        role: 'pier-lower',
-+        lineKey: line.key,
-+        start: support[0], end: support[1], minY: 0, maxY: ARCH_UPPER_BOTTOM
-+      });
-+      volumes.push({
-+        id: `${line.key}:pier-upper:${index}`,
-+        role: 'pier-upper',
-+        lineKey: line.key,
-+        start: support[0], end: support[1], minY: ARCH_UPPER_TOP, maxY: WALL_HEIGHT
-+      });
-+    });
-+    upperRuns.forEach((run, index) => volumes.push({
-+      id: `${line.key}:upper-mass:${index}`,
-+      role: 'upper-mass',
-+      lineKey: line.key,
-+      start: run[0], end: run[1], minY: ARCH_UPPER_BOTTOM, maxY: ARCH_UPPER_TOP
-+    }));
-+  }
-+  return volumes;
-+}
-+
- export function archFrameBaysForDescriptors(descriptors: readonly CellDescriptor[]): ArchFrameBay[] {
-   return [...archLinesForDescriptors(descriptors).values()].flatMap(frameBaysForLine);
- }
-@@ -637,7 +675,7 @@ function resetSemanticArchMeshes(visual: CellVisual): void {
-   for (const wall of visual.descriptor.walls) {
-     if (wall.materialId !== 'arch-pale-wallpaper') continue;
--    if (!isArchHeader(wall) && !isArchLower(wall) && !isArchVerticalSolid(wall)) continue;
-+    if (!isArchHeader(wall) && !isArchLower(wall) && !isArchPierSupport(wall)) continue;
-     const source = entityByName(visual.root, wall.id);
-     if (source?.render) source.render.enabled = true;
-   }
-@@ -685,18 +723,32 @@ function renderArchFrames(renderer: WorldRenderer, targetCellIds?: ReadonlySet<s
-       if (visual.descriptor.world.generationVersion !== 'gen3-v1') continue;
-       for (let index = 0; index < activeSupportIntervals.length; index += 1) {
-         const support = activeSupportIntervals[index]!;
-+        // The upper mass owns its full intersection volume. The visible pier is
-+        // split only in presentation; the semantic/collision pier remains one
-+        // continuous 2D footprint in archDividerRuntimeCorrection.ts.
-         addWorldBoxClipped(
-           visual,
--          `pier:${line.key}:${index}`,
-+          `pier-lower:${line.key}:${index}`,
-           line.orientation,
-           line.fixed,
-           support[0],
-           support[1],
--          WALL_HEIGHT / 2,
--          WALL_HEIGHT,
-+          ARCH_UPPER_BOTTOM / 2,
-+          ARCH_UPPER_BOTTOM,
-           ARCH_PIER_DEPTH,
-           pierMaterial
-         );
-+        const upperPierHeight = WALL_HEIGHT - ARCH_UPPER_TOP;
-+        addWorldBoxClipped(
-+          visual,
-+          `pier-upper:${line.key}:${index}`,
-+          line.orientation,
-+          line.fixed,
-+          support[0],
-+          support[1],
-+          ARCH_UPPER_TOP + upperPierHeight / 2,
-+          upperPierHeight,
-+          ARCH_PIER_DEPTH,
-+          pierMaterial
-+        );
-       }
-       const shoulderHeight = ARCH_UPPER_TOP - ARCH_UPPER_BOTTOM;
-diff --git a/src/renderer/streamingScheduler.ts b/src/renderer/streamingScheduler.ts
-index c6fe3fd..0000000 100644
---- a/src/renderer/streamingScheduler.ts
-+++ b/src/renderer/streamingScheduler.ts
-@@ -13,7 +13,8 @@ export const STREAMING_SCHEDULER_PROFILE = Object.freeze({
-   workBudgetMs: 2.25,
-   maxHeavyJobsPerFrame: 1,
-   unloadGraceMs: 1200,
--  predictiveExtraRings: 1
-+  predictiveExtraRings: 1,
-+  maxQueueDepth: 256
- });
-@@ -77,7 +78,15 @@ interface GameStreamingAccess {
- }
- interface RuntimePrototype { update(this: ProjectNoclipGame, dt: number): void; }
- type JobKind = 'prepare' | 'refresh' | 'unload';
--interface StreamJob { key: string; kind: JobKind; x: number; z: number; priority: number; serial: number; notBefore: number; }
-+interface StreamJob {
-+  key: string;
-+  kind: JobKind;
-+  x: number;
-+  z: number;
-+  priority: number;
-+  serial: number;
-+  notBefore: number;
-+  predictive: boolean;
-+}
- export interface StreamingDiagnostics {
-   queueDepth: number;
-+  queueDepthPeak: number;
-   predictiveWarmLoads: number;
-   coldBoundaryLoads: number;
-   generatedCells: number;
-@@ -91,6 +100,14 @@ export interface StreamingDiagnostics {
-   cellUnloadMs: number;
-   boundaryReconcileMs: number;
-   regionRefreshMs: number;
-+  lastHeavyOperations: number;
-+  maxHeavyOperations: number;
-+  lastHeavyMs: number;
-+  maxHeavyMs: number;
-+  heavyBudgetDeferrals: number;
-+  heavyBudgetOverruns: number;
-+  lastHeavyOperation?: { kind: JobKind | 'required-current'; x: number; z: number; durationMs: number };
-+  lastUpdateMs: number;
-+  maxUpdateMs: number;
- }
- interface SchedulerState {
-   jobs: Map<string, StreamJob>;
-@@ -103,6 +120,9 @@ interface SchedulerState {
-   lastCellX?: number;
-   lastCellZ?: number;
-   diagnostics: StreamingDiagnostics;
-+  frameActive: boolean;
-+  frameHeavyOperations: number;
-+  frameHeavyMs: number;
- }
-@@ -113,13 +133,42 @@ let installed = false;
- function access(game: ProjectNoclipGame): GameStreamingAccess { return game as unknown as GameStreamingAccess; }
- function now(): number { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
- function createDiagnostics(): StreamingDiagnostics {
--  return { queueDepth: 0, predictiveWarmLoads: 0, coldBoundaryLoads: 0, generatedCells: 0, loadedCells: 0, refreshedCells: 0, unloadedCells: 0, lastBoundaryFrameMs: 0, maxBoundaryFrameMs: 0, generateMs: 0, cellRendererMs: 0, cellRefreshMs: 0, cellUnloadMs: 0, boundaryReconcileMs: 0, regionRefreshMs: 0 };
-+  return {
-+    queueDepth: 0, queueDepthPeak: 0, predictiveWarmLoads: 0, coldBoundaryLoads: 0,
-+    generatedCells: 0, loadedCells: 0, refreshedCells: 0, unloadedCells: 0,
-+    lastBoundaryFrameMs: 0, maxBoundaryFrameMs: 0, generateMs: 0, cellRendererMs: 0,
-+    cellRefreshMs: 0, cellUnloadMs: 0, boundaryReconcileMs: 0, regionRefreshMs: 0,
-+    lastHeavyOperations: 0, maxHeavyOperations: 0, lastHeavyMs: 0, maxHeavyMs: 0,
-+    heavyBudgetDeferrals: 0, heavyBudgetOverruns: 0, lastUpdateMs: 0, maxUpdateMs: 0
-+  };
- }
- function stateFor(game: ProjectNoclipGame): SchedulerState {
-   const existing = states.get(game);
-   if (existing) return existing;
--  const created: SchedulerState = { jobs: new Map(), serial: 0, directionX: 0, directionZ: 0, diagnostics: createDiagnostics() };
-+  const created: SchedulerState = {
-+    jobs: new Map(), serial: 0, directionX: 0, directionZ: 0, diagnostics: createDiagnostics(),
-+    frameActive: false, frameHeavyOperations: 0, frameHeavyMs: 0
-+  };
-   states.set(game, created);
-   return created;
- }
- function publish(game: ProjectNoclipGame): void {
-   if (typeof window === 'undefined') return;
-   const state = stateFor(game);
-   state.diagnostics.queueDepth = state.jobs.size;
-+  state.diagnostics.queueDepthPeak = Math.max(state.diagnostics.queueDepthPeak, state.jobs.size);
-   (window as unknown as { __noclipStreamingDiagnostics?: StreamingDiagnostics }).__noclipStreamingDiagnostics = { ...state.diagnostics };
- }
-+
-+export function streamingFrameCanRunHeavyWork(heavyOperations: number, heavyMs: number): boolean {
-+  return heavyOperations < STREAMING_SCHEDULER_PROFILE.maxHeavyJobsPerFrame
-+    && heavyMs < STREAMING_SCHEDULER_PROFILE.workBudgetMs;
-+}
-+
-+function boundQueue(scheduler: SchedulerState): void {
-+  if (scheduler.jobs.size <= STREAMING_SCHEDULER_PROFILE.maxQueueDepth) return;
-+  const removable = [...scheduler.jobs.values()]
-+    .filter((job) => job.predictive || job.kind === 'unload')
-+    .sort((left, right) => right.priority - left.priority || right.serial - left.serial);
-+  while (scheduler.jobs.size > STREAMING_SCHEDULER_PROFILE.maxQueueDepth && removable.length > 0) {
-+    const job = removable.shift();
-+    if (job) scheduler.jobs.delete(job.key);
-+  }
-+}
-@@ -165,7 +214,7 @@ function descriptorChanged(existing: CellDescriptor, descriptor: CellDescriptor)
-     || existing.address.zoneId !== descriptor.address.zoneId
-     || existing.roomArchetype !== descriptor.roomArchetype;
- }
--function enqueue(scheduler: SchedulerState, kind: JobKind, x: number, z: number, priority: number, delayMs = 0): void {
-+function enqueue(scheduler: SchedulerState, kind: JobKind, x: number, z: number, priority: number, delayMs = 0, predictive = false): void {
-   const key = `${kind}:${x}:${z}`;
-   const existing = scheduler.jobs.get(key);
-   const notBefore = now() + delayMs;
-   if (existing) {
-     existing.priority = Math.min(existing.priority, priority);
-+    existing.predictive = existing.predictive && predictive;
-     if (kind === 'unload') existing.notBefore = Math.max(existing.notBefore, notBefore);
-     return;
-   }
--  scheduler.jobs.set(key, { key, kind, x, z, priority, serial: scheduler.serial++, notBefore });
-+  scheduler.jobs.set(key, { key, kind, x, z, priority, serial: scheduler.serial++, notBefore, predictive });
-+  boundQueue(scheduler);
- }
-@@ -225,20 +274,53 @@ function unloadCell(game: ProjectNoclipGame, x: number, z: number): void {
-   scheduler.diagnostics.cellUnloadMs += now() - start;
-   scheduler.diagnostics.unloadedCells += 1;
- }
-+
-+function runHeavyOperation(
-+  game: ProjectNoclipGame,
-+  kind: JobKind | 'required-current',
-+  x: number,
-+  z: number,
-+  required: boolean,
-+  operation: () => void
-+): boolean {
-+  const scheduler = stateFor(game);
-+  if (scheduler.frameActive && !streamingFrameCanRunHeavyWork(scheduler.frameHeavyOperations, scheduler.frameHeavyMs)) {
-+    if (!required) scheduler.diagnostics.heavyBudgetDeferrals += 1;
-+    return false;
-+  }
-+  const start = now();
-+  operation();
-+  const durationMs = now() - start;
-+  if (scheduler.frameActive) {
-+    scheduler.frameHeavyOperations += 1;
-+    scheduler.frameHeavyMs += durationMs;
-+    if (scheduler.frameHeavyMs > STREAMING_SCHEDULER_PROFILE.workBudgetMs) scheduler.diagnostics.heavyBudgetOverruns += 1;
-+  }
-+  scheduler.diagnostics.lastHeavyOperation = { kind, x, z, durationMs };
-+  scheduler.diagnostics.maxHeavyMs = Math.max(scheduler.diagnostics.maxHeavyMs, durationMs);
-+  return true;
-+}
-+
- function processOneJob(game: ProjectNoclipGame): void {
-   const scheduler = stateFor(game);
-+  if (!streamingFrameCanRunHeavyWork(scheduler.frameHeavyOperations, scheduler.frameHeavyMs)) {
-+    if (scheduler.jobs.size > 0) scheduler.diagnostics.heavyBudgetDeferrals += 1;
-+    publish(game);
-+    return;
-+  }
-   const timestamp = now();
-   const eligible = [...scheduler.jobs.values()]
-     .filter((job) => job.notBefore <= timestamp)
-     .sort((left, right) => left.priority - right.priority || left.serial - right.serial);
-   const job = eligible[0];
-   if (!job) { publish(game); return; }
--  scheduler.jobs.delete(job.key);
--  if (job.kind === 'prepare') prepareCell(game, job.x, job.z, job.priority < 30);
--  else if (job.kind === 'refresh') refreshCell(game, job.x, job.z);
--  else unloadCell(game, job.x, job.z);
-+  const ran = runHeavyOperation(game, job.kind, job.x, job.z, false, () => {
-+    if (job.kind === 'prepare') prepareCell(game, job.x, job.z, job.predictive);
-+    else if (job.kind === 'refresh') refreshCell(game, job.x, job.z);
-+    else unloadCell(game, job.x, job.z);
-+  });
-+  if (ran) scheduler.jobs.delete(job.key);
-   publish(game);
- }
- function warmAhead(game: ProjectNoclipGame): void {
-@@ -256,10 +338,15 @@ function warmAhead(game: ProjectNoclipGame): void {
-   scheduler.lastX = position.x;
-   scheduler.lastZ = position.z;
-   const profile = renderDistanceProfile(getRenderSettings());
-+  // Predictive jobs are recalculated from the latest motion vector every frame.
-+  // This prevents stale forward-path work from accumulating after reversals.
-+  for (const job of [...scheduler.jobs.values()]) if (job.predictive) scheduler.jobs.delete(job.key);
-   for (const coordinate of predictiveWarmCoordinates(state.currentCellX, state.currentCellZ, profile.loadRadius, scheduler.directionX, scheduler.directionZ)) {
-     const id = `${coordinate.x}:${coordinate.z}`;
--    if (!state.renderer.loaded.has(id)) enqueue(scheduler, 'prepare', coordinate.x, coordinate.z, coordinate.priority);
-+    if (!state.renderer.loaded.has(id)) enqueue(scheduler, 'prepare', coordinate.x, coordinate.z, 60 + coordinate.priority, 0, true);
-     cancel(scheduler, 'unload', coordinate.x, coordinate.z);
-   }
- }
-@@ -315,17 +402,17 @@ export function reconcileStreaming(game: ProjectNoclipGame, force = false, radiu
- 
-   const desired = new Set<string>();
--  const missing: Array<{ x: number; z: number; score: number }> = [];
--  const currentDescriptor = descriptorFor(state, state.currentCellX, state.currentCellZ, scheduler.diagnostics);
--  const currentExisting = state.renderer.loaded.get(currentDescriptor.id)?.descriptor;
--  if (!currentExisting) prepareCell(game, state.currentCellX, state.currentCellZ, false);
--  else if (descriptorChanged(currentExisting, currentDescriptor)) {
--    const start = now(); state.renderer.refreshCell(currentDescriptor); scheduler.diagnostics.cellRefreshMs += now() - start; scheduler.diagnostics.refreshedCells += 1;
-+  const currentId = `${state.currentCellX}:${state.currentCellZ}`;
-+  let currentDescriptor = state.renderer.loaded.get(currentId)?.descriptor;
-+  if (!currentDescriptor) {
-+    cancel(scheduler, 'prepare', state.currentCellX, state.currentCellZ);
-+    const loaded = runHeavyOperation(game, 'required-current', state.currentCellX, state.currentCellZ, true, () => prepareCell(game, state.currentCellX, state.currentCellZ, false));
-+    currentDescriptor = state.renderer.loaded.get(currentId)?.descriptor;
-+    if (loaded) scheduler.diagnostics.coldBoundaryLoads += 1;
-   }
--  state.currentCell = currentDescriptor;
-+  if (currentDescriptor) state.currentCell = currentDescriptor;
- 
-   for (let x = state.currentCellX - radius; x <= state.currentCellX + radius; x += 1) {
-     for (let z = state.currentCellZ - radius; z <= state.currentCellZ + radius; z += 1) {
-@@ -341,19 +428,13 @@ export function reconcileStreaming(game: ProjectNoclipGame, force = false, radiu
-         // shift epochs advance only on actual unload. Reusing it avoids flooding the
-         // per-frame queue with 48 deterministic no-op descriptor refreshes per step.
-         visual.root.enabled = true;
-       } else {
--        const score = -((x - state.currentCellX) * scheduler.directionX + (z - state.currentCellZ) * scheduler.directionZ);
--        missing.push({ x, z, score });
--        enqueue(scheduler, 'prepare', x, z, 35 + cellDistance(state, x, z));
-+        const directionLength = Math.hypot(scheduler.directionX, scheduler.directionZ) || 1;
-+        const directional = ((x - state.currentCellX) * scheduler.directionX + (z - state.currentCellZ) * scheduler.directionZ) / directionLength;
-+        const directionalBias = Math.max(-3, Math.min(3, directional));
-+        enqueue(scheduler, 'prepare', x, z, 12 + cellDistance(state, x, z) * 2 - directionalBias);
-       }
-     }
-   }
--
--  if (missing.length > 0) {
--    missing.sort((left, right) => left.score - right.score);
--    const emergency = missing[0]!;
--    cancel(scheduler, 'prepare', emergency.x, emergency.z);
--    prepareCell(game, emergency.x, emergency.z, false);
--    scheduler.diagnostics.coldBoundaryLoads += 1;
--  }
- 
-   for (const [id, visual] of [...state.renderer.loaded.entries()]) {
-@@ -377,10 +458,17 @@ export function installStreamingScheduler(prototype: RuntimePrototype): void {
-   prototype.update = function streamingScheduledUpdate(this: ProjectNoclipGame, dt: number): void {
-     const scheduler = stateFor(this);
-     const state = access(this);
-     const frameStart = now();
--    processOneJob(this);
-+    scheduler.frameActive = true;
-+    scheduler.frameHeavyOperations = 0;
-+    scheduler.frameHeavyMs = 0;
-+    // Movement/boundary reconciliation gets first admission to the frame budget.
-+    // A required current-Cell load can therefore never stack on top of an
-+    // already-processed queued heavy job in the same rendered update.
-     originalUpdate.call(this, dt);
-+    processOneJob(this);
-     warmAhead(this);
-+    scheduler.frameActive = false;
-+    scheduler.diagnostics.lastHeavyOperations = scheduler.frameHeavyOperations;
-+    scheduler.diagnostics.maxHeavyOperations = Math.max(scheduler.diagnostics.maxHeavyOperations, scheduler.frameHeavyOperations);
-+    scheduler.diagnostics.lastHeavyMs = scheduler.frameHeavyMs;
-+    const updateMs = now() - frameStart;
-+    scheduler.diagnostics.lastUpdateMs = updateMs;
-+    scheduler.diagnostics.maxUpdateMs = Math.max(scheduler.diagnostics.maxUpdateMs, updateMs);
-     const changedCell = scheduler.lastCellX !== undefined
-       && (scheduler.lastCellX !== state.currentCellX || scheduler.lastCellZ !== state.currentCellZ);
-     if (changedCell) {
--      const frameMs = now() - frameStart;
--      scheduler.diagnostics.lastBoundaryFrameMs = frameMs;
--      scheduler.diagnostics.maxBoundaryFrameMs = Math.max(scheduler.diagnostics.maxBoundaryFrameMs, frameMs);
-+      scheduler.diagnostics.lastBoundaryFrameMs = updateMs;
-+      scheduler.diagnostics.maxBoundaryFrameMs = Math.max(scheduler.diagnostics.maxBoundaryFrameMs, updateMs);
-     }
-     scheduler.lastCellX = state.currentCellX;
-     scheduler.lastCellZ = state.currentCellZ;
-diff --git a/tests/dev8-corrective.test.mjs b/tests/dev8-corrective.test.mjs
-new file mode 100644
-index 0000000..0000000
---- /dev/null
-+++ b/tests/dev8-corrective.test.mjs
-@@ -0,0 +1,150 @@
-+import assert from 'node:assert/strict';
-+import test from 'node:test';
-+
-+const { generateCell } = await import('../.test-dist/src/world/generator.js');
-+const { ARCH_HEADER_HEIGHT, ARCH_LOWER_HEIGHT } = await import('../.test-dist/src/world/gen3ArchitectureCore.js');
-+const { WALL_HEIGHT, WALL_THICKNESS, DEFAULT_TUNING } = await import('../.test-dist/src/world/types.js');
-+const {
-+  archFrameBaysForDescriptors,
-+  archFrameVisibleVolumesForDescriptors
-+} = await import('../.test-dist/src/renderer/level0RegionPresentation.js');
-+const {
-+  STREAMING_SCHEDULER_PROFILE,
-+  predictiveWarmCoordinates,
-+  streamingFrameCanRunHeavyWork
-+} = await import('../.test-dist/src/renderer/streamingScheduler.js');
-+
-+function tuning(regionOverride = 'arch-rooms') {
-+  return { ...DEFAULT_TUNING, regionOverride, conditionOverride: 'clear', carverOverride: 'none', structureOverride: 'none', gateBypass: true };
-+}
-+
-+function baseCell(x = 0, z = 0) {
-+  return generateCell({
-+    seed: 'dev8-corrective', x, z, worldDay: 40, exposure: 10, shiftEpoch: 0,
-+    tuning: tuning(), generationVersion: 'gen3-v1'
-+  });
-+}
-+
-+function wall(id, start, end, kind, fixed = 0) {
-+  let cy;
-+  let sy;
-+  if (kind === 'header') {
-+    sy = ARCH_HEADER_HEIGHT;
-+    cy = WALL_HEIGHT - ARCH_HEADER_HEIGHT / 2;
-+  } else if (kind === 'pier') {
-+    sy = WALL_HEIGHT - ARCH_HEADER_HEIGHT - ARCH_LOWER_HEIGHT;
-+    cy = ARCH_LOWER_HEIGHT + sy / 2;
-+  } else if (kind === 'lower') {
-+    sy = ARCH_LOWER_HEIGHT;
-+    cy = ARCH_LOWER_HEIGHT / 2;
-+  } else {
-+    sy = WALL_HEIGHT;
-+    cy = WALL_HEIGHT / 2;
-+  }
-+  return {
-+    id, cx: (start + end) / 2, cy, cz: fixed,
-+    sx: end - start, sy, sz: WALL_THICKNESS,
-+    orientation: 'z', drawable: true, materialId: 'arch-pale-wallpaper', materialVariant: 0
-+  };
-+}
-+
-+function descriptorWithWalls(walls, x = 0, z = 0) {
-+  const descriptor = baseCell(x, z);
-+  return { ...descriptor, walls };
-+}
-+
-+function positiveOverlap(left, right) {
-+  return left.lineKey === right.lineKey
-+    && left.end > right.start + 1e-6
-+    && left.start < right.end - 1e-6
-+    && left.maxY > right.minY + 1e-6
-+    && left.minY < right.maxY - 1e-6;
-+}
-+
-+test('A-A1 visible rectangular volumes have one positive-volume owner', () => {
-+  const descriptor = descriptorWithWalls([
-+    wall('header', -5, 5, 'header'),
-+    wall('left-pier', -2.22, -1.78, 'pier'),
-+    wall('right-pier', 1.78, 2.22, 'pier')
-+  ]);
-+  const bays = archFrameBaysForDescriptors([descriptor]);
-+  assert.equal(bays.length, 1);
-+  const volumes = archFrameVisibleVolumesForDescriptors([descriptor]);
-+  assert.ok(volumes.some((volume) => volume.role === 'pier-lower'));
-+  assert.ok(volumes.some((volume) => volume.role === 'pier-upper'));
-+  assert.ok(volumes.some((volume) => volume.role === 'upper-mass'));
-+  for (let i = 0; i < volumes.length; i += 1) {
-+    for (let j = i + 1; j < volumes.length; j += 1) {
-+      assert.equal(positiveOverlap(volumes[i], volumes[j]), false, `${volumes[i].id} overlapped ${volumes[j].id}`);
-+    }
-+  }
-+});
-+
-+test('full-height Arch termination cannot become a reconstructed bay support', () => {
-+  const descriptor = descriptorWithWalls([
-+    wall('header', -5, 5, 'header'),
-+    wall('termination', -2.22, -1.78, 'full'),
-+    wall('right-pier', 1.78, 2.22, 'pier')
-+  ]);
-+  assert.equal(archFrameBaysForDescriptors([descriptor]).length, 0);
-+});
-+
-+test('unrelated full-height pale wall cannot become a reconstructed bay support', () => {
-+  const descriptor = descriptorWithWalls([
-+    wall('header', -5, 5, 'header'),
-+    wall('left-pier', -2.22, -1.78, 'pier'),
-+    wall('unrelated-pale-wall', 1.78, 2.22, 'full')
-+  ]);
-+  assert.equal(archFrameBaysForDescriptors([descriptor]).length, 0);
-+});
-+
-+test('semantic header gaps are not bridged into an unintended upper connector', () => {
-+  const descriptor = descriptorWithWalls([
-+    wall('header-left', -5, -0.8, 'header'),
-+    wall('header-right', 0.8, 5, 'header'),
-+    wall('left-pier', -2.22, -1.78, 'pier'),
-+    wall('right-pier', 1.78, 2.22, 'pier')
-+  ]);
-+  assert.equal(archFrameBaysForDescriptors([descriptor]).length, 0);
-+});
-+
-+test('real Cell-seam adjacency still reconstructs without a wide bridge heuristic', () => {
-+  const left = descriptorWithWalls([
-+    wall('header-left', 2, 7, 'header'),
-+    wall('left-pier', 3.78, 4.22, 'pier')
-+  ], 0, 0);
-+  const rightHeader = wall('header-right', -7, -2, 'header');
-+  const rightPier = wall('right-pier', -4.22, -3.78, 'pier');
-+  const right = descriptorWithWalls([rightHeader, rightPier], 1, 0);
-+  const bays = archFrameBaysForDescriptors([left, right]);
-+  assert.equal(bays.length, 1);
-+});
-+
-+test('streaming heavy-work admission enforces both per-frame count and measured budget', () => {
-+  assert.equal(streamingFrameCanRunHeavyWork(0, 0), true);
-+  assert.equal(streamingFrameCanRunHeavyWork(STREAMING_SCHEDULER_PROFILE.maxHeavyJobsPerFrame, 0), false);
-+  assert.equal(streamingFrameCanRunHeavyWork(0, STREAMING_SCHEDULER_PROFILE.workBudgetMs), false);
-+  assert.equal(STREAMING_SCHEDULER_PROFILE.maxHeavyJobsPerFrame, 1);
-+});
-+
-+test('predictive warming remains exactly one retention ring ahead of the current square scope', () => {
-+  const forward = predictiveWarmCoordinates(4, -2, 3, 1, 0);
-+  assert.ok(forward.length > 0);
-+  assert.ok(forward.every((coordinate) => coordinate.x === 8));
-+  assert.ok(forward.every((coordinate) => Math.abs(coordinate.z + 2) <= 3));
-+});
+#!/usr/bin/env bash
+set -euo pipefail
+python3 - <<'PY'
+from pathlib import Path
+
+
+def replace_once(path: str, old: str, new: str) -> None:
+    p = Path(path)
+    text = p.read_text()
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f'{path}: expected exactly one match, found {count}: {old[:90]!r}')
+    p.write_text(text.replace(old, new, 1))
+
+
+def replace_count(path: str, old: str, new: str, expected: int) -> None:
+    p = Path(path)
+    text = p.read_text()
+    count = text.count(old)
+    if count != expected:
+        raise SystemExit(f'{path}: expected {expected} matches, found {count}: {old!r}')
+    p.write_text(text.replace(old, new))
+
+# ---------------------------------------------------------------------------
+# A-A1 presentation ownership / inference
+# ---------------------------------------------------------------------------
+path = 'src/renderer/level0RegionPresentation.ts'
+replace_once(path, "const ARCH_HEADER_BRIDGE_MAX_GAP = 4.1;\n", '')
+replace_count(path, 'isArchVerticalSolid', 'isArchPierSupport', 4)
+replace_once(
+    path,
+    "  return wall.materialId === 'arch-pale-wallpaper'\n    && wallMinY(wall) <= ARCH_LOWER_HEIGHT + 0.065\n",
+    "  return wall.materialId === 'arch-pale-wallpaper'\n    && wallMinY(wall) > 0.04\n    && wallMinY(wall) <= ARCH_LOWER_HEIGHT + 0.065\n"
+)
+replace_once(
+    path,
+    "function mergedHeaderRuns(line: WorldArchLine): Interval[] {\n"
+    "  const raw = mergeIntervals(line.headers.map((header) => [header.start, header.end] as const));\n"
+    "  if (raw.length < 2) return raw;\n"
+    "  const bridged: Array<[number, number]> = [];\n"
+    "  for (const interval of raw) {\n"
+    "    const previous = bridged[bridged.length - 1];\n"
+    "    const gap = previous ? interval[0] - previous[1] : Number.POSITIVE_INFINITY;\n"
+    "    if (previous && gap > 0.03 && gap <= ARCH_HEADER_BRIDGE_MAX_GAP) previous[1] = interval[1];\n"
+    "    else bridged.push([interval[0], interval[1]]);\n"
+    "  }\n"
+    "  return bridged;\n"
+    "}\n",
+    "function mergedHeaderRuns(line: WorldArchLine): Interval[] {\n"
+    "  // Real Cell seams already meet within mergeIntervals' 3 cm continuity\n"
+    "  // tolerance. Never bridge a larger semantic gap: route/termination cuts are\n"
+    "  // world truth and must not be reinterpreted as an Arch header continuation.\n"
+    "  return mergeIntervals(line.headers.map((header) => [header.start, header.end] as const));\n"
+    "}\n"
+)
+visible_volume_code = r'''export interface ArchFrameVisibleVolume {
+  id: string;
+  role: 'pier-lower' | 'upper-mass' | 'pier-upper';
+  lineKey: string;
+  start: number;
+  end: number;
+  minY: number;
+  maxY: number;
+}
+
+/** Pure geometry ownership view used by regression tests and diagnostics. */
+export function archFrameVisibleVolumesForDescriptors(descriptors: readonly CellDescriptor[]): ArchFrameVisibleVolume[] {
+  const volumes: ArchFrameVisibleVolume[] = [];
+  for (const line of archLinesForDescriptors(descriptors).values()) {
+    const bays = frameBaysForLine(line);
+    const supports = mergeIntervals(line.solids.map((wall) => [wall.start, wall.end] as const))
+      .filter((support) => bays.some((bay) => Math.abs(support[1] - bay.start) < 0.08 || Math.abs(support[0] - bay.end) < 0.08));
+    const upperRuns = rectangularUpperRuns(bays, supports);
+    supports.forEach((support, index) => {
+      volumes.push({
+        id: `${line.key}:pier-lower:${index}`,
+        role: 'pier-lower',
+        lineKey: line.key,
+        start: support[0], end: support[1], minY: 0, maxY: ARCH_UPPER_BOTTOM
+      });
+      volumes.push({
+        id: `${line.key}:pier-upper:${index}`,
+        role: 'pier-upper',
+        lineKey: line.key,
+        start: support[0], end: support[1], minY: ARCH_UPPER_TOP, maxY: WALL_HEIGHT
+      });
+    });
+    upperRuns.forEach((run, index) => volumes.push({
+      id: `${line.key}:upper-mass:${index}`,
+      role: 'upper-mass',
+      lineKey: line.key,
+      start: run[0], end: run[1], minY: ARCH_UPPER_BOTTOM, maxY: ARCH_UPPER_TOP
+    }));
+  }
+  return volumes;
+}
+
+'''
+replace_once(path, 'export function archFrameBaysForDescriptors(descriptors: readonly CellDescriptor[]): ArchFrameBay[] {\n', visible_volume_code + 'export function archFrameBaysForDescriptors(descriptors: readonly CellDescriptor[]): ArchFrameBay[] {\n')
+replace_once(
+    path,
+    "        addWorldBoxClipped(\n"
+    "          visual,\n"
+    "          `pier:${line.key}:${index}`,\n"
+    "          line.orientation,\n"
+    "          line.fixed,\n"
+    "          support[0],\n"
+    "          support[1],\n"
+    "          WALL_HEIGHT / 2,\n"
+    "          WALL_HEIGHT,\n"
+    "          ARCH_PIER_DEPTH,\n"
+    "          pierMaterial\n"
+    "        );\n",
+    "        // The upper mass owns its full intersection volume. The visible pier is\n"
+    "        // split only in presentation; semantic/collision ownership stays continuous.\n"
+    "        addWorldBoxClipped(\n"
+    "          visual,\n"
+    "          `pier-lower:${line.key}:${index}`,\n"
+    "          line.orientation,\n"
+    "          line.fixed,\n"
+    "          support[0],\n"
+    "          support[1],\n"
+    "          ARCH_UPPER_BOTTOM / 2,\n"
+    "          ARCH_UPPER_BOTTOM,\n"
+    "          ARCH_PIER_DEPTH,\n"
+    "          pierMaterial\n"
+    "        );\n"
+    "        const upperPierHeight = WALL_HEIGHT - ARCH_UPPER_TOP;\n"
+    "        addWorldBoxClipped(\n"
+    "          visual,\n"
+    "          `pier-upper:${line.key}:${index}`,\n"
+    "          line.orientation,\n"
+    "          line.fixed,\n"
+    "          support[0],\n"
+    "          support[1],\n"
+    "          ARCH_UPPER_TOP + upperPierHeight / 2,\n"
+    "          upperPierHeight,\n"
+    "          ARCH_PIER_DEPTH,\n"
+    "          pierMaterial\n"
+    "        );\n"
+)
+
+# ---------------------------------------------------------------------------
+# Dev.8 streaming admission / predictive queue discipline
+# ---------------------------------------------------------------------------
+path = 'src/renderer/streamingScheduler.ts'
+replace_once(path, '  predictiveExtraRings: 1\n});', '  predictiveExtraRings: 1,\n  maxQueueDepth: 256\n});')
+replace_once(
+    path,
+    "interface StreamJob { key: string; kind: JobKind; x: number; z: number; priority: number; serial: number; notBefore: number; }",
+    "interface StreamJob {\n  key: string; kind: JobKind; x: number; z: number; priority: number; serial: number; notBefore: number; predictive: boolean;\n}"
+)
+replace_once(path, '  queueDepth: number;\n', '  queueDepth: number;\n  queueDepthPeak: number;\n')
+replace_once(
+    path,
+    '  regionRefreshMs: number;\n}',
+    "  regionRefreshMs: number;\n  lastHeavyOperations: number;\n  maxHeavyOperations: number;\n  lastHeavyMs: number;\n  maxHeavyMs: number;\n  heavyBudgetDeferrals: number;\n  heavyBudgetOverruns: number;\n  lastHeavyOperation?: { kind: JobKind | 'required-current'; x: number; z: number; durationMs: number };\n  lastUpdateMs: number;\n  maxUpdateMs: number;\n}"
+)
+replace_once(
+    path,
+    '  diagnostics: StreamingDiagnostics;\n}',
+    '  diagnostics: StreamingDiagnostics;\n  frameActive: boolean;\n  frameHeavyOperations: number;\n  frameHeavyMs: number;\n}'
+)
+replace_once(
+    path,
+    "  return { queueDepth: 0, predictiveWarmLoads: 0, coldBoundaryLoads: 0, generatedCells: 0, loadedCells: 0, refreshedCells: 0, unloadedCells: 0, lastBoundaryFrameMs: 0, maxBoundaryFrameMs: 0, generateMs: 0, cellRendererMs: 0, cellRefreshMs: 0, cellUnloadMs: 0, boundaryReconcileMs: 0, regionRefreshMs: 0 };",
+    "  return {\n    queueDepth: 0, queueDepthPeak: 0, predictiveWarmLoads: 0, coldBoundaryLoads: 0, generatedCells: 0, loadedCells: 0, refreshedCells: 0, unloadedCells: 0,\n    lastBoundaryFrameMs: 0, maxBoundaryFrameMs: 0, generateMs: 0, cellRendererMs: 0, cellRefreshMs: 0, cellUnloadMs: 0, boundaryReconcileMs: 0, regionRefreshMs: 0,\n    lastHeavyOperations: 0, maxHeavyOperations: 0, lastHeavyMs: 0, maxHeavyMs: 0, heavyBudgetDeferrals: 0, heavyBudgetOverruns: 0, lastUpdateMs: 0, maxUpdateMs: 0\n  };"
+)
+replace_once(
+    path,
+    '  const created: SchedulerState = { jobs: new Map(), serial: 0, directionX: 0, directionZ: 0, diagnostics: createDiagnostics() };',
+    '  const created: SchedulerState = { jobs: new Map(), serial: 0, directionX: 0, directionZ: 0, diagnostics: createDiagnostics(), frameActive: false, frameHeavyOperations: 0, frameHeavyMs: 0 };'
+)
+replace_once(
+    path,
+    '  state.diagnostics.queueDepth = state.jobs.size;\n  (window as unknown as { __noclipStreamingDiagnostics?: StreamingDiagnostics }).__noclipStreamingDiagnostics = { ...state.diagnostics };\n}\nfunction cellDistance',
+    "  state.diagnostics.queueDepth = state.jobs.size;\n  state.diagnostics.queueDepthPeak = Math.max(state.diagnostics.queueDepthPeak, state.jobs.size);\n  (window as unknown as { __noclipStreamingDiagnostics?: StreamingDiagnostics }).__noclipStreamingDiagnostics = { ...state.diagnostics };\n}\n\nexport function streamingFrameCanRunHeavyWork(heavyOperations: number, heavyMs: number): boolean {\n  return heavyOperations < STREAMING_SCHEDULER_PROFILE.maxHeavyJobsPerFrame\n    && heavyMs < STREAMING_SCHEDULER_PROFILE.workBudgetMs;\n}\n\nfunction boundQueue(scheduler: SchedulerState): void {\n  if (scheduler.jobs.size <= STREAMING_SCHEDULER_PROFILE.maxQueueDepth) return;\n  const removable = [...scheduler.jobs.values()]\n    .filter((job) => job.predictive || job.kind === 'unload')\n    .sort((left, right) => right.priority - left.priority || right.serial - left.serial);\n  while (scheduler.jobs.size > STREAMING_SCHEDULER_PROFILE.maxQueueDepth && removable.length > 0) {\n    const job = removable.shift();\n    if (job) scheduler.jobs.delete(job.key);\n  }\n}\nfunction cellDistance"
+)
+replace_once(
+    path,
+    "function enqueue(scheduler: SchedulerState, kind: JobKind, x: number, z: number, priority: number, delayMs = 0): void {\n"
+    "  const key = `${kind}:${x}:${z}`;\n"
+    "  const existing = scheduler.jobs.get(key);\n"
+    "  const notBefore = now() + delayMs;\n"
+    "  if (existing) {\n"
+    "    existing.priority = Math.min(existing.priority, priority);\n"
+    "    if (kind === 'unload') existing.notBefore = Math.max(existing.notBefore, notBefore);\n"
+    "    return;\n"
+    "  }\n"
+    "  scheduler.jobs.set(key, { key, kind, x, z, priority, serial: scheduler.serial++, notBefore });\n"
+    "}\n",
+    "function enqueue(scheduler: SchedulerState, kind: JobKind, x: number, z: number, priority: number, delayMs = 0, predictive = false): void {\n"
+    "  const key = `${kind}:${x}:${z}`;\n"
+    "  const existing = scheduler.jobs.get(key);\n"
+    "  const notBefore = now() + delayMs;\n"
+    "  if (existing) {\n"
+    "    existing.priority = Math.min(existing.priority, priority);\n"
+    "    existing.predictive = existing.predictive && predictive;\n"
+    "    if (kind === 'unload') existing.notBefore = Math.max(existing.notBefore, notBefore);\n"
+    "    return;\n"
+    "  }\n"
+    "  scheduler.jobs.set(key, { key, kind, x, z, priority, serial: scheduler.serial++, notBefore, predictive });\n"
+    "  boundQueue(scheduler);\n"
+    "}\n"
+)
+old_process = r'''function processOneJob(game: ProjectNoclipGame): void {
+  const scheduler = stateFor(game);
+  const timestamp = now();
+  const eligible = [...scheduler.jobs.values()]
+    .filter((job) => job.notBefore <= timestamp)
+    .sort((left, right) => left.priority - right.priority || left.serial - right.serial);
+  const job = eligible[0];
+  if (!job) { publish(game); return; }
+  scheduler.jobs.delete(job.key);
+  if (job.kind === 'prepare') prepareCell(game, job.x, job.z, job.priority < 30);
+  else if (job.kind === 'refresh') refreshCell(game, job.x, job.z);
+  else unloadCell(game, job.x, job.z);
+  publish(game);
+}
+'''
+new_process = r'''function runHeavyOperation(
+  game: ProjectNoclipGame,
+  kind: JobKind | 'required-current',
+  x: number,
+  z: number,
+  required: boolean,
+  operation: () => void
+): boolean {
+  const scheduler = stateFor(game);
+  if (scheduler.frameActive && !streamingFrameCanRunHeavyWork(scheduler.frameHeavyOperations, scheduler.frameHeavyMs)) {
+    if (!required) scheduler.diagnostics.heavyBudgetDeferrals += 1;
+    return false;
+  }
+  const start = now();
+  operation();
+  const durationMs = now() - start;
+  if (scheduler.frameActive) {
+    scheduler.frameHeavyOperations += 1;
+    scheduler.frameHeavyMs += durationMs;
+    if (scheduler.frameHeavyMs > STREAMING_SCHEDULER_PROFILE.workBudgetMs) scheduler.diagnostics.heavyBudgetOverruns += 1;
+  }
+  scheduler.diagnostics.lastHeavyOperation = { kind, x, z, durationMs };
+  scheduler.diagnostics.maxHeavyMs = Math.max(scheduler.diagnostics.maxHeavyMs, durationMs);
+  return true;
+}
+function processOneJob(game: ProjectNoclipGame): void {
+  const scheduler = stateFor(game);
+  if (!streamingFrameCanRunHeavyWork(scheduler.frameHeavyOperations, scheduler.frameHeavyMs)) {
+    if (scheduler.jobs.size > 0) scheduler.diagnostics.heavyBudgetDeferrals += 1;
+    publish(game);
+    return;
+  }
+  const timestamp = now();
+  const eligible = [...scheduler.jobs.values()]
+    .filter((job) => job.notBefore <= timestamp)
+    .sort((left, right) => left.priority - right.priority || left.serial - right.serial);
+  const job = eligible[0];
+  if (!job) { publish(game); return; }
+  const ran = runHeavyOperation(game, job.kind, job.x, job.z, false, () => {
+    if (job.kind === 'prepare') prepareCell(game, job.x, job.z, job.predictive);
+    else if (job.kind === 'refresh') refreshCell(game, job.x, job.z);
+    else unloadCell(game, job.x, job.z);
+  });
+  if (ran) scheduler.jobs.delete(job.key);
+  publish(game);
+}
+'''
+replace_once(path, old_process, new_process)
+replace_once(
+    path,
+    "  const profile = renderDistanceProfile(getRenderSettings());\n  for (const coordinate of predictiveWarmCoordinates(state.currentCellX, state.currentCellZ, profile.loadRadius, scheduler.directionX, scheduler.directionZ)) {\n    const id = `${coordinate.x}:${coordinate.z}`;\n    if (!state.renderer.loaded.has(id)) enqueue(scheduler, 'prepare', coordinate.x, coordinate.z, coordinate.priority);\n",
+    "  const profile = renderDistanceProfile(getRenderSettings());\n  // Recompute predictive work from the latest motion vector; stale reversal work\n  // may not grow the queue behind the player.\n  for (const job of [...scheduler.jobs.values()]) if (job.predictive) scheduler.jobs.delete(job.key);\n  for (const coordinate of predictiveWarmCoordinates(state.currentCellX, state.currentCellZ, profile.loadRadius, scheduler.directionX, scheduler.directionZ)) {\n    const id = `${coordinate.x}:${coordinate.z}`;\n    if (!state.renderer.loaded.has(id)) enqueue(scheduler, 'prepare', coordinate.x, coordinate.z, 60 + coordinate.priority, 0, true);\n"
+)
+replace_once(
+    path,
+    "  const desired = new Set<string>();\n  const missing: Array<{ x: number; z: number; score: number }> = [];\n  const currentDescriptor = descriptorFor(state, state.currentCellX, state.currentCellZ, scheduler.diagnostics);\n  const currentExisting = state.renderer.loaded.get(currentDescriptor.id)?.descriptor;\n  if (!currentExisting) prepareCell(game, state.currentCellX, state.currentCellZ, false);\n  else if (descriptorChanged(currentExisting, currentDescriptor)) {\n    const start = now(); state.renderer.refreshCell(currentDescriptor); scheduler.diagnostics.cellRefreshMs += now() - start; scheduler.diagnostics.refreshedCells += 1;\n  }\n  state.currentCell = currentDescriptor;\n",
+    "  const desired = new Set<string>();\n  const currentId = `${state.currentCellX}:${state.currentCellZ}`;\n  let currentDescriptor = state.renderer.loaded.get(currentId)?.descriptor;\n  if (!currentDescriptor) {\n    cancel(scheduler, 'prepare', state.currentCellX, state.currentCellZ);\n    const loaded = runHeavyOperation(game, 'required-current', state.currentCellX, state.currentCellZ, true, () => prepareCell(game, state.currentCellX, state.currentCellZ, false));\n    currentDescriptor = state.renderer.loaded.get(currentId)?.descriptor;\n    if (loaded) scheduler.diagnostics.coldBoundaryLoads += 1;\n  }\n  if (currentDescriptor) state.currentCell = currentDescriptor;\n"
+)
+replace_once(
+    path,
+    "        const score = -((x - state.currentCellX) * scheduler.directionX + (z - state.currentCellZ) * scheduler.directionZ);\n        missing.push({ x, z, score });\n        enqueue(scheduler, 'prepare', x, z, 35 + cellDistance(state, x, z));\n",
+    "        const directionLength = Math.hypot(scheduler.directionX, scheduler.directionZ) || 1;\n        const directional = ((x - state.currentCellX) * scheduler.directionX + (z - state.currentCellZ) * scheduler.directionZ) / directionLength;\n        const directionalBias = Math.max(-3, Math.min(3, directional));\n        enqueue(scheduler, 'prepare', x, z, 12 + cellDistance(state, x, z) * 2 - directionalBias);\n"
+)
+replace_once(
+    path,
+    "\n  if (missing.length > 0) {\n    missing.sort((left, right) => left.score - right.score);\n    const emergency = missing[0]!;\n    cancel(scheduler, 'prepare', emergency.x, emergency.z);\n    prepareCell(game, emergency.x, emergency.z, false);\n    scheduler.diagnostics.coldBoundaryLoads += 1;\n  }\n",
+    "\n"
+)
+old_update = r'''  prototype.update = function streamingScheduledUpdate(this: ProjectNoclipGame, dt: number): void {
+    const scheduler = stateFor(this);
+    const state = access(this);
+    const frameStart = now();
+    processOneJob(this);
+    originalUpdate.call(this, dt);
+    warmAhead(this);
+    const changedCell = scheduler.lastCellX !== undefined
+      && (scheduler.lastCellX !== state.currentCellX || scheduler.lastCellZ !== state.currentCellZ);
+    if (changedCell) {
+      const frameMs = now() - frameStart;
+      scheduler.diagnostics.lastBoundaryFrameMs = frameMs;
+      scheduler.diagnostics.maxBoundaryFrameMs = Math.max(scheduler.diagnostics.maxBoundaryFrameMs, frameMs);
+    }
+    scheduler.lastCellX = state.currentCellX;
+    scheduler.lastCellZ = state.currentCellZ;
+    publish(this);
+  };
+'''
+new_update = r'''  prototype.update = function streamingScheduledUpdate(this: ProjectNoclipGame, dt: number): void {
+    const scheduler = stateFor(this);
+    const state = access(this);
+    const frameStart = now();
+    scheduler.frameActive = true;
+    scheduler.frameHeavyOperations = 0;
+    scheduler.frameHeavyMs = 0;
+    // Boundary safety gets first admission. A required current-Cell load therefore
+    // cannot stack on top of an already-run queued heavy operation in this frame.
+    originalUpdate.call(this, dt);
+    processOneJob(this);
+    warmAhead(this);
+    scheduler.frameActive = false;
+    scheduler.diagnostics.lastHeavyOperations = scheduler.frameHeavyOperations;
+    scheduler.diagnostics.maxHeavyOperations = Math.max(scheduler.diagnostics.maxHeavyOperations, scheduler.frameHeavyOperations);
+    scheduler.diagnostics.lastHeavyMs = scheduler.frameHeavyMs;
+    const updateMs = now() - frameStart;
+    scheduler.diagnostics.lastUpdateMs = updateMs;
+    scheduler.diagnostics.maxUpdateMs = Math.max(scheduler.diagnostics.maxUpdateMs, updateMs);
+    const changedCell = scheduler.lastCellX !== undefined
+      && (scheduler.lastCellX !== state.currentCellX || scheduler.lastCellZ !== state.currentCellZ);
+    if (changedCell) {
+      scheduler.diagnostics.lastBoundaryFrameMs = updateMs;
+      scheduler.diagnostics.maxBoundaryFrameMs = Math.max(scheduler.diagnostics.maxBoundaryFrameMs, updateMs);
+    }
+    scheduler.lastCellX = state.currentCellX;
+    scheduler.lastCellZ = state.currentCellZ;
+    publish(this);
+  };
+'''
+replace_once(path, old_update, new_update)
+
+# ---------------------------------------------------------------------------
+# Behavior regressions
+# ---------------------------------------------------------------------------
+test_path = Path('tests/dev8-corrective.test.mjs')
+test_path.write_text(r'''import assert from 'node:assert/strict';
+import test from 'node:test';
+
+const { generateCell } = await import('../.test-dist/src/world/generator.js');
+const { ARCH_HEADER_HEIGHT, ARCH_LOWER_HEIGHT } = await import('../.test-dist/src/world/gen3ArchitectureCore.js');
+const { WALL_HEIGHT, WALL_THICKNESS, DEFAULT_TUNING } = await import('../.test-dist/src/world/types.js');
+const { archFrameBaysForDescriptors, archFrameVisibleVolumesForDescriptors } = await import('../.test-dist/src/renderer/level0RegionPresentation.js');
+const { STREAMING_SCHEDULER_PROFILE, predictiveWarmCoordinates, streamingFrameCanRunHeavyWork } = await import('../.test-dist/src/renderer/streamingScheduler.js');
+
+function tuning() {
+  return { ...DEFAULT_TUNING, regionOverride: 'arch-rooms', conditionOverride: 'clear', carverOverride: 'none', structureOverride: 'none', gateBypass: true };
+}
+function baseCell(x = 0, z = 0) {
+  return generateCell({ seed: 'dev8-corrective', x, z, worldDay: 40, exposure: 10, shiftEpoch: 0, tuning: tuning(), generationVersion: 'gen3-v1' });
+}
+function wall(id, start, end, kind, fixed = 0) {
+  let cy; let sy;
+  if (kind === 'header') { sy = ARCH_HEADER_HEIGHT; cy = WALL_HEIGHT - ARCH_HEADER_HEIGHT / 2; }
+  else if (kind === 'pier') { sy = WALL_HEIGHT - ARCH_HEADER_HEIGHT - ARCH_LOWER_HEIGHT; cy = ARCH_LOWER_HEIGHT + sy / 2; }
+  else if (kind === 'lower') { sy = ARCH_LOWER_HEIGHT; cy = ARCH_LOWER_HEIGHT / 2; }
+  else { sy = WALL_HEIGHT; cy = WALL_HEIGHT / 2; }
+  return { id, cx: (start + end) / 2, cy, cz: fixed, sx: end - start, sy, sz: WALL_THICKNESS, orientation: 'z', drawable: true, materialId: 'arch-pale-wallpaper', materialVariant: 0 };
+}
+function descriptorWithWalls(walls, x = 0, z = 0) { return { ...baseCell(x, z), walls }; }
+function positiveOverlap(left, right) {
+  return left.lineKey === right.lineKey
+    && left.end > right.start + 1e-6 && left.start < right.end - 1e-6
+    && left.maxY > right.minY + 1e-6 && left.minY < right.maxY - 1e-6;
+}
+
+test('A-A1 visible rectangular volumes have one positive-volume owner', () => {
+  const descriptor = descriptorWithWalls([wall('header', -5, 5, 'header'), wall('left-pier', -2.22, -1.78, 'pier'), wall('right-pier', 1.78, 2.22, 'pier')]);
+  assert.equal(archFrameBaysForDescriptors([descriptor]).length, 1);
+  const volumes = archFrameVisibleVolumesForDescriptors([descriptor]);
+  assert.ok(volumes.some((volume) => volume.role === 'pier-lower'));
+  assert.ok(volumes.some((volume) => volume.role === 'pier-upper'));
+  assert.ok(volumes.some((volume) => volume.role === 'upper-mass'));
+  for (let i = 0; i < volumes.length; i += 1) for (let j = i + 1; j < volumes.length; j += 1) {
+    assert.equal(positiveOverlap(volumes[i], volumes[j]), false, `${volumes[i].id} overlapped ${volumes[j].id}`);
+  }
+});
+
+test('full-height Arch termination cannot become a reconstructed bay support', () => {
+  const descriptor = descriptorWithWalls([wall('header', -5, 5, 'header'), wall('termination', -2.22, -1.78, 'full'), wall('right-pier', 1.78, 2.22, 'pier')]);
+  assert.equal(archFrameBaysForDescriptors([descriptor]).length, 0);
+});
+
+test('unrelated full-height pale wall cannot become a reconstructed bay support', () => {
+  const descriptor = descriptorWithWalls([wall('header', -5, 5, 'header'), wall('left-pier', -2.22, -1.78, 'pier'), wall('unrelated-pale-wall', 1.78, 2.22, 'full')]);
+  assert.equal(archFrameBaysForDescriptors([descriptor]).length, 0);
+});
+
+test('semantic header gaps are not bridged into an unintended upper connector', () => {
+  const descriptor = descriptorWithWalls([wall('header-left', -5, -0.8, 'header'), wall('header-right', 0.8, 5, 'header'), wall('left-pier', -2.22, -1.78, 'pier'), wall('right-pier', 1.78, 2.22, 'pier')]);
+  assert.equal(archFrameBaysForDescriptors([descriptor]).length, 0);
+});
+
+test('real Cell-seam adjacency still reconstructs without a wide bridge heuristic', () => {
+  const left = descriptorWithWalls([wall('header-left', 2, 7, 'header'), wall('left-pier', 3.78, 4.22, 'pier')], 0, 0);
+  const right = descriptorWithWalls([wall('header-right', -7, -2, 'header'), wall('right-pier', -4.22, -3.78, 'pier')], 1, 0);
+  assert.equal(archFrameBaysForDescriptors([left, right]).length, 1);
+});
+
+test('streaming heavy-work admission enforces both per-frame count and measured budget', () => {
+  assert.equal(streamingFrameCanRunHeavyWork(0, 0), true);
+  assert.equal(streamingFrameCanRunHeavyWork(STREAMING_SCHEDULER_PROFILE.maxHeavyJobsPerFrame, 0), false);
+  assert.equal(streamingFrameCanRunHeavyWork(0, STREAMING_SCHEDULER_PROFILE.workBudgetMs), false);
+  assert.equal(STREAMING_SCHEDULER_PROFILE.maxHeavyJobsPerFrame, 1);
+});
+
+test('predictive warming remains one retention ring ahead of the current square scope', () => {
+  const forward = predictiveWarmCoordinates(4, -2, 3, 1, 0);
+  assert.ok(forward.length > 0);
+  assert.ok(forward.every((coordinate) => coordinate.x === 8));
+  assert.ok(forward.every((coordinate) => Math.abs(coordinate.z + 2) <= 3));
+});
+''')
+PY
