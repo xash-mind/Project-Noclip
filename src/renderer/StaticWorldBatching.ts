@@ -4,6 +4,7 @@ import { installArchDividerRuntimeCorrection } from './archDividerRuntimeCorrect
 import { isMFluorescentPanelVisualName } from './fixtureVisualOwnership.js';
 import { installFixtureLighting } from './fixtureLighting.js';
 import { installLevel0RegionPresentation } from './level0RegionPresentation.js';
+import { WorldRenderer } from './WorldRenderer.js';
 
 const STATIC_WORLD_BATCH_GROUP_ID_START = 1601;
 const STATIC_WORLD_BATCH_GROUP_NAME = 'level0-static-cell';
@@ -16,6 +17,9 @@ export interface StaticWorldBatchingDiagnostics {
   removals: number;
   dirtyCalls: number;
   activeGroups: number;
+  skippedCleanPasses: number;
+  reconcileMs: number;
+  maxReconcileMs: number;
 }
 
 const batchingDiagnostics: StaticWorldBatchingDiagnostics = {
@@ -23,7 +27,10 @@ const batchingDiagnostics: StaticWorldBatchingDiagnostics = {
   allocations: 0,
   removals: 0,
   dirtyCalls: 0,
-  activeGroups: 0
+  activeGroups: 0,
+  skippedCleanPasses: 0,
+  reconcileMs: 0,
+  maxReconcileMs: 0
 };
 
 export function staticWorldBatchingDiagnosticsSnapshot(): StaticWorldBatchingDiagnostics {
@@ -46,6 +53,7 @@ type BatchManager = {
 };
 type BatchApplication = pc.Application & { root: BatchEntity; batcher: BatchManager };
 type ApplicationLookup = typeof pc.Application & { getApplication(id?: string): pc.Application | undefined; };
+let installed = false;
 interface CellBatch { id: number; guid: string; }
 
 function isBatchEntity(node: unknown): node is BatchEntity { return node instanceof pc.Entity; }
@@ -67,6 +75,8 @@ function getRunningApplication(): BatchApplication | undefined {
 
 /** Static geometry is batched per streamed Cell so one entering/leaving Cell never invalidates the whole Level 0 batch. */
 export function installStaticWorldBatching(): void {
+  if (installed) return;
+  installed = true;
   installLevel0RegionPresentation();
   installArchDividerRuntimeCorrection();
   installFixtureLighting();
@@ -74,12 +84,14 @@ export function installStaticWorldBatching(): void {
   let nextGroupId = STATIC_WORLD_BATCH_GROUP_ID_START;
   let freeGroupIds: number[] = [];
   let cellBatches = new Map<string, CellBatch>();
+  let dirty = true;
 
   const reset = (app: BatchApplication): void => {
     currentApp = app;
     nextGroupId = STATIC_WORLD_BATCH_GROUP_ID_START;
     freeGroupIds = [];
     cellBatches = new Map();
+    dirty = true;
   };
   const allocate = (app: BatchApplication, cell: BatchEntity): CellBatch => {
     const id = freeGroupIds.pop() ?? nextGroupId++;
@@ -91,10 +103,16 @@ export function installStaticWorldBatching(): void {
     return batch;
   };
   const reconcile = (): void => {
+    if (!dirty) {
+      batchingDiagnostics.skippedCleanPasses += 1;
+      return;
+    }
+    const reconcileStart = performance.now();
     batchingDiagnostics.reconcilePasses += 1;
     const app = getRunningApplication();
     if (!app) return;
     if (app !== currentApp) reset(app);
+    dirty = false;
     const cells = app.root.children.filter(isBatchEntity).filter((entity) => entity.name.startsWith('cell:'));
     const present = new Set(cells.map((cell) => cell.guid));
     for (const [guid, batch] of [...cellBatches.entries()]) {
@@ -112,7 +130,24 @@ export function installStaticWorldBatching(): void {
         batchingDiagnostics.dirtyCalls += 1;
       }
     }
+    const reconcileMs = performance.now() - reconcileStart;
+    batchingDiagnostics.reconcileMs += reconcileMs;
+    batchingDiagnostics.maxReconcileMs = Math.max(batchingDiagnostics.maxReconcileMs, reconcileMs);
   };
+
+  const originalLoadCell = WorldRenderer.prototype.loadCell;
+  WorldRenderer.prototype.loadCell = function batchingLoadCell(this: WorldRenderer, descriptor): void {
+    const loadedBefore = this.loaded.has(descriptor.id);
+    originalLoadCell.call(this, descriptor);
+    if (!loadedBefore && this.loaded.has(descriptor.id)) dirty = true;
+  };
+  const originalUnloadCell = WorldRenderer.prototype.unloadCell;
+  WorldRenderer.prototype.unloadCell = function batchingUnloadCell(this: WorldRenderer, cellId): void {
+    const loadedBefore = this.loaded.has(cellId);
+    originalUnloadCell.call(this, cellId);
+    if (loadedBefore && !this.loaded.has(cellId)) dirty = true;
+  };
+
   reconcile();
   window.setInterval(reconcile, RECONCILE_INTERVAL_MS);
 }

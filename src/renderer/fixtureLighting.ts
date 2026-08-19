@@ -59,6 +59,12 @@ export interface FixtureLightingDiagnostics {
   shadowUpdateRequests: number;
   selectionChanges: number;
   shadowResolutionChanges: number;
+  panelMaterialWrites: number;
+  intensityWrites: number;
+  enabledWrites: number;
+  updateCalls: number;
+  updateMs: number;
+  maxUpdateMs: number;
 }
 
 const fixtureDiagnostics: FixtureLightingDiagnostics = {
@@ -68,7 +74,13 @@ const fixtureDiagnostics: FixtureLightingDiagnostics = {
   shadowDirtyMarks: 0,
   shadowUpdateRequests: 0,
   selectionChanges: 0,
-  shadowResolutionChanges: 0
+  shadowResolutionChanges: 0,
+  panelMaterialWrites: 0,
+  intensityWrites: 0,
+  enabledWrites: 0,
+  updateCalls: 0,
+  updateMs: 0,
+  maxUpdateMs: 0
 };
 
 export function fixtureLightingDiagnosticsSnapshot(): FixtureLightingDiagnostics {
@@ -316,6 +328,7 @@ function updateFixtureLighting(
   playerX: number,
   playerZ: number
 ): void {
+  const updateStart = performance.now();
   const state = stateFor(renderer);
   const settings = getRenderSettings();
   const renderDistanceCeiling = renderDistanceProfile(settings).lightShadowSafetyCeiling;
@@ -343,7 +356,13 @@ function updateFixtureLighting(
     }
     runtime.selected = selected;
 
-    if (runtime.mesh?.render) runtime.mesh.render.material = fixtureMaterial(state, runtime.descriptor, runtime.group, pulse);
+    if (runtime.mesh?.render) {
+      const material = fixtureMaterial(state, runtime.descriptor, runtime.group, pulse);
+      if (runtime.mesh.render.material !== material) {
+        runtime.mesh.render.material = material;
+        fixtureDiagnostics.panelMaterialWrites += 1;
+      }
+    }
     const light = componentFor(runtime);
     if (!light) continue;
     // Color/range/cast/bias/normal-offset are invariant for this runtime and
@@ -357,8 +376,16 @@ function updateFixtureLighting(
         fixtureDiagnostics.shadowDirtyMarks += 1;
       }
     }
-    light.intensity = selected ? runtime.group.intensity * pulse * FIXTURE_LIGHT_INTENSITY_MULTIPLIER : 0;
-    runtime.light.enabled = selected && runtime.group.state !== 'off';
+    const intensity = selected ? runtime.group.intensity * pulse * FIXTURE_LIGHT_INTENSITY_MULTIPLIER : 0;
+    if (Math.abs(light.intensity - intensity) > 0.000001) {
+      light.intensity = intensity;
+      fixtureDiagnostics.intensityWrites += 1;
+    }
+    const enabled = selected && runtime.group.state !== 'off';
+    if (runtime.light.enabled !== enabled) {
+      runtime.light.enabled = enabled;
+      fixtureDiagnostics.enabledWrites += 1;
+    }
 
     if (selected && runtime.group.state !== 'off' && pulse > 0.001 && runtime.shadowDirty) {
       light.shadowUpdateMode = pc.SHADOWUPDATE_THISFRAME;
@@ -366,6 +393,10 @@ function updateFixtureLighting(
       runtime.shadowDirty = false;
     }
   }
+  const updateMs = performance.now() - updateStart;
+  fixtureDiagnostics.updateCalls += 1;
+  fixtureDiagnostics.updateMs += updateMs;
+  fixtureDiagnostics.maxUpdateMs = Math.max(fixtureDiagnostics.maxUpdateMs, updateMs);
 }
 
 export const FIXTURE_LIGHTING_PROFILE = Object.freeze({
