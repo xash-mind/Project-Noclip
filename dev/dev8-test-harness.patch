@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+python3 - <<'PY'
+from pathlib import Path
+path = Path('tsconfig.test.json')
+text = path.read_text()
+old = '    "src/renderer/level0RegionPresentation.ts",\n    "src/renderer/renderSettings.ts"\n'
+new = '    "src/renderer/level0RegionPresentation.ts",\n    "src/renderer/renderSettings.ts",\n    "src/renderer/streamingScheduler.ts"\n'
+if text.count(old) != 1:
+    raise SystemExit('tsconfig.test.json: expected renderer include block exactly once')
+path.write_text(text.replace(old, new, 1))
+PY
