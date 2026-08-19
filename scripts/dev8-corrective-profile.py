@@ -260,12 +260,11 @@ def main() -> None:
 
         locate(driver, 'arch-rooms', 'core')
         qa_place(driver, 'placeAtArchOverview')
-        arch = record_scenario(driver, report, 'arch-core-overview')
+        record_scenario(driver, report, 'arch-core-overview')
         screenshot(driver, '03-arch-overview.png', report)
-        qa_place(driver, 'placeAtDecorativeArch')
-        screenshot(driver, '04-arch-decorative.png', report)
         route = qa_place(driver, 'placeAtArchRoute')
         report['archRoute'] = route
+        screenshot(driver, '04-arch-route-before.png', report)
         record_scenario(driver, report, 'arch-repeated-fast-traversal', lambda: [sprint(driver, 0.9, backward=bool(i % 2)) for i in range(8)])
         screenshot(driver, '05-arch-route-after-reversal.png', report)
 
