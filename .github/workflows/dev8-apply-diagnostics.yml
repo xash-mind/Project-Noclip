@@ -4,6 +4,7 @@ on:
     branches: [dev8-traversal-aa1-ownership]
     paths:
       - dev/dev8-diagnostics-transform.sh
+      - dev/dev8-diagnostics-typefix.sh
       - .github/workflows/dev8-apply-diagnostics.yml
   pull_request:
     branches: [main]
@@ -21,7 +22,9 @@ jobs:
           ref: dev8-traversal-aa1-ownership
           fetch-depth: 0
       - name: Apply exact bounded diagnostics transform
-        run: bash dev/dev8-diagnostics-transform.sh
+        run: |
+          bash dev/dev8-diagnostics-transform.sh
+          bash dev/dev8-diagnostics-typefix.sh
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -32,7 +35,7 @@ jobs:
       - name: Commit verified diagnostics and clean staging machinery
         run: |
           set -euo pipefail
-          git rm dev/dev8-diagnostics-transform.sh .github/workflows/dev8-apply-diagnostics.yml
+          git rm dev/dev8-diagnostics-transform.sh dev/dev8-diagnostics-typefix.sh .github/workflows/dev8-apply-diagnostics.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/main.ts src/renderer/fixtureLighting.ts src/renderer/StaticWorldBatching.ts src/renderer/level0RegionPresentation.ts src/renderer/rendererRuntimeDiagnostics.ts tests/dev8-runtime-diagnostics.test.mjs
