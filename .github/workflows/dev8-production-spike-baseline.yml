@@ -21,7 +21,9 @@ jobs:
         env:
           NOCLIP_BASE_URL: https://project-noclip.vercel.app
           NOCLIP_DEV8_BEFORE_ARTIFACTS: artifacts/dev8-production-before
-        run: python scripts/dev8-production-spike-profile.py | tee artifacts/dev8-production-before/workflow-report.log
+        run: |
+          mkdir -p artifacts/dev8-production-before
+          python scripts/dev8-production-spike-profile.py | tee artifacts/dev8-production-before/workflow-report.log
       - name: Upload production traversal baseline
         if: always()
         uses: actions/upload-artifact@v4
