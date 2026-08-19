@@ -26,6 +26,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p artifacts/dev8-corrective
           npm run preview > /tmp/project-noclip-dev8-preview.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true; cat /tmp/project-noclip-dev8-preview.log || true' EXIT
