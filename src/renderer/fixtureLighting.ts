@@ -51,6 +51,31 @@ interface RendererFixtureState {
 const states = new WeakMap<WorldRenderer, RendererFixtureState>();
 let installed = false;
 
+export interface FixtureLightingDiagnostics {
+  lightsCreated: number;
+  lightsDestroyed: number;
+  shadowDirtyScans: number;
+  shadowDirtyMarks: number;
+  shadowUpdateRequests: number;
+  selectionChanges: number;
+  shadowResolutionChanges: number;
+}
+
+const fixtureDiagnostics: FixtureLightingDiagnostics = {
+  lightsCreated: 0,
+  lightsDestroyed: 0,
+  shadowDirtyScans: 0,
+  shadowDirtyMarks: 0,
+  shadowUpdateRequests: 0,
+  selectionChanges: 0,
+  shadowResolutionChanges: 0
+};
+
+export function fixtureLightingDiagnosticsSnapshot(): FixtureLightingDiagnostics {
+  return { ...fixtureDiagnostics };
+}
+
+
 function stateFor(renderer: WorldRenderer): RendererFixtureState {
   const existing = states.get(renderer);
   if (existing) return existing;
@@ -212,8 +237,11 @@ function fixtureRangeTouchesCell(runtime: FixtureRuntime, descriptor: CellDescri
 }
 
 function markFixtureShadowsDirtyNearCell(state: RendererFixtureState, descriptor: CellDescriptor): void {
+  fixtureDiagnostics.shadowDirtyScans += 1;
   for (const runtime of state.fixtures.values()) {
-    if (fixtureRangeTouchesCell(runtime, descriptor)) runtime.shadowDirty = true;
+    if (!fixtureRangeTouchesCell(runtime, descriptor) || runtime.shadowDirty) continue;
+    runtime.shadowDirty = true;
+    fixtureDiagnostics.shadowDirtyMarks += 1;
   }
 }
 
@@ -264,6 +292,7 @@ function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void 
         shadowDirty: true,
         selected: false
       });
+      fixtureDiagnostics.lightsCreated += 1;
     });
   }
   markFixtureShadowsDirtyNearCell(state, descriptor);
@@ -274,7 +303,9 @@ function detachCellFixtures(renderer: WorldRenderer, cellId: string, descriptor?
   if (!state) return;
   if (descriptor) markFixtureShadowsDirtyNearCell(state, descriptor);
   for (const [id, runtime] of state.fixtures) {
-    if (runtime.cellId === cellId) state.fixtures.delete(id);
+    if (runtime.cellId !== cellId) continue;
+    state.fixtures.delete(id);
+    fixtureDiagnostics.lightsDestroyed += 1;
   }
 }
 
@@ -303,23 +334,35 @@ function updateFixtureLighting(
   for (const runtime of state.fixtures.values()) {
     const pulse = pulseFor(runtime.group);
     const selected = selectedIds.has(runtime.id);
-    if (selected && !runtime.selected) runtime.shadowDirty = true;
+    if (selected !== runtime.selected) {
+      fixtureDiagnostics.selectionChanges += 1;
+      if (selected && !runtime.shadowDirty) {
+        runtime.shadowDirty = true;
+        fixtureDiagnostics.shadowDirtyMarks += 1;
+      }
+    }
     runtime.selected = selected;
 
     if (runtime.mesh?.render) runtime.mesh.render.material = fixtureMaterial(state, runtime.descriptor, runtime.group, pulse);
     const light = componentFor(runtime);
     if (!light) continue;
-    light.color = lightColor(runtime.group);
-    light.range = FIXTURE_LIGHT_RANGE;
-    light.castShadows = true;
-    light.shadowResolution = settings.shadowResolution;
-    light.shadowBias = FIXTURE_SHADOW_BIAS;
-    light.normalOffsetBias = FIXTURE_SHADOW_NORMAL_OFFSET;
+    // Color/range/cast/bias/normal-offset are invariant for this runtime and
+    // are set once at creation. Rewriting them for every fixture every frame
+    // created steady-state CPU/device churn without changing visible output.
+    if (light.shadowResolution !== settings.shadowResolution) {
+      light.shadowResolution = settings.shadowResolution;
+      fixtureDiagnostics.shadowResolutionChanges += 1;
+      if (!runtime.shadowDirty) {
+        runtime.shadowDirty = true;
+        fixtureDiagnostics.shadowDirtyMarks += 1;
+      }
+    }
     light.intensity = selected ? runtime.group.intensity * pulse * FIXTURE_LIGHT_INTENSITY_MULTIPLIER : 0;
     runtime.light.enabled = selected && runtime.group.state !== 'off';
 
     if (selected && runtime.group.state !== 'off' && pulse > 0.001 && runtime.shadowDirty) {
       light.shadowUpdateMode = pc.SHADOWUPDATE_THISFRAME;
+      fixtureDiagnostics.shadowUpdateRequests += 1;
       runtime.shadowDirty = false;
     }
   }

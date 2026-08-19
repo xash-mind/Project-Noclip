@@ -10,6 +10,26 @@ const STATIC_WORLD_BATCH_GROUP_NAME = 'level0-static-cell';
 const RECONCILE_INTERVAL_MS = 100;
 const EXCLUDED_SUBTREE_PREFIXES = ['item:', 'note:', 'exit:', 'exit-frame:', 'crack:'] as const;
 
+export interface StaticWorldBatchingDiagnostics {
+  reconcilePasses: number;
+  allocations: number;
+  removals: number;
+  dirtyCalls: number;
+  activeGroups: number;
+}
+
+const batchingDiagnostics: StaticWorldBatchingDiagnostics = {
+  reconcilePasses: 0,
+  allocations: 0,
+  removals: 0,
+  dirtyCalls: 0,
+  activeGroups: 0
+};
+
+export function staticWorldBatchingDiagnosticsSnapshot(): StaticWorldBatchingDiagnostics {
+  return { ...batchingDiagnostics };
+}
+
 export const STATIC_WORLD_BATCHING_PROFILE = Object.freeze({
   mode: 'per-cell' as const,
   reconcileIntervalMs: RECONCILE_INTERVAL_MS,
@@ -64,11 +84,14 @@ export function installStaticWorldBatching(): void {
   const allocate = (app: BatchApplication, cell: BatchEntity): CellBatch => {
     const id = freeGroupIds.pop() ?? nextGroupId++;
     app.batcher.addGroup(`${STATIC_WORLD_BATCH_GROUP_NAME}:${cell.guid}`, false, STATIC_WORLD_BATCHING_PROFILE.maxAabbSize, id);
+    batchingDiagnostics.allocations += 1;
     const batch = { id, guid: cell.guid };
     cellBatches.set(cell.guid, batch);
+    batchingDiagnostics.activeGroups = cellBatches.size;
     return batch;
   };
   const reconcile = (): void => {
+    batchingDiagnostics.reconcilePasses += 1;
     const app = getRunningApplication();
     if (!app) return;
     if (app !== currentApp) reset(app);
@@ -77,12 +100,17 @@ export function installStaticWorldBatching(): void {
     for (const [guid, batch] of [...cellBatches.entries()]) {
       if (present.has(guid)) continue;
       app.batcher.removeGroup(batch.id);
+      batchingDiagnostics.removals += 1;
       freeGroupIds.push(batch.id);
       cellBatches.delete(guid);
+      batchingDiagnostics.activeGroups = cellBatches.size;
     }
     for (const cell of cells) {
       const batch = cellBatches.get(cell.guid) ?? allocate(app, cell);
-      if (assignStaticVisuals(cell, batch.id)) app.batcher.markGroupDirty(batch.id);
+      if (assignStaticVisuals(cell, batch.id)) {
+        app.batcher.markGroupDirty(batch.id);
+        batchingDiagnostics.dirtyCalls += 1;
+      }
     }
   };
   reconcile();

@@ -703,6 +703,7 @@ function hideSemanticDividerMeshes(visual: CellVisual, ids: Set<string>): void {
 }
 
 function renderArchFrames(renderer: WorldRenderer, targetCellIds?: ReadonlySet<string>): void {
+  const reconstructionStart = performance.now();
   const visuals = [...renderer.loaded.values()];
   const targetVisuals = targetCellIds ? visuals.filter((visual) => targetCellIds.has(visual.descriptor.id)) : visuals;
   const descriptors = visuals.map((visual) => visual.descriptor);
@@ -793,6 +794,11 @@ function renderArchFrames(renderer: WorldRenderer, targetCellIds?: ReadonlySet<s
       }
     }
   }
+  const reconstructionMs = performance.now() - reconstructionStart;
+  archPresentationDiagnostics.reconstructionCalls += 1;
+  archPresentationDiagnostics.reconstructedCells += targetVisuals.length;
+  archPresentationDiagnostics.reconstructionMs += reconstructionMs;
+  archPresentationDiagnostics.maxReconstructionMs = Math.max(archPresentationDiagnostics.maxReconstructionMs, reconstructionMs);
 }
 
 function applyRegionPresentation(renderer: WorldRenderer, visual: CellVisual): void {
@@ -806,6 +812,24 @@ function applyRegionPresentation(renderer: WorldRenderer, visual: CellVisual): v
  * topology/collision ownership; A-A1 is reconstructed from those world-space
  * divider runs so streaming Cells only clip one continuous heavy frame.
  */
+export interface ArchPresentationDiagnostics {
+  reconstructionCalls: number;
+  reconstructedCells: number;
+  reconstructionMs: number;
+  maxReconstructionMs: number;
+}
+
+const archPresentationDiagnostics: ArchPresentationDiagnostics = {
+  reconstructionCalls: 0,
+  reconstructedCells: 0,
+  reconstructionMs: 0,
+  maxReconstructionMs: 0
+};
+
+export function archPresentationDiagnosticsSnapshot(): ArchPresentationDiagnostics {
+  return { ...archPresentationDiagnostics };
+}
+
 const pendingArchCells = new WeakMap<WorldRenderer, Set<string>>();
 const scheduledArchFlush = new WeakSet<WorldRenderer>();
 
