@@ -72,15 +72,12 @@ replacement = "import {\n  STREAMING_SCHEDULER_PROFILE,\n  predictiveWarmCoordin
 text = text[:start] + replacement + text[end:]
 scheduler.write_text(text)
 
-# Remove the now-duplicate local admission helper added by the first transform.
 text = scheduler.read_text()
 old_helper = "export function streamingFrameCanRunHeavyWork(heavyOperations: number, heavyMs: number): boolean {\n  return heavyOperations < STREAMING_SCHEDULER_PROFILE.maxHeavyJobsPerFrame\n    && heavyMs < STREAMING_SCHEDULER_PROFILE.workBudgetMs;\n}\n\n"
 if text.count(old_helper) != 1:
     raise SystemExit(f'streamingScheduler.ts: expected one local admission helper, found {text.count(old_helper)}')
 scheduler.write_text(text.replace(old_helper, '', 1))
 
-# The isolated Node test target compiles the dependency-free policy, not the
-# application/renderer lifecycle pulled in by the full scheduler module.
 tsconfig = Path('tsconfig.test.json')
 text = tsconfig.read_text()
 old = '    "src/renderer/level0RegionPresentation.ts",\n    "src/renderer/renderSettings.ts"\n'
@@ -96,4 +93,43 @@ new = "await import('../.test-dist/src/renderer/streamingPolicy.js')"
 if text.count(old) != 1:
     raise SystemExit('dev8-corrective test: expected scheduler import exactly once')
 test_path.write_text(text.replace(old, new, 1))
+
+# Existing tests retain scheduler lifecycle/source assertions, but policy
+# constants now belong to streamingPolicy.ts.
+arch_test = Path('tests/arch-streaming-change.test.mjs')
+text = arch_test.read_text()
+old = "const streamingSource = await readFile(new URL('../src/renderer/streamingScheduler.ts', import.meta.url), 'utf8');\n"
+new = old + "const streamingPolicySource = await readFile(new URL('../src/renderer/streamingPolicy.ts', import.meta.url), 'utf8');\n"
+if text.count(old) != 1:
+    raise SystemExit('arch-streaming-change: expected streaming source declaration exactly once')
+text = text.replace(old, new, 1)
+for literal in ('predictiveExtraRings: 1', 'workBudgetMs: 2\\.25', 'maxHeavyJobsPerFrame: 1', 'unloadGraceMs: 1200'):
+    old_assert = f'assert.match(streamingSource, /{literal}/);'
+    new_assert = f'assert.match(streamingPolicySource, /{literal}/);'
+    if text.count(old_assert) != 1:
+        raise SystemExit(f'arch-streaming-change: expected policy assertion {old_assert!r}')
+    text = text.replace(old_assert, new_assert, 1)
+old_assert = 'assert.match(streamingSource, /const retentionRadius = loadRadius \\+ STREAMING_SCHEDULER_PROFILE\\.predictiveExtraRings/);'
+new_assert = 'assert.match(streamingPolicySource, /const retentionRadius = loadRadius \\+ STREAMING_SCHEDULER_PROFILE\\.predictiveExtraRings/);'
+if text.count(old_assert) != 1:
+    raise SystemExit('arch-streaming-change: expected retention policy assertion')
+text = text.replace(old_assert, new_assert, 1)
+old_assert = 'assert.match(streamingSource, /for \\(let offset = -loadRadius; offset <= loadRadius; offset \\+= 1\\)/);'
+new_assert = 'assert.match(streamingPolicySource, /for \\(let offset = -loadRadius; offset <= loadRadius; offset \\+= 1\\)/);'
+if text.count(old_assert) != 1:
+    raise SystemExit('arch-streaming-change: expected warm-coordinate policy assertion')
+arch_test.write_text(text.replace(old_assert, new_assert, 1))
+
+render_test = Path('tests/render-settings.test.mjs')
+text = render_test.read_text()
+old = "const streamingSource = await readFile(new URL('../src/renderer/streamingScheduler.ts', import.meta.url), 'utf8');\n"
+new = old + "const streamingPolicySource = await readFile(new URL('../src/renderer/streamingPolicy.ts', import.meta.url), 'utf8');\n"
+if text.count(old) != 1:
+    raise SystemExit('render-settings: expected streaming source declaration exactly once')
+text = text.replace(old, new, 1)
+old_assert = 'assert.match(streamingSource, /unloadGraceMs: 1200/);'
+new_assert = 'assert.match(streamingPolicySource, /unloadGraceMs: 1200/);'
+if text.count(old_assert) != 1:
+    raise SystemExit('render-settings: expected unload grace assertion')
+render_test.write_text(text.replace(old_assert, new_assert, 1))
 PY
