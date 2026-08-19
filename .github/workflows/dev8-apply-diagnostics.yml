@@ -5,6 +5,8 @@ on:
     paths:
       - dev/dev8-diagnostics-transform.sh
       - .github/workflows/dev8-apply-diagnostics.yml
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
