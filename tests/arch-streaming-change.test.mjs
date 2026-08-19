@@ -12,6 +12,7 @@ const { resolveGeometry, geometryIsFinite, hasDuplicateTriangles } = await impor
 const { LEVEL0_FEATURE_PRESENTATION_REGISTRY, MEDIUM_BUCKET_TARGET, SMALL_GREY_OPEN_PAINT_CAN_TARGET } = await import('../.test-dist/src/presentation/level0FeatureRepresentations.js');
 const { resolveRepresentation } = await import('../.test-dist/src/presentation/registry.js');
 const streamingSource = await readFile(new URL('../src/renderer/streamingScheduler.ts', import.meta.url), 'utf8');
+const streamingPolicySource = await readFile(new URL('../src/renderer/streamingPolicy.ts', import.meta.url), 'utf8');
 const batchingSource = await readFile(new URL('../src/renderer/StaticWorldBatching.ts', import.meta.url), 'utf8');
 const archPresentationSource = await readFile(new URL('../src/renderer/level0RegionPresentation.ts', import.meta.url), 'utf8');
 const featurePresentationSource = await readFile(new URL('../src/renderer/level0FeaturePresentation.ts', import.meta.url), 'utf8');
@@ -134,12 +135,12 @@ test('CV-H1 depth bands preserve an illuminated upper shaft and hide the deep te
 });
 
 test('streaming scheduler predicts into only the existing retention ring and budgets heavy work', () => {
-  assert.match(streamingSource, /predictiveExtraRings: 1/);
-  assert.match(streamingSource, /workBudgetMs: 2\.25/);
-  assert.match(streamingSource, /maxHeavyJobsPerFrame: 1/);
-  assert.match(streamingSource, /unloadGraceMs: 1200/);
-  assert.match(streamingSource, /const retentionRadius = loadRadius \+ STREAMING_SCHEDULER_PROFILE\.predictiveExtraRings/);
-  assert.match(streamingSource, /for \(let offset = -loadRadius; offset <= loadRadius; offset \+= 1\)/);
+  assert.match(streamingPolicySource, /predictiveExtraRings: 1/);
+  assert.match(streamingPolicySource, /workBudgetMs: 2\.25/);
+  assert.match(streamingPolicySource, /maxHeavyJobsPerFrame: 1/);
+  assert.match(streamingPolicySource, /unloadGraceMs: 1200/);
+  assert.match(streamingPolicySource, /const retentionRadius = loadRadius \+ STREAMING_SCHEDULER_PROFILE\.predictiveExtraRings/);
+  assert.match(streamingPolicySource, /for \(let offset = -loadRadius; offset <= loadRadius; offset \+= 1\)/);
   assert.match(streamingSource, /processOneJob\(this\)/);
   assert.equal(streamingSource.includes("enqueue(scheduler, 'refresh', x, z"), false);
   assert.match(streamingSource, /visual\.root\.enabled = false/);
