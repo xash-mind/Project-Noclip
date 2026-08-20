@@ -6,7 +6,7 @@ const core = await import('../.test-dist/src/world/gen3ArchitectureCore.js');
 const { generateCell } = await import('../.test-dist/src/world/generator.js');
 const { DEFAULT_TUNING } = await import('../.test-dist/src/world/types.js');
 const { routeReservationEnvelopesForCell } = await import('../.test-dist/src/world/gen3SpaceTopologyBuild.js');
-const { archFramePresentationProfile, holeDepthBands } = await import('../.test-dist/src/renderer/level0RegionPresentation.js');
+const { archFramePresentationProfile, archFrameVisibleVolumesForDescriptors, holeDepthBands } = await import('../.test-dist/src/renderer/level0RegionPresentation.js');
 const { OBJECT_CATALOG, validateObjectCatalog } = await import('../.test-dist/src/renderer/objectCatalog.js');
 const { resolveGeometry, geometryIsFinite, hasDuplicateTriangles } = await import('../.test-dist/src/presentation/geometry.js');
 const { LEVEL0_FEATURE_PRESENTATION_REGISTRY, MEDIUM_BUCKET_TARGET, SMALL_GREY_OPEN_PAINT_CAN_TARGET } = await import('../.test-dist/src/presentation/level0FeatureRepresentations.js');
@@ -147,8 +147,16 @@ test('streaming scheduler predicts into only the existing retention ring and bud
 });
 
 test('A-A1 shared-pier upper mass has canonical single-surface ownership', () => {
-  assert.match(archPresentationSource, /function rectangularUpperRuns/);
-  assert.match(archPresentationSource, /const upperRuns = rectangularUpperRuns\(bays, activeSupportIntervals\)/);
+  const descriptor = cell('single-surface-owner', 0, 0, 'arch-rooms');
+  const volumes = archFrameVisibleVolumesForDescriptors([descriptor]);
+  for (let left = 0; left < volumes.length; left += 1) for (let right = left + 1; right < volumes.length; right += 1) {
+    const a = volumes[left]; const b = volumes[right];
+    const overlap = a.lineKey === b.lineKey
+      && a.end > b.start + 1e-6 && a.start < b.end - 1e-6
+      && a.maxY > b.minY + 1e-6 && a.minY < b.maxY - 1e-6;
+    assert.equal(overlap, false, `${a.id} overlapped ${b.id}`);
+  }
+  assert.match(archPresentationSource, /const upperIntervals = subtractIntervals\(rectangularUpperRuns\(bays, activePiers\), terminationIntervals\)/);
   assert.match(archPresentationSource, /const clip = clippedInterval\(descriptor, bay\.orientation, bay\.curveStart, bay\.curveEnd\)/);
   assert.match(archPresentationSource, /entersFromPreviousCell/);
   assert.match(archPresentationSource, /continuesIntoNextCell/);
