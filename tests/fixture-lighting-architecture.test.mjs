@@ -32,7 +32,10 @@ test('runtime keeps fixture identities but bounds realtime Omni participation to
   assert.ok(fixtureLightingSource.includes('cellIsInsideActiveRenderScope(renderer, runtime.descriptor)'));
   assert.ok(fixtureLightingSource.includes('group.fixtures.forEach'));
   assert.ok(fixtureLightingSource.includes('state.fixtures.set(id'));
-  assert.ok(fixtureLightingSource.includes('a.distance - b.distance || a.runtime.id.localeCompare(b.runtime.id)'));
+  assert.ok(fixtureLightingSource.includes('fixtureInfluenceIntersectsView(runtime, frustum)'));
+  assert.ok(fixtureLightingSource.includes('if (a.runtime.selected !== b.runtime.selected) return a.runtime.selected ? -1 : 1'));
+  assert.ok(fixtureLightingSource.includes('Math.floor(a.distance / FIXTURE_DISTANCE_BUCKET_METERS)'));
+  assert.ok(fixtureLightingSource.includes("participationPolicy: 'camera-frustum-intersecting-influence-with-margin-and-retention'"));
   assert.equal(fixtureLightingSource.includes('MAX_ACTIVE_FIXTURE_LIGHTS = 8'), false);
 });
 
