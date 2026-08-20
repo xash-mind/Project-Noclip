@@ -1,6 +1,5 @@
 import * as pc from 'playcanvas';
 import { CELL_SIZE } from '../world/types.js';
-import { installArchDividerRuntimeCorrection } from './archDividerRuntimeCorrection.js';
 import { isMFluorescentPanelVisualName } from './fixtureVisualOwnership.js';
 import { installFixtureLighting } from './fixtureLighting.js';
 import { installLevel0RegionPresentation } from './level0RegionPresentation.js';
@@ -78,7 +77,6 @@ export function installStaticWorldBatching(): void {
   if (installed) return;
   installed = true;
   installLevel0RegionPresentation();
-  installArchDividerRuntimeCorrection();
   installFixtureLighting();
   let currentApp: BatchApplication | undefined;
   let nextGroupId = STATIC_WORLD_BATCH_GROUP_ID_START;
