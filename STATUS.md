@@ -1,11 +1,12 @@
 # Project Status
 
-**Last reconciled:** 2026-08-18 (Asia/Kolkata)  
+**Last reconciled:** 2026-08-19 (Asia/Kolkata)  
 **Canonical production:** https://project-noclip.vercel.app  
 **Visible release version:** `v0.3.0-dev.8`  
 **Release checkpoint:** **DEV.8 — POST-PAU CLEAN RECOVERY CHECKPOINT**  
 **Recovery anchor:** `4e96157bb9a85564ff9ab381ce19370fe0f3373d`  
 **Release PR:** GitHub PR #61 — `release/dev8-post-pau-recovery`  
+**Dev.8 corrective candidate:** draft PR #64 — `dev8-traversal-aa1-ownership`  
 **Previous production baseline:** `v0.3.0-dev.7` / `8fe71c43b6050ab69b00711116c896f3e52a9337`  
 **Production release evidence:** the exact promoted commit and deployment verification are recorded on PR #61 by the release/production-smoke path after promotion  
 **Save schema:** `v2`  
@@ -15,34 +16,54 @@
 
 ## Current accepted release
 
-Dev.8 is an intentionally conservative recovery checkpoint. It restores Project Noclip to the clean post-PAU / Noclip Studio architecture at `4e96157bb9a85564ff9ab381ce19370fe0f3373d`, then adds only release-verification/documentation compatibility work that does not alter deterministic world truth or the recovered renderer runtime.
+Canonical production remains `v0.3.0-dev.8`. Draft PR #64 is a bounded post-release Dev.8 corrective candidate and is **not** merged or production-deployed.
 
-Dev.8 deliberately **does not preserve the latest A-A1 visual redesign**. The later Arch repair/reconstruction chain is abandoned for this checkpoint because it introduced overlapping presentation ownership and eventually reproduced a real PlayCanvas shadow/render-target failure under World Lab Region relocation.
+Dev.8 remains an intentionally conservative post-PAU recovery checkpoint. It retains PAU/Noclip Studio foundations, deterministic Generation 3 identity, frozen Generation 2 compatibility, schema-v2 saves, existing world laws and the one-to-one M-F1 active-light/shadow rule.
 
-The recovered release keeps:
+The discarded post-PAU correction chain remains discarded. `archSmoothPresentationCorrection.ts` is not restored. The corrective candidate does not begin Dev.9, Noclip Studio continuous-sync or the planned visibility-driven renderer architecture.
 
-- PAU Run 1 presentation architecture and Representation bindings;
-- PAU Run 2 / Noclip Studio foundation;
-- DevelopmentContext and ChangeReceipt contracts;
-- asset validation/fallback architecture and production Studio bridge exclusion;
-- deterministic Generation 3 world identity and frozen Generation 2 save compatibility;
-- the clean anchor's Arch presentation/collision behavior;
-- the clean post-PAU streaming/static-batching implementation;
-- the retained fixture-light architecture in which active M-F1 Omnis and active shadow-casting M-F1 Omnis remain one-to-one.
+## Dev.8 corrective candidate — physical-device failure reconciliation
 
-The discarded post-anchor A-A1 chain includes the reconstruction/correction sequence beginning at `f3fd36e1a527ebb6cd1ec98802526a2bbda4daa3`, through `dd841f747cb3f028bd3c15d366589e945ec2be5e`, `dd0d919f3f5935f1ddc0ef2d832bccb55f012775`, `6c17f6789dd3023083dedfa33c2425de2327ef2e`, `ee3be744e6557b29d1299042aea1b4b4d75ec781`, and the later `studio-test` repair work. `archSmoothPresentationCorrection.ts` is not part of Dev.8.
+Physical testing has now supplied real failure evidence and must no longer be described as merely unverified:
 
-## Recovery evidence
+- Device A is playable but substantially slow/laggy and exposed visible A-A1 pier/upper-mass overlap plus selective unintended Arch-head/neighbor-wall connector geometry.
+- Device B can begin smoothly, then under fast traversal stop updating the rendered image, develop blue/grey dot-like corruption and subsequently crash.
+- These observations are treated as separate geometry-ownership, steady-render cost, traversal-spike and possible GPU/WebGL/device-failure questions rather than one assumed cause.
 
-- Exact recovery anchor `4e96157` passed the real Chromium Region-locator journey that exposed the regression: Ordinary → Arch → Pillar → Arch → Ordinary → Arch.
-- That anchor run preserved ordinary loaded Cell geometry/colliders through the transitions and produced no blocking PlayCanvas ShadowRenderer/render-target exception.
-- Representative generated descriptor snapshots for the Dev.8 recovery candidate are byte-identical to the recovery anchor, including the located Arch occurrence and surrounding Cells.
-- World seed outcomes, `generationVersion`, save schema, Cell identities, Region geography, generated wall/Feature identity and topology remain unchanged by the recovery.
-- No renderer, world-generation, lighting, movement, gameplay, save, static-batching or A-A1 runtime implementation is changed from the recovery anchor by the release-record work itself.
+Draft PR #64 confirms and corrects two A-A1 presentation-ownership defects without changing generated world truth or accepted Arch dimensions:
+
+- reconstructed visible piers previously occupied the same upper volume as the reconstructed upper mass; visible presentation now gives the upper mass sole ownership of that intersection while preserving the continuous semantic/collision pier footprint;
+- broad pale-wall support inference plus a 4.1 m header-gap bridge could selectively admit a full-height termination or unrelated pale wall into A-A1 reconstruction; those inference paths are removed while real touching/cross-Cell continuity remains supported.
+
+The same candidate confirms a Dev.8 streaming scheduling defect:
+
+- the advertised `2.25 ms` / one-heavy-job contract was not actually enforced;
+- one queued synchronous heavy Cell operation could run before the ordinary update and a boundary reconciliation could then synchronously perform another Cell build in the same rendered frame;
+- the candidate now measures frame-scoped heavy work, admits at most one heavy Cell operation in a rendered update, gives current/directional safety work priority, bounds the queue, recalculates predictive work after direction changes and removes the arbitrary extra missing-Cell emergency build.
+
+A single synchronous Cell operation is still indivisible and may itself exceed 2.25 ms; this is recorded as a budget overrun and prevents any second heavy operation in that frame rather than pretending the operation was pre-empted.
+
+The candidate also removes proven redundant renderer work without changing participation semantics:
+
+- invariant M-F1 light properties are no longer rewritten for every resident fixture every frame;
+- unchanged panel material/intensity/enabled values are not rewritten;
+- per-Cell static batching no longer recursively scans a clean residency/presentation graph every 100 ms, but retains the same grouping/output and becomes dirty on actual Cell ownership changes.
+
+Local-only diagnostics now record streaming queue/heavy-work timing, A-A1 reconstruction, fixture/shadow lifecycle, static batching, rendered-frame distributions and bounded failure context. `webglcontextlost` / `webglcontextrestored` and PlayCanvas device-loss/restoration signals are observed without creating a second renderer lifecycle owner or sending external telemetry.
+
+## Corrective verification state
+
+The corrective source has passed strict TypeScript, the full 123-test suite, PAU validation, Studio validation/security-boundary smoke, Generation 2/Generation 3 identity coverage, Arch route/collision and A-A1 reconstruction tests, fixture/render-settings/streaming/static-batching tests, the 10,000-Cell benchmark and production build before final browser evidence is accepted.
+
+The corrected scheduler evidence proves one heavy Cell operation maximum per rendered update in the measured stress scenarios, bounded queue depth and zero measured cold-boundary emergency loads. The measured heavy Cell work is in millisecond-scale territory while full High-preset SwiftShader rendered frames can still reach multi-second stalls. That means the original scheduling defect was real and corrected, but it is not sufficient to explain or eliminate all High-preset rendering cost.
+
+Canonical production Dev.8 showed multi-second High-preset traversal frames under software Chromium/SwiftShader while its old boundary metric reported only single-digit milliseconds, proving that the old metric materially underrepresented the whole rendered-frame failure path. The corrected candidate materially improves some stress samples and removes the double-heavy/cold-emergency path, but High remains expensive on the software renderer and therefore is **not** being declared safe for all physical-device classes from headless evidence.
+
+Natural WebGL/context loss has not been reproduced automatically. The bounded forced device-loss diagnostic path has been exercised successfully. The physical blue/grey corruption/crash therefore remains compatible with a GPU/context/device failure hypothesis but is not proven to have that cause until the candidate is retested on the affected physical devices.
 
 ## Verification contract
 
-Dev.8 release acceptance requires the exact final release candidate to pass:
+Dev.8 corrective acceptance requires the exact final candidate to pass:
 
 - strict TypeScript;
 - the full deterministic/system test suite;
@@ -51,21 +72,24 @@ Dev.8 release acceptance requires the exact final release candidate to pass:
 - Generation 2 deterministic/save compatibility tests;
 - Generation 3 deterministic/world-identity tests;
 - Region generation/locator and Arch route/collision tests;
+- A-A1 ownership/reconstruction regressions;
 - fixture-light, render-settings and streaming/static-batching tests;
 - the 10,000-Cell generator benchmark;
 - production build and production Studio-boundary check;
 - real Chromium desktop/mobile/world-cohesion journeys, including repeated Arch/Pillar/Ordinary Region relocation with no severe browser errors;
-- Renderer Regression under the post-PAU shadow-aware budget, explicitly requiring `activeOmnis == shadowedOmnis`;
+- Renderer Regression, explicitly requiring `activeOmnis == shadowedOmnis`;
 - blocking World/Region + fidelity browser evidence;
-- main-branch CI and bounded production smoke after promotion.
+- corrected High-preset deterministic traversal baselines covering Ordinary enclosed/long-sightline, Arch, normal Pillar and deep/open Pillar cases;
+- physical-device retest before the Device A / Device B failures can be called accepted as resolved.
 
-The exact Actions/deployment evidence is kept on PR #61 and its release artifacts so the repository does not need a post-release code commit merely to backfill a deployment SHA.
+The candidate remains a distance-based square-radius renderer. It does **not** implement camera-frustum optimization, portal/topology visibility, visibility-driven Cell scope, visibility-driven light selection, a Visibility Snapshot architecture or Non-Euclidean observer rendering.
 
 ## Verification calibration retained for Dev.8
 
 Dev.7-era renderer and visual workflows contained assumptions that predated the retained post-PAU renderer. Dev.8 keeps the useful checks while avoiding unrelated visual redesign during recovery:
 
 - Renderer Regression uses bounded post-PAU draw-call budgets and blocks any violation of the active-light/shadow one-to-one invariant rather than disabling shadows to match the older Dev.7 budget.
+- Canonical-production comparison failures caused by the known Dev.8 traversal stall are preserved as evidence but do not prevent the candidate from being checked against absolute renderer, save, Cell-cardinality and browser-error budgets.
 - World/Region and fidelity browser evidence remains blocking.
 - Legacy headless luminance, pulse-timing and screenshot calibration is retained as diagnostic evidence rather than a reason to retune Level 0 during this recovery checkpoint.
 
@@ -78,22 +102,25 @@ Dev.7-era renderer and visual workflows contained assumptions that predated the 
 - Presentation truth separated from deterministic world identity;
 - PAU as the canonical representation/asset architecture;
 - Noclip Studio foundation retained behind development/security boundaries;
-- Manila/Transition laws, frozen Gen2 isolation and existing movement/gameplay behavior.
+- Manila/Transition laws, frozen Gen2 isolation and existing movement/gameplay behavior;
+- active M-F1 Omnis and active shadow-casting M-F1 Omnis remain one-to-one.
 
 ## Remaining known gaps
 
-- The latest accepted smooth A-A1 appearance is intentionally deferred. Future Arch work must rebuild it directly in the authoritative A-A1 presentation owner from Dev.8 rather than restoring the discarded correction chain.
+- Physical acceptance is pending on both reported devices. Desktop/headless/software-renderer success cannot close that gate.
+- High remains a costly current-renderer baseline on software Chromium/SwiftShader even after the confirmed streaming and redundant-work corrections. A later device-quality decision may still be required for weaker hardware, but the default preset is not changed in this corrective run.
+- The separate visibility-driven renderer pilot is planned but not implemented here. It must compare against the corrected distance-based Dev.8 baseline rather than being smuggled into this corrective run.
 - Noclip Studio continuous-sync remains future work and is not part of Dev.8.
-- Physical Android/iOS GPU cost for the retained shadowed fixture-light architecture still requires real-device playtesting.
-- Legacy headless visual-calibration diagnostics can remain runner-sensitive; they are evidence aids, not substitutes for the blocking world/fidelity and production browser journeys.
+- Legacy headless visual-calibration diagnostics can remain runner-sensitive; they are evidence aids, not substitutes for the blocking world/fidelity and physical-device journeys.
 - Perceptual audio quality remains unverified unless actually listened to.
 
 ## Important links
 
 - Repository: https://github.com/xash-mind/Project-Noclip
 - Dev.8 release PR: https://github.com/xash-mind/Project-Noclip/pull/61
+- Dev.8 corrective PR: https://github.com/xash-mind/Project-Noclip/pull/64
 - Superseded forward-recovery PR: https://github.com/xash-mind/Project-Noclip/pull/60
 - Production: https://project-noclip.vercel.app
-- Generation 3 architecture: https://github.com/xash-mind/Project-Noclip/issues/31
-- Level 0 fidelity: https://github.com/xash-mind/Project-Noclip/issues/37
+- Generation 3 architecture/performance tracking: https://github.com/xash-mind/Project-Noclip/issues/31
+- Level 0 fidelity/A-A1 tracking: https://github.com/xash-mind/Project-Noclip/issues/37
 - Presentation architecture: `docs/PRESENTATION_ARCHITECTURE.md`

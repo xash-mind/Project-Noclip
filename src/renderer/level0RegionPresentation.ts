@@ -66,7 +66,6 @@ const carpetClones = new WeakMap<pc.StandardMaterial, Map<string, pc.StandardMat
 let installed = false;
 const CARPET_REPEAT_METERS = CELL_SIZE / 5;
 const ARCH_CURVE_SEGMENTS = 18;
-const ARCH_HEADER_BRIDGE_MAX_GAP = 4.1;
 const ARCH_UPPER_BOTTOM = 1.92;
 const ARCH_UPPER_TOP = WALL_HEIGHT - 0.24;
 const ARCH_CURVE_APEX = Math.min(ARCH_UPPER_TOP - 0.24, 2.46);
@@ -254,9 +253,10 @@ function isArchLower(wall: WallSpec): boolean {
     && Math.abs(wall.sy - ARCH_LOWER_HEIGHT) < 0.065
     && wallMinY(wall) <= 0.045;
 }
-function isArchVerticalSolid(wall: WallSpec): boolean {
+function isArchPierSupport(wall: WallSpec): boolean {
   const headerBottom = WALL_HEIGHT - ARCH_HEADER_HEIGHT;
   return wall.materialId === 'arch-pale-wallpaper'
+    && wallMinY(wall) > 0.04
     && wallMinY(wall) <= ARCH_LOWER_HEIGHT + 0.065
     && wallMaxY(wall) >= headerBottom - 0.045
     && wall.sy > 1.35;
@@ -309,7 +309,7 @@ function archLinesForDescriptors(descriptors: readonly CellDescriptor[]): Map<st
   for (const descriptor of descriptors) {
     if (descriptor.world.generationVersion !== 'gen3-v1') continue;
     for (const wall of descriptor.walls) {
-      if (!isArchLower(wall) && !isArchVerticalSolid(wall)) continue;
+      if (!isArchLower(wall) && !isArchPierSupport(wall)) continue;
       const world = toWorldArchWall(descriptor, wall);
       const key = `${world.orientation}:${world.fixed.toFixed(3)}`;
       const line = lines.get(key);
@@ -317,23 +317,17 @@ function archLinesForDescriptors(descriptors: readonly CellDescriptor[]): Map<st
       const headerIntervals = mergeIntervals(line.headers.map((header) => [header.start, header.end] as const));
       if (!headerIntervals.some((header) => overlapsInterval(header, [world.start, world.end]))) continue;
       if (isArchLower(wall)) line.lowers.push(world);
-      if (isArchVerticalSolid(wall)) line.solids.push(world);
+      if (isArchPierSupport(wall)) line.solids.push(world);
     }
   }
   return lines;
 }
 
 function mergedHeaderRuns(line: WorldArchLine): Interval[] {
-  const raw = mergeIntervals(line.headers.map((header) => [header.start, header.end] as const));
-  if (raw.length < 2) return raw;
-  const bridged: Array<[number, number]> = [];
-  for (const interval of raw) {
-    const previous = bridged[bridged.length - 1];
-    const gap = previous ? interval[0] - previous[1] : Number.POSITIVE_INFINITY;
-    if (previous && gap > 0.03 && gap <= ARCH_HEADER_BRIDGE_MAX_GAP) previous[1] = interval[1];
-    else bridged.push([interval[0], interval[1]]);
-  }
-  return bridged;
+  // Real Cell seams already meet within mergeIntervals' 3 cm continuity
+  // tolerance. Never bridge a larger semantic gap: route/termination cuts are
+  // world truth and must not be reinterpreted as an Arch header continuation.
+  return mergeIntervals(line.headers.map((header) => [header.start, header.end] as const));
 }
 
 function curveWidthForBay(width: number): number {
@@ -395,6 +389,48 @@ function rectangularUpperRuns(bays: readonly ArchFrameBay[], supports: readonly 
     intervals.push([bay.start, bay.curveStart], [bay.curveEnd, bay.end]);
   }
   return mergeIntervals(intervals);
+}
+
+export interface ArchFrameVisibleVolume {
+  id: string;
+  role: 'pier-lower' | 'upper-mass' | 'pier-upper';
+  lineKey: string;
+  start: number;
+  end: number;
+  minY: number;
+  maxY: number;
+}
+
+/** Pure geometry ownership view used by regression tests and diagnostics. */
+export function archFrameVisibleVolumesForDescriptors(descriptors: readonly CellDescriptor[]): ArchFrameVisibleVolume[] {
+  const volumes: ArchFrameVisibleVolume[] = [];
+  for (const line of archLinesForDescriptors(descriptors).values()) {
+    const bays = frameBaysForLine(line);
+    const supports = mergeIntervals(line.solids.map((wall) => [wall.start, wall.end] as const))
+      .filter((support) => bays.some((bay) => Math.abs(support[1] - bay.start) < 0.08 || Math.abs(support[0] - bay.end) < 0.08));
+    const upperRuns = rectangularUpperRuns(bays, supports);
+    supports.forEach((support, index) => {
+      volumes.push({
+        id: `${line.key}:pier-lower:${index}`,
+        role: 'pier-lower',
+        lineKey: line.key,
+        start: support[0], end: support[1], minY: 0, maxY: ARCH_UPPER_BOTTOM
+      });
+      volumes.push({
+        id: `${line.key}:pier-upper:${index}`,
+        role: 'pier-upper',
+        lineKey: line.key,
+        start: support[0], end: support[1], minY: ARCH_UPPER_TOP, maxY: WALL_HEIGHT
+      });
+    });
+    upperRuns.forEach((run, index) => volumes.push({
+      id: `${line.key}:upper-mass:${index}`,
+      role: 'upper-mass',
+      lineKey: line.key,
+      start: run[0], end: run[1], minY: ARCH_UPPER_BOTTOM, maxY: ARCH_UPPER_TOP
+    }));
+  }
+  return volumes;
 }
 
 export function archFrameBaysForDescriptors(descriptors: readonly CellDescriptor[]): ArchFrameBay[] {
@@ -653,7 +689,7 @@ function clearArchFrameVisuals(visual: CellVisual): void {
 function resetSemanticArchMeshes(visual: CellVisual): void {
   for (const wall of visual.descriptor.walls) {
     if (wall.materialId !== 'arch-pale-wallpaper') continue;
-    if (!isArchHeader(wall) && !isArchLower(wall) && !isArchVerticalSolid(wall)) continue;
+    if (!isArchHeader(wall) && !isArchLower(wall) && !isArchPierSupport(wall)) continue;
     const source = entityByName(visual.root, wall.id);
     if (source?.render) source.render.enabled = true;
   }
@@ -667,6 +703,7 @@ function hideSemanticDividerMeshes(visual: CellVisual, ids: Set<string>): void {
 }
 
 function renderArchFrames(renderer: WorldRenderer, targetCellIds?: ReadonlySet<string>): void {
+  const reconstructionStart = performance.now();
   const visuals = [...renderer.loaded.values()];
   const targetVisuals = targetCellIds ? visuals.filter((visual) => targetCellIds.has(visual.descriptor.id)) : visuals;
   const descriptors = visuals.map((visual) => visual.descriptor);
@@ -694,15 +731,30 @@ function renderArchFrames(renderer: WorldRenderer, targetCellIds?: ReadonlySet<s
       if (visual.descriptor.world.generationVersion !== 'gen3-v1') continue;
       for (let index = 0; index < activeSupportIntervals.length; index += 1) {
         const support = activeSupportIntervals[index]!;
+        // The upper mass owns its full intersection volume. The visible pier is
+        // split only in presentation; semantic/collision ownership stays continuous.
         addWorldBoxClipped(
           visual,
-          `pier:${line.key}:${index}`,
+          `pier-lower:${line.key}:${index}`,
           line.orientation,
           line.fixed,
           support[0],
           support[1],
-          WALL_HEIGHT / 2,
-          WALL_HEIGHT,
+          ARCH_UPPER_BOTTOM / 2,
+          ARCH_UPPER_BOTTOM,
+          ARCH_PIER_DEPTH,
+          pierMaterial
+        );
+        const upperPierHeight = WALL_HEIGHT - ARCH_UPPER_TOP;
+        addWorldBoxClipped(
+          visual,
+          `pier-upper:${line.key}:${index}`,
+          line.orientation,
+          line.fixed,
+          support[0],
+          support[1],
+          ARCH_UPPER_TOP + upperPierHeight / 2,
+          upperPierHeight,
           ARCH_PIER_DEPTH,
           pierMaterial
         );
@@ -742,6 +794,11 @@ function renderArchFrames(renderer: WorldRenderer, targetCellIds?: ReadonlySet<s
       }
     }
   }
+  const reconstructionMs = performance.now() - reconstructionStart;
+  archPresentationDiagnostics.reconstructionCalls += 1;
+  archPresentationDiagnostics.reconstructedCells += targetVisuals.length;
+  archPresentationDiagnostics.reconstructionMs += reconstructionMs;
+  archPresentationDiagnostics.maxReconstructionMs = Math.max(archPresentationDiagnostics.maxReconstructionMs, reconstructionMs);
 }
 
 function applyRegionPresentation(renderer: WorldRenderer, visual: CellVisual): void {
@@ -755,6 +812,24 @@ function applyRegionPresentation(renderer: WorldRenderer, visual: CellVisual): v
  * topology/collision ownership; A-A1 is reconstructed from those world-space
  * divider runs so streaming Cells only clip one continuous heavy frame.
  */
+export interface ArchPresentationDiagnostics {
+  reconstructionCalls: number;
+  reconstructedCells: number;
+  reconstructionMs: number;
+  maxReconstructionMs: number;
+}
+
+const archPresentationDiagnostics: ArchPresentationDiagnostics = {
+  reconstructionCalls: 0,
+  reconstructedCells: 0,
+  reconstructionMs: 0,
+  maxReconstructionMs: 0
+};
+
+export function archPresentationDiagnosticsSnapshot(): ArchPresentationDiagnostics {
+  return { ...archPresentationDiagnostics };
+}
+
 const pendingArchCells = new WeakMap<WorldRenderer, Set<string>>();
 const scheduledArchFlush = new WeakSet<WorldRenderer>();
 

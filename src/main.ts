@@ -4,6 +4,7 @@ import { installLevel0SurfacePresentation } from './renderer/level0SurfacePresen
 import { installRenderSettingsRuntime } from './renderer/renderSettingsRuntime.js';
 import { installPauFeaturePresentationPilot } from './renderer/pauFeaturePresentationPilot.js';
 import { installStaticWorldBatching } from './renderer/StaticWorldBatching.js';
+import { installRendererRuntimeDiagnostics } from './renderer/rendererRuntimeDiagnostics.js';
 import { mountDevelopmentVersionIndicator } from './ui/DevelopmentVersionIndicator.js';
 import { installRegionDepthLab } from './ui/regionDepthLab.js';
 import { installRenderSettingsLab } from './ui/renderSettingsLab.js';
@@ -12,6 +13,7 @@ installLevel0SurfacePresentation();
 installRenderSettingsRuntime();
 installPauFeaturePresentationPilot();
 installStaticWorldBatching();
+installRendererRuntimeDiagnostics();
 mountDevelopmentVersionIndicator();
 
 const game = new ProjectNoclipGame();

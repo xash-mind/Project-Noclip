@@ -20,5 +20,6 @@ test('distance-scaled M-F1 budgets never create a smaller independent shadow poo
   assert.equal(fixtureSource.includes('MAX_ACTIVE_SHADOW'), false);
   assert.equal(fixtureSource.includes('shadowCandidates'), false);
   assert.ok(fixtureSource.includes("shadowCountPolicy: 'one-to-one-with-active-lights'"));
-  assert.ok(fixtureSource.includes('light.castShadows = true'));
+  assert.ok(fixtureSource.includes('castShadows: true'));
+  assert.ok(fixtureSource.includes("shadowCountPolicy: 'one-to-one-with-active-lights'"));
 });

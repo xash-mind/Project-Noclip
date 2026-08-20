@@ -8,52 +8,18 @@ import type { CellDescriptor, WorldTuning } from '../world/types.js';
 import type { WorldRenderer } from './WorldRenderer.js';
 import { getRenderSettings, renderDistanceProfile, setRendererRenderScope } from './renderSettings.js';
 
-export const STREAMING_SCHEDULER_PROFILE = Object.freeze({
-  workBudgetMs: 2.25,
-  maxHeavyJobsPerFrame: 1,
-  unloadGraceMs: 1200,
-  predictiveExtraRings: 1
-});
-
-export type StreamingRetentionDisposition = 'active' | 'retained' | 'unload';
-export function streamingRetentionDisposition(distance: number, loadRadius: number, retentionRadius: number): StreamingRetentionDisposition {
-  if (distance <= loadRadius) return 'active';
-  if (distance <= retentionRadius) return 'retained';
-  return 'unload';
-}
-
-export interface WarmCoordinate { x: number; z: number; priority: number; }
-export function predictiveWarmCoordinates(
-  centerX: number,
-  centerZ: number,
-  loadRadius: number,
-  directionX: number,
-  directionZ: number
-): WarmCoordinate[] {
-  if (Math.hypot(directionX, directionZ) < 0.08) return [];
-  const retentionRadius = loadRadius + STREAMING_SCHEDULER_PROFILE.predictiveExtraRings;
-  const length = Math.hypot(directionX, directionZ) || 1;
-  const nx = directionX / length;
-  const nz = directionZ / length;
-  const result = new Map<string, WarmCoordinate>();
-  const add = (x: number, z: number, priority: number): void => {
-    const id = `${x}:${z}`;
-    const existing = result.get(id);
-    if (!existing || priority < existing.priority) result.set(id, { x, z, priority });
-  };
-  if (Math.abs(nx) >= 0.2) {
-    const x = centerX + Math.sign(nx) * retentionRadius;
-    for (let offset = -loadRadius; offset <= loadRadius; offset += 1) add(x, centerZ + offset, 10 + Math.abs(offset));
-  }
-  if (Math.abs(nz) >= 0.2) {
-    const z = centerZ + Math.sign(nz) * retentionRadius;
-    for (let offset = -loadRadius; offset <= loadRadius; offset += 1) add(centerX + offset, z, 10 + Math.abs(offset));
-  }
-  if (Math.abs(nx) >= 0.2 && Math.abs(nz) >= 0.2) {
-    add(centerX + Math.sign(nx) * retentionRadius, centerZ + Math.sign(nz) * retentionRadius, 9);
-  }
-  return [...result.values()].sort((left, right) => left.priority - right.priority || left.x - right.x || left.z - right.z);
-}
+import {
+  STREAMING_SCHEDULER_PROFILE,
+  predictiveWarmCoordinates,
+  streamingFrameCanRunHeavyWork
+} from './streamingPolicy.js';
+export {
+  STREAMING_SCHEDULER_PROFILE,
+  predictiveWarmCoordinates,
+  streamingFrameCanRunHeavyWork,
+  streamingRetentionDisposition
+} from './streamingPolicy.js';
+export type { StreamingRetentionDisposition, WarmCoordinate } from './streamingPolicy.js';
 
 interface RenderControl { autoRender: boolean; renderNextFrame: boolean; }
 interface CameraAccess { getPosition(): { x: number; z: number }; }
@@ -73,9 +39,12 @@ interface GameStreamingAccess {
 }
 interface RuntimePrototype { update(this: ProjectNoclipGame, dt: number): void; }
 type JobKind = 'prepare' | 'refresh' | 'unload';
-interface StreamJob { key: string; kind: JobKind; x: number; z: number; priority: number; serial: number; notBefore: number; }
+interface StreamJob {
+  key: string; kind: JobKind; x: number; z: number; priority: number; serial: number; notBefore: number; predictive: boolean;
+}
 export interface StreamingDiagnostics {
   queueDepth: number;
+  queueDepthPeak: number;
   predictiveWarmLoads: number;
   coldBoundaryLoads: number;
   generatedCells: number;
@@ -90,6 +59,15 @@ export interface StreamingDiagnostics {
   cellUnloadMs: number;
   boundaryReconcileMs: number;
   regionRefreshMs: number;
+  lastHeavyOperations: number;
+  maxHeavyOperations: number;
+  lastHeavyMs: number;
+  maxHeavyMs: number;
+  heavyBudgetDeferrals: number;
+  heavyBudgetOverruns: number;
+  lastHeavyOperation?: { kind: JobKind | 'required-current'; x: number; z: number; durationMs: number };
+  lastUpdateMs: number;
+  maxUpdateMs: number;
 }
 interface SchedulerState {
   jobs: Map<string, StreamJob>;
@@ -101,6 +79,9 @@ interface SchedulerState {
   lastCellX?: number;
   lastCellZ?: number;
   diagnostics: StreamingDiagnostics;
+  frameActive: boolean;
+  frameHeavyOperations: number;
+  frameHeavyMs: number;
 }
 
 const states = new WeakMap<ProjectNoclipGame, SchedulerState>();
@@ -109,12 +90,16 @@ let installed = false;
 function access(game: ProjectNoclipGame): GameStreamingAccess { return game as unknown as GameStreamingAccess; }
 function now(): number { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
 function createDiagnostics(): StreamingDiagnostics {
-  return { queueDepth: 0, predictiveWarmLoads: 0, coldBoundaryLoads: 0, generatedCells: 0, loadedCells: 0, refreshedCells: 0, unloadedCells: 0, lastBoundaryFrameMs: 0, maxBoundaryFrameMs: 0, generateMs: 0, cellRendererMs: 0, cellRefreshMs: 0, cellUnloadMs: 0, boundaryReconcileMs: 0, regionRefreshMs: 0 };
+  return {
+    queueDepth: 0, queueDepthPeak: 0, predictiveWarmLoads: 0, coldBoundaryLoads: 0, generatedCells: 0, loadedCells: 0, refreshedCells: 0, unloadedCells: 0,
+    lastBoundaryFrameMs: 0, maxBoundaryFrameMs: 0, generateMs: 0, cellRendererMs: 0, cellRefreshMs: 0, cellUnloadMs: 0, boundaryReconcileMs: 0, regionRefreshMs: 0,
+    lastHeavyOperations: 0, maxHeavyOperations: 0, lastHeavyMs: 0, maxHeavyMs: 0, heavyBudgetDeferrals: 0, heavyBudgetOverruns: 0, lastUpdateMs: 0, maxUpdateMs: 0
+  };
 }
 function stateFor(game: ProjectNoclipGame): SchedulerState {
   const existing = states.get(game);
   if (existing) return existing;
-  const created: SchedulerState = { jobs: new Map(), serial: 0, directionX: 0, directionZ: 0, diagnostics: createDiagnostics() };
+  const created: SchedulerState = { jobs: new Map(), serial: 0, directionX: 0, directionZ: 0, diagnostics: createDiagnostics(), frameActive: false, frameHeavyOperations: 0, frameHeavyMs: 0 };
   states.set(game, created);
   return created;
 }
@@ -122,7 +107,19 @@ function publish(game: ProjectNoclipGame): void {
   if (typeof window === 'undefined') return;
   const state = stateFor(game);
   state.diagnostics.queueDepth = state.jobs.size;
+  state.diagnostics.queueDepthPeak = Math.max(state.diagnostics.queueDepthPeak, state.jobs.size);
   (window as unknown as { __noclipStreamingDiagnostics?: StreamingDiagnostics }).__noclipStreamingDiagnostics = { ...state.diagnostics };
+}
+
+function boundQueue(scheduler: SchedulerState): void {
+  if (scheduler.jobs.size <= STREAMING_SCHEDULER_PROFILE.maxQueueDepth) return;
+  const removable = [...scheduler.jobs.values()]
+    .filter((job) => job.predictive || job.kind === 'unload')
+    .sort((left, right) => right.priority - left.priority || right.serial - left.serial);
+  while (scheduler.jobs.size > STREAMING_SCHEDULER_PROFILE.maxQueueDepth && removable.length > 0) {
+    const job = removable.shift();
+    if (job) scheduler.jobs.delete(job.key);
+  }
 }
 function cellDistance(state: GameStreamingAccess, x: number, z: number): number {
   return Math.max(Math.abs(x - state.currentCellX), Math.abs(z - state.currentCellZ));
@@ -150,16 +147,18 @@ function descriptorChanged(existing: CellDescriptor, descriptor: CellDescriptor)
     || existing.address.zoneId !== descriptor.address.zoneId
     || existing.roomArchetype !== descriptor.roomArchetype;
 }
-function enqueue(scheduler: SchedulerState, kind: JobKind, x: number, z: number, priority: number, delayMs = 0): void {
+function enqueue(scheduler: SchedulerState, kind: JobKind, x: number, z: number, priority: number, delayMs = 0, predictive = false): void {
   const key = `${kind}:${x}:${z}`;
   const existing = scheduler.jobs.get(key);
   const notBefore = now() + delayMs;
   if (existing) {
     existing.priority = Math.min(existing.priority, priority);
+    existing.predictive = existing.predictive && predictive;
     if (kind === 'unload') existing.notBefore = Math.max(existing.notBefore, notBefore);
     return;
   }
-  scheduler.jobs.set(key, { key, kind, x, z, priority, serial: scheduler.serial++, notBefore });
+  scheduler.jobs.set(key, { key, kind, x, z, priority, serial: scheduler.serial++, notBefore, predictive });
+  boundQueue(scheduler);
 }
 function cancel(scheduler: SchedulerState, kind: JobKind, x: number, z: number): void {
   scheduler.jobs.delete(`${kind}:${x}:${z}`);
@@ -223,18 +222,50 @@ function unloadCell(game: ProjectNoclipGame, x: number, z: number): void {
   scheduler.diagnostics.cellUnloadMs += now() - start;
   scheduler.diagnostics.unloadedCells += 1;
 }
+function runHeavyOperation(
+  game: ProjectNoclipGame,
+  kind: JobKind | 'required-current',
+  x: number,
+  z: number,
+  required: boolean,
+  operation: () => void
+): boolean {
+  const scheduler = stateFor(game);
+  if (scheduler.frameActive && !streamingFrameCanRunHeavyWork(scheduler.frameHeavyOperations, scheduler.frameHeavyMs)) {
+    if (!required) scheduler.diagnostics.heavyBudgetDeferrals += 1;
+    return false;
+  }
+  const start = now();
+  operation();
+  const durationMs = now() - start;
+  if (scheduler.frameActive) {
+    scheduler.frameHeavyOperations += 1;
+    scheduler.frameHeavyMs += durationMs;
+    if (scheduler.frameHeavyMs > STREAMING_SCHEDULER_PROFILE.workBudgetMs) scheduler.diagnostics.heavyBudgetOverruns += 1;
+  }
+  scheduler.diagnostics.lastHeavyOperation = { kind, x, z, durationMs };
+  scheduler.diagnostics.maxHeavyMs = Math.max(scheduler.diagnostics.maxHeavyMs, durationMs);
+  return true;
+}
 function processOneJob(game: ProjectNoclipGame): void {
   const scheduler = stateFor(game);
+  if (!streamingFrameCanRunHeavyWork(scheduler.frameHeavyOperations, scheduler.frameHeavyMs)) {
+    if (scheduler.jobs.size > 0) scheduler.diagnostics.heavyBudgetDeferrals += 1;
+    publish(game);
+    return;
+  }
   const timestamp = now();
   const eligible = [...scheduler.jobs.values()]
     .filter((job) => job.notBefore <= timestamp)
     .sort((left, right) => left.priority - right.priority || left.serial - right.serial);
   const job = eligible[0];
   if (!job) { publish(game); return; }
-  scheduler.jobs.delete(job.key);
-  if (job.kind === 'prepare') prepareCell(game, job.x, job.z, job.priority < 30);
-  else if (job.kind === 'refresh') refreshCell(game, job.x, job.z);
-  else unloadCell(game, job.x, job.z);
+  const ran = runHeavyOperation(game, job.kind, job.x, job.z, false, () => {
+    if (job.kind === 'prepare') prepareCell(game, job.x, job.z, job.predictive);
+    else if (job.kind === 'refresh') refreshCell(game, job.x, job.z);
+    else unloadCell(game, job.x, job.z);
+  });
+  if (ran) scheduler.jobs.delete(job.key);
   publish(game);
 }
 function warmAhead(game: ProjectNoclipGame): void {
@@ -253,9 +284,12 @@ function warmAhead(game: ProjectNoclipGame): void {
   scheduler.lastX = position.x;
   scheduler.lastZ = position.z;
   const profile = renderDistanceProfile(getRenderSettings());
+  // Recompute predictive work from the latest motion vector; stale reversal work
+  // may not grow the queue behind the player.
+  for (const job of [...scheduler.jobs.values()]) if (job.predictive) scheduler.jobs.delete(job.key);
   for (const coordinate of predictiveWarmCoordinates(state.currentCellX, state.currentCellZ, profile.loadRadius, scheduler.directionX, scheduler.directionZ)) {
     const id = `${coordinate.x}:${coordinate.z}`;
-    if (!state.renderer.loaded.has(id)) enqueue(scheduler, 'prepare', coordinate.x, coordinate.z, coordinate.priority);
+    if (!state.renderer.loaded.has(id)) enqueue(scheduler, 'prepare', coordinate.x, coordinate.z, 60 + coordinate.priority, 0, true);
     cancel(scheduler, 'unload', coordinate.x, coordinate.z);
   }
 }
@@ -321,14 +355,15 @@ export function reconcileStreaming(game: ProjectNoclipGame, force = false, radiu
   }
 
   const desired = new Set<string>();
-  const missing: Array<{ x: number; z: number; score: number }> = [];
-  const currentDescriptor = descriptorFor(state, state.currentCellX, state.currentCellZ, scheduler.diagnostics);
-  const currentExisting = state.renderer.loaded.get(currentDescriptor.id)?.descriptor;
-  if (!currentExisting) prepareCell(game, state.currentCellX, state.currentCellZ, false);
-  else if (descriptorChanged(currentExisting, currentDescriptor)) {
-    const start = now(); state.renderer.refreshCell(currentDescriptor); scheduler.diagnostics.cellRefreshMs += now() - start; scheduler.diagnostics.refreshedCells += 1;
+  const currentId = `${state.currentCellX}:${state.currentCellZ}`;
+  let currentDescriptor = state.renderer.loaded.get(currentId)?.descriptor;
+  if (!currentDescriptor) {
+    cancel(scheduler, 'prepare', state.currentCellX, state.currentCellZ);
+    const loaded = runHeavyOperation(game, 'required-current', state.currentCellX, state.currentCellZ, true, () => prepareCell(game, state.currentCellX, state.currentCellZ, false));
+    currentDescriptor = state.renderer.loaded.get(currentId)?.descriptor;
+    if (loaded) scheduler.diagnostics.coldBoundaryLoads += 1;
   }
-  state.currentCell = currentDescriptor;
+  if (currentDescriptor) state.currentCell = currentDescriptor;
 
   for (let x = state.currentCellX - radius; x <= state.currentCellX + radius; x += 1) {
     for (let z = state.currentCellZ - radius; z <= state.currentCellZ + radius; z += 1) {
@@ -342,20 +377,14 @@ export function reconcileStreaming(game: ProjectNoclipGame, force = false, radiu
         // per-frame queue with 48 deterministic no-op descriptor refreshes per step.
         visual.root.enabled = true;
       } else {
-        const score = -((x - state.currentCellX) * scheduler.directionX + (z - state.currentCellZ) * scheduler.directionZ);
-        missing.push({ x, z, score });
-        enqueue(scheduler, 'prepare', x, z, 35 + cellDistance(state, x, z));
+        const directionLength = Math.hypot(scheduler.directionX, scheduler.directionZ) || 1;
+        const directional = ((x - state.currentCellX) * scheduler.directionX + (z - state.currentCellZ) * scheduler.directionZ) / directionLength;
+        const directionalBias = Math.max(-3, Math.min(3, directional));
+        enqueue(scheduler, 'prepare', x, z, 12 + cellDistance(state, x, z) * 2 - directionalBias);
       }
     }
   }
 
-  if (missing.length > 0) {
-    missing.sort((left, right) => left.score - right.score);
-    const emergency = missing[0]!;
-    cancel(scheduler, 'prepare', emergency.x, emergency.z);
-    prepareCell(game, emergency.x, emergency.z, false);
-    scheduler.diagnostics.coldBoundaryLoads += 1;
-  }
 
   for (const [id, visual] of [...state.renderer.loaded.entries()]) {
     if (desired.has(id)) continue;
@@ -382,15 +411,26 @@ export function installStreamingScheduler(prototype: RuntimePrototype): void {
     const scheduler = stateFor(this);
     const state = access(this);
     const frameStart = now();
-    processOneJob(this);
+    scheduler.frameActive = true;
+    scheduler.frameHeavyOperations = 0;
+    scheduler.frameHeavyMs = 0;
+    // Boundary safety gets first admission. A required current-Cell load therefore
+    // cannot stack on top of an already-run queued heavy operation in this frame.
     originalUpdate.call(this, dt);
+    processOneJob(this);
     warmAhead(this);
+    scheduler.frameActive = false;
+    scheduler.diagnostics.lastHeavyOperations = scheduler.frameHeavyOperations;
+    scheduler.diagnostics.maxHeavyOperations = Math.max(scheduler.diagnostics.maxHeavyOperations, scheduler.frameHeavyOperations);
+    scheduler.diagnostics.lastHeavyMs = scheduler.frameHeavyMs;
+    const updateMs = now() - frameStart;
+    scheduler.diagnostics.lastUpdateMs = updateMs;
+    scheduler.diagnostics.maxUpdateMs = Math.max(scheduler.diagnostics.maxUpdateMs, updateMs);
     const changedCell = scheduler.lastCellX !== undefined
       && (scheduler.lastCellX !== state.currentCellX || scheduler.lastCellZ !== state.currentCellZ);
     if (changedCell) {
-      const frameMs = now() - frameStart;
-      scheduler.diagnostics.lastBoundaryFrameMs = frameMs;
-      scheduler.diagnostics.maxBoundaryFrameMs = Math.max(scheduler.diagnostics.maxBoundaryFrameMs, frameMs);
+      scheduler.diagnostics.lastBoundaryFrameMs = updateMs;
+      scheduler.diagnostics.maxBoundaryFrameMs = Math.max(scheduler.diagnostics.maxBoundaryFrameMs, updateMs);
     }
     scheduler.lastCellX = state.currentCellX;
     scheduler.lastCellZ = state.currentCellZ;

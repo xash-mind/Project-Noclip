@@ -86,12 +86,18 @@ jobs:
             exit 0
           fi
           echo "Resolved matching canonical production baseline: ${baseline_commit} / ${baseline_version}"
-          NOCLIP_BASE_URL="https://project-noclip.vercel.app" \
-          NOCLIP_DEPLOYMENT_COMMIT="$baseline_commit" \
-          NOCLIP_DEPLOYMENT_ID="canonical-production-${baseline_version}" \
-          NOCLIP_EXPECTED_VERSION="$baseline_version" \
-          NOCLIP_PROFILE_ARTIFACTS="artifacts/renderer-compare/before" \
-          python scripts/profile-production.py
+          if ! NOCLIP_BASE_URL="https://project-noclip.vercel.app" \
+            NOCLIP_DEPLOYMENT_COMMIT="$baseline_commit" \
+            NOCLIP_DEPLOYMENT_ID="canonical-production-${baseline_version}" \
+            NOCLIP_EXPECTED_VERSION="$baseline_version" \
+            NOCLIP_PROFILE_ARTIFACTS="artifacts/renderer-compare/before" \
+            python scripts/profile-production.py; then
+            rm -f artifacts/renderer-compare/before/profile.json
+            printf '%s\n' \
+              "production comparison unavailable: canonical Dev.8 profile stalled/failed; see Dev.8 production traversal baseline for bounded failure evidence" \
+              > artifacts/renderer-compare/before/status.txt
+            echo "Canonical production profile failed under the known Dev.8 runtime fault; continuing with absolute candidate renderer budgets."
+          fi
       - name: Build and serve candidate
         shell: bash
         run: |
@@ -133,8 +139,8 @@ jobs:
 
           # Dev.8 deliberately retains the post-PAU one-to-one fixture shadow
           # architecture. Absolute budgets and deterministic streaming cardinality
-          # therefore remain authoritative even while canonical production is
-          # temporarily one release behind main during promotion.
+          # therefore remain authoritative even when canonical production itself
+          # cannot complete the broad production profiler under the known runtime fault.
           scenarios = {
               'defaultSpawn': {'loadedCells': 49, 'drawCalls': 220, 'colliders': 1200, 'interactions': 160},
               'holeCarverRadius1': {'loadedCells': 9, 'drawCalls': 220, 'colliders': 600, 'interactions': 120},

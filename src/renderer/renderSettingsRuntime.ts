@@ -179,7 +179,8 @@ function setupEngine(this: ProjectNoclipGame): void {
     clearColor: new pc.Color(fog.color.r, fog.color.g, fog.color.b),
     nearClip: 0.05,
     farClip: fog.end + 2,
-    fov: 73
+    fov: 73,
+    frustumCulling: true
   });
   app.root.addChild(camera);
   const cameraComponent = (camera as unknown as { camera?: ConstructorParameters<typeof CameraFrame>[1] }).camera;

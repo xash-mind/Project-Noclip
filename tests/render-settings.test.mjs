@@ -8,6 +8,7 @@ const { CELL_SIZE, DEFAULT_TUNING } = await import('../.test-dist/src/world/type
 const fixtureSource = await readFile(new URL('../src/renderer/fixtureLighting.ts', import.meta.url), 'utf8');
 const runtimeSource = await readFile(new URL('../src/renderer/renderSettingsRuntime.ts', import.meta.url), 'utf8');
 const streamingSource = await readFile(new URL('../src/renderer/streamingScheduler.ts', import.meta.url), 'utf8');
+const streamingPolicySource = await readFile(new URL('../src/renderer/streamingPolicy.ts', import.meta.url), 'utf8');
 const mainSource = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
 
 const {
@@ -144,11 +145,12 @@ test('render runtime owns modern PlayCanvas FogParams and keeps camera clear col
   assert.match(runtimeSource, /scene\.fog\.start = fog\.start/);
   assert.match(runtimeSource, /scene\.fog\.end = fog\.end/);
   assert.match(runtimeSource, /cameraComponent\.clearColor = new pc\.Color\(fog\.color\.r, fog\.color\.g, fog\.color\.b\)/);
+  assert.match(runtimeSource, /frustumCulling: true/);
   assert.match(runtimeSource, /reconcileStreaming\(this, force, radiusOverride\)/);
   assert.match(streamingSource, /visual\.root\.enabled = false/);
   assert.match(streamingSource, /distance <= profile\.retentionRadius/);
   assert.match(streamingSource, /predictiveWarmCoordinates/);
-  assert.match(streamingSource, /unloadGraceMs: 1200/);
+  assert.match(streamingPolicySource, /unloadGraceMs: 1200/);
   assert.equal(runtimeSource.includes('scene.fogStart'), false);
   assert.equal(runtimeSource.includes('scene.fogEnd'), false);
   assert.equal(mainSource.includes('installPlayCanvasFogCompatibility'), false);
