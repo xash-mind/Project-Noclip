@@ -9,6 +9,7 @@ const {
   archFramePresentationProfile,
   archFrameVisibleVolumesForDescriptors,
   archSemanticSourceIdsForDescriptors,
+  archStructuralRunsForDescriptors,
   archStructuralSignatureForDescriptors
 } = await import('../.test-dist/src/renderer/level0RegionPresentation.js');
 
@@ -49,7 +50,6 @@ function positiveVolume(left, right) {
     && positive1d(left, right)
     && left.maxY > right.minY + 1e-6 && left.minY < right.maxY - 1e-6;
 }
-
 function shuffled(values) {
   const output = [...values];
   let state = 0x9e3779b9;
@@ -87,8 +87,10 @@ test('A-A1 endpoint joined to an ordinary through-wall is a handoff, not a termi
     wall('candidate-end', 4.5, 5, 'full'),
     wall('ordinary-through', -2, 2, 'full', 5, 'x', 'level-0-wallpaper')
   ]);
+  const runs = archStructuralRunsForDescriptors([descriptor]);
   const terminations = archStructuralSignatureForDescriptors([descriptor]).filter((entry) => entry.role === 'termination');
   assert.equal(terminations.some((entry) => entry.end > 4.49), false);
+  assert.ok(runs.some((run) => run.classification === 'handoff'));
 });
 
 test('A-A1 visible roles have no unintended positive-volume ownership overlap', () => {
@@ -123,6 +125,19 @@ test('A-A1 route center stays clear of every canonical floor-blocking role', () 
   assert.equal(blockers.some((entry) => center > entry.start + 1e-6 && center < entry.end - 1e-6), false);
 });
 
+test('semantic A-A1 header remains visibly owned when lower-panel evidence exists without a complete bay pair', () => {
+  const descriptor = descriptorWithWalls([
+    wall('header', -5, 5, 'header'),
+    wall('lower', -5, 5, 'lower'),
+    wall('only-support', -2.22, -1.78, 'pier')
+  ]);
+  const [run] = archStructuralRunsForDescriptors([descriptor]);
+  assert.ok(run);
+  assert.equal(run.bays, 0);
+  assert.ok(run.lowerPanelIntervals.length > 0);
+  assert.ok(run.upperIntervals.length > 0, 'semantic header must not disappear merely because a bay pair is incomplete');
+});
+
 test('A-A1 final structural signature is independent of descriptor arrival order', () => {
   const descriptors = [];
   for (let x = -2; x <= 2; x += 1) for (let z = -2; z <= 2; z += 1) descriptors.push(baseCell(x, z, 'aa1-order'));
@@ -152,6 +167,30 @@ test('generated Arch sweep has no orphan full-height mass and route centers rema
   }
 });
 
+test('968-Cell natural Arch sweep has no settled normal or continuation lower-only run', () => {
+  const counts = { cells: 0, runs: 0, withLower: 0, normal: 0, continuation: 0, termination: 0, handoff: 0 };
+  for (let seedIndex = 0; seedIndex < 8; seedIndex += 1) {
+    const descriptors = [];
+    for (let x = -5; x <= 5; x += 1) for (let z = -5; z <= 5; z += 1) {
+      descriptors.push(baseCell(x, z, `aa1-completeness-${seedIndex}`));
+      counts.cells += 1;
+    }
+    for (const run of archStructuralRunsForDescriptors(descriptors)) {
+      counts.runs += 1;
+      counts[run.classification] += 1;
+      if (run.lowerPanelIntervals.length === 0) continue;
+      counts.withLower += 1;
+      if (run.classification === 'normal' || run.classification === 'continuation') {
+        assert.ok(run.upperIntervals.length > 0 || run.bays > 0, `${run.classification} lower-only run ${run.id}`);
+      }
+    }
+  }
+  assert.equal(counts.cells, 968);
+  assert.ok(counts.runs > 0);
+  assert.ok(counts.withLower > 0);
+  console.log(`[A-A1 completeness sweep] ${JSON.stringify(counts)}`);
+});
+
 test('A-A1 silhouette contract remains frozen at the accepted Dev.8 values', () => {
   const profile = archFramePresentationProfile();
   assert.ok(Math.abs(profile.ceilingReveal - 0.24) < 1e-12);
@@ -161,11 +200,16 @@ test('A-A1 silhouette contract remains frozen at the accepted Dev.8 values', () 
   assert.ok(profile.upperDepth > profile.pierDepth);
 });
 
-test('A-A1 has one final runtime owner and semantic sources are suppressed before queued reconciliation', async () => {
+test('A-A1 has one indexed final runtime owner and suppresses semantic sources before queued reconciliation', async () => {
   assert.equal(batchingSource.includes('installArchDividerRuntimeCorrection'), false);
   assert.equal(regionSource.includes('resetSemanticArchMeshes'), false);
+  assert.equal(regionSource.includes('markAffectedArchRuns'), false);
+  assert.equal(regionSource.includes('for (const visual of renderer.loaded.values())'), false);
+  assert.ok(regionSource.includes('lineDescriptorIds: Map<string, Set<string>>'));
+  assert.ok(regionSource.includes('lineStructuralSignatures: Map<string, string>'));
+  assert.ok(regionSource.includes('lineOwnerSignatures: Map<string, string>'));
   assert.ok(regionSource.includes('suppressLocalArchSources(this, visual)'));
-  assert.ok(regionSource.indexOf('suppressLocalArchSources(this, visual)') < regionSource.indexOf('markAffectedArchRuns(this, descriptor)'));
+  assert.ok(regionSource.indexOf('suppressLocalArchSources(this, visual)') < regionSource.indexOf('scheduleAffectedLines(this, changedKeys)'));
   assert.ok(regionSource.includes('arch-frame-collider:'));
   assert.ok(regionSource.includes('source WallSpecs remain deterministic world-generation evidence only'));
   await assert.rejects(access(new URL('../src/renderer/archDividerRuntimeCorrection.ts', import.meta.url)));

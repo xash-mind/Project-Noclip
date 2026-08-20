@@ -28,10 +28,7 @@ function cell(seed, x, z, regionOverride) {
 function overlaps(left, right) {
   return left.maxX > right.minX && left.minX < right.maxX && left.maxZ > right.minZ && left.minZ < right.maxZ;
 }
-
-function tintEnergy(tint) {
-  return tint[0] + tint[1] + tint[2];
-}
+function tintEnergy(tint) { return tint[0] + tint[1] + tint[2]; }
 
 test('A-A1 halves each shoulder while preserving the accepted central curve', () => {
   const profiles = Array.from({ length: 100 }, (_, index) => core.archBayProfile(`arch-profile-${index}`));
@@ -156,7 +153,9 @@ test('A-A1 shared-pier upper mass has canonical single-surface ownership', () =>
       && a.maxY > b.minY + 1e-6 && a.minY < b.maxY - 1e-6;
     assert.equal(overlap, false, `${a.id} overlapped ${b.id}`);
   }
-  assert.match(archPresentationSource, /const upperIntervals = subtractIntervals\(rectangularUpperRuns\(bays, activePiers\), terminationIntervals\)/);
+  assert.match(archPresentationSource, /const curveIntervals = bays\.map/);
+  assert.match(archPresentationSource, /const upperIntervals = subtractIntervals\(\[header\], \[\.\.\.curveIntervals, \.\.\.terminationIntervals\]\)/);
+  assert.equal(archPresentationSource.includes('rectangularUpperRuns'), false);
   assert.match(archPresentationSource, /const clip = clippedInterval\(descriptor, bay\.orientation, bay\.curveStart, bay\.curveEnd\)/);
   assert.match(archPresentationSource, /entersFromPreviousCell/);
   assert.match(archPresentationSource, /continuesIntoNextCell/);
@@ -165,9 +164,20 @@ test('A-A1 shared-pier upper mass has canonical single-surface ownership', () =>
   assert.equal(archPresentationSource.includes('upper-through-pier'), false);
 });
 
-test('static world batching is localized per Cell rather than one global dirty group', () => {
+test('A-A1 invalidation is indexed and unchanged signatures can skip presentation/collision mutation', () => {
+  assert.match(archPresentationSource, /lineDescriptorIds: Map<string, Set<string>>/);
+  assert.match(archPresentationSource, /lineStructuralSignatures: Map<string, string>/);
+  assert.match(archPresentationSource, /lineOwnerSignatures: Map<string, string>/);
+  assert.match(archPresentationSource, /unchangedSignatureSkips \+= 1/);
+  assert.equal(archPresentationSource.includes('for (const visual of renderer.loaded.values())'), false);
+  assert.match(archPresentationSource, /ownerDescriptorIdsForRuns/);
+});
+
+test('static world batching is localized per Cell and consumes explicit A-A1 mutation dirties', () => {
   assert.match(batchingSource, /mode: 'per-cell'/);
   assert.match(batchingSource, /excludesFluorescentPanels: true/);
+  assert.match(batchingSource, /__noclipArchPresentationDirty/);
+  assert.match(batchingSource, /recordArchStaticBatchDirtyCall\(\)/);
   assert.match(batchingSource, /app\.batcher\.markGroupDirty\(batch\.id\)/);
   assert.equal(batchingSource.includes('markGroupDirty(STATIC_WORLD_BATCH_GROUP_ID)'), false);
 });
