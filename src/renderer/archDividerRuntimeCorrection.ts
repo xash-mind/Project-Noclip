@@ -12,8 +12,7 @@ interface ArchCorrectionCache {
   lowerPanel: pc.StandardMaterial;
 }
 
-const ARCH_VISIBLE_COLLIDER_PREFIX = 'arch-visible-collider:';
-const ARCH_PIER_LOWER_PREFIX = 'arch-frame:pier-lower:';
+const ARCH_VISIBLE_LOWER_COLLIDER_PREFIX = 'arch-visible-lower-collider:';
 const ARCH_LOWER_PANEL_PREFIX = 'arch-frame:lower-panel:';
 const caches = new WeakMap<WorldRenderer, ArchCorrectionCache>();
 const pendingCollisionCells = new WeakMap<WorldRenderer, Set<string>>();
@@ -40,10 +39,12 @@ export function archStructuralRole(wall: WallSpec): ArchStructuralRole | undefin
 
 export function archSemanticWallOwnsFinalCollision(wall: WallSpec): boolean {
   const role = archStructuralRole(wall);
-  // Overhead headers never block the 2D player solver. Reconstructed piers and
-  // lower panels receive collision from their final visible boxes after the
-  // Region presentation pass, so hidden semantic fallbacks cannot become walls.
-  if (role === 'upper' || role === 'pier' || role === 'lower-panel') return false;
+  // The player solver is 2D. Headers stay non-colliding and the accepted pier
+  // footprint stays unchanged. Lower-panel collision is rebuilt only where the
+  // final Region presentation actually draws a lower panel, so hidden tail spans
+  // cannot become invisible walls.
+  if (role === 'upper' || role === 'lower-panel') return false;
+  if (role === 'pier') return true;
   return wallMinY(wall) <= 0.04;
 }
 
@@ -93,30 +94,22 @@ function applyArchDividerRuntimeCorrection(renderer: WorldRenderer, visual: Cell
   });
 }
 
-function visibleFloorBlockerOrientation(name: string): WallSpec['orientation'] | undefined {
-  const suffix = name.startsWith(ARCH_PIER_LOWER_PREFIX)
-    ? name.slice(ARCH_PIER_LOWER_PREFIX.length)
-    : name.startsWith(ARCH_LOWER_PANEL_PREFIX)
-      ? name.slice(ARCH_LOWER_PANEL_PREFIX.length)
-      : undefined;
-  if (!suffix) return undefined;
+function lowerPanelOrientation(name: string): WallSpec['orientation'] | undefined {
+  if (!name.startsWith(ARCH_LOWER_PANEL_PREFIX)) return undefined;
+  const suffix = name.slice(ARCH_LOWER_PANEL_PREFIX.length);
   if (suffix.startsWith('x:')) return 'x';
   if (suffix.startsWith('z:')) return 'z';
   return undefined;
 }
 
-function colliderForVisibleFloorBlocker(
-  visual: CellVisual,
-  entity: pc.Entity,
-  orientation: WallSpec['orientation']
-): WorldCollider {
+function lowerPanelCollider(visual: CellVisual, entity: pc.Entity, orientation: WallSpec['orientation']): WorldCollider {
   const position = entity.getLocalPosition();
   const scale = entity.getLocalScale();
   const cx = visual.descriptor.address.cellX * CELL_SIZE + position.x;
   const cy = position.y;
   const cz = visual.descriptor.address.cellZ * CELL_SIZE + position.z;
   return {
-    id: `${ARCH_VISIBLE_COLLIDER_PREFIX}${visual.descriptor.id}:${entity.name}`,
+    id: `${ARCH_VISIBLE_LOWER_COLLIDER_PREFIX}${visual.descriptor.id}:${entity.name}`,
     cellId: visual.descriptor.id,
     shiftEpoch: visual.descriptor.address.shiftEpoch,
     minX: cx - scale.x / 2,
@@ -136,27 +129,17 @@ function colliderForVisibleFloorBlocker(
   };
 }
 
-function reconcileCollisionToVisibleArch(renderer: WorldRenderer, visual: CellVisual): void {
+function reconcileVisibleLowerPanelCollision(renderer: WorldRenderer, visual: CellVisual): void {
   if (visual.descriptor.world.generationVersion !== 'gen3-v1') return;
-  const wallById = new Map(visual.descriptor.walls.map((wall) => [wall.id, wall]));
-
   visual.colliders = visual.colliders.filter((collider) => {
-    if (collider.id.startsWith(ARCH_VISIBLE_COLLIDER_PREFIX)) {
-      renderer.walls.delete(collider.id);
-      return false;
-    }
-    const wall = wallById.get(collider.id);
-    if (!wall || wall.materialId !== 'arch-pale-wallpaper') return true;
-    const source = entityByName(visual.root, wall.id);
-    if (source?.render?.enabled !== false && archStructuralRole(wall) === undefined) return true;
+    if (!collider.id.startsWith(ARCH_VISIBLE_LOWER_COLLIDER_PREFIX)) return true;
     renderer.walls.delete(collider.id);
     return false;
   });
-
   for (const child of childrenOf(visual.root)) {
-    const orientation = visibleFloorBlockerOrientation(child.name);
+    const orientation = lowerPanelOrientation(child.name);
     if (!orientation || !child.enabled || !child.render || child.render.enabled === false) continue;
-    const collider = colliderForVisibleFloorBlocker(visual, child, orientation);
+    const collider = lowerPanelCollider(visual, child, orientation);
     visual.colliders.push(collider);
     renderer.walls.set(collider.id, collider);
   }
@@ -180,16 +163,16 @@ function markNearbyCollisionCells(renderer: WorldRenderer, descriptor: CellDescr
     pendingCollisionCells.set(renderer, new Set());
     for (const cellId of targets) {
       const visual = renderer.loaded.get(cellId);
-      if (visual) reconcileCollisionToVisibleArch(renderer, visual);
+      if (visual) reconcileVisibleLowerPanelCollision(renderer, visual);
     }
   });
 }
 
 /**
  * Final A-A1 compatibility pass after Region reconstruction. Structural semantic
- * fallback pieces use plain Arch-compatible materials (never wallpaper). Collision
- * follows the settled visible floor-blocking presentation: hidden semantic Arch
- * pieces cannot block movement, while visible reconstructed piers/lower panels do.
+ * fallback pieces use plain Arch-compatible materials (never wallpaper). Existing
+ * pier/termination collision stays intact; lower panels block only where the final
+ * reconstructed presentation visibly contains a lower panel.
  */
 export function installArchDividerRuntimeCorrection(): void {
   if (installed) return;
