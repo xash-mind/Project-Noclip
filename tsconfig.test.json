@@ -23,6 +23,7 @@
     "src/renderer/level0Wallpaper.ts",
     "src/renderer/level0RegionPresentation.ts",
     "src/renderer/renderSettings.ts",
-    "src/renderer/streamingPolicy.ts"
+    "src/renderer/streamingPolicy.ts",
+    "src/renderer/wallJunctionGeometry.ts"
   ]
 }
