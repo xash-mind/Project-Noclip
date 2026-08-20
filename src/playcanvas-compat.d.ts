@@ -1,15 +1,17 @@
 import 'playcanvas';
 
 declare module 'playcanvas' {
-  class BoundingSphere {
-    constructor(center?: Vec3, radius?: number);
-    readonly center: Vec3;
+  interface BoundingSphere {
+    center: { set(x: number, y: number, z: number): void };
     radius: number;
   }
 
-  class Frustum {
+  interface Frustum {
     containsSphere(sphere: BoundingSphere): number;
   }
+
+  const Vec3: { new (): unknown };
+  const BoundingSphere: { new (center?: unknown, radius?: number): BoundingSphere };
 
   interface StandardMaterial {
     clone(): StandardMaterial;
