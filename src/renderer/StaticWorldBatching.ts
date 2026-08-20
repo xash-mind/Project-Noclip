@@ -2,7 +2,7 @@ import * as pc from 'playcanvas';
 import { CELL_SIZE } from '../world/types.js';
 import { isMFluorescentPanelVisualName } from './fixtureVisualOwnership.js';
 import { installFixtureLighting } from './fixtureLighting.js';
-import { installLevel0RegionPresentation } from './level0RegionPresentation.js';
+import { installLevel0RegionPresentation, recordArchStaticBatchDirtyCall } from './level0RegionPresentation.js';
 import { WorldRenderer } from './WorldRenderer.js';
 
 const STATIC_WORLD_BATCH_GROUP_ID_START = 1601;
@@ -44,7 +44,14 @@ export const STATIC_WORLD_BATCHING_PROFILE = Object.freeze({
 });
 
 type BatchRenderComponent = { batchGroupId: number };
-type BatchEntity = pc.Entity & { name: string; guid: string; children: readonly unknown[]; render?: { material: pc.StandardMaterial } & BatchRenderComponent; };
+type BatchEntity = pc.Entity & {
+  name: string;
+  guid: string;
+  children: readonly unknown[];
+  render?: { material: pc.StandardMaterial } & BatchRenderComponent;
+  __noclipArchPresentationDirty?: boolean;
+};
+type BatchAssignmentResult = { changed: boolean; archChanged: boolean };
 type BatchManager = {
   addGroup(name: string, dynamic: boolean, maxAabbSize: number, id?: number): unknown;
   removeGroup(id: number): void;
@@ -57,16 +64,29 @@ interface CellBatch { id: number; guid: string; }
 
 function isBatchEntity(node: unknown): node is BatchEntity { return node instanceof pc.Entity; }
 function isExcludedSubtree(entity: BatchEntity): boolean { return EXCLUDED_SUBTREE_PREFIXES.some((prefix) => entity.name.startsWith(prefix)); }
-function assignStaticVisuals(entity: BatchEntity, batchGroupId: number): boolean {
-  if (isExcludedSubtree(entity)) return false;
+function assignStaticVisuals(entity: BatchEntity, batchGroupId: number): BatchAssignmentResult {
+  if (isExcludedSubtree(entity)) return { changed: false, archChanged: false };
   if (isMFluorescentPanelVisualName(entity.name)) {
-    if (entity.render && entity.render.batchGroupId !== -1) { entity.render.batchGroupId = -1; return true; }
-    return false;
+    if (entity.render && entity.render.batchGroupId !== -1) {
+      entity.render.batchGroupId = -1;
+      return { changed: true, archChanged: false };
+    }
+    return { changed: false, archChanged: false };
   }
   let changed = false;
-  if (entity.render && entity.render.batchGroupId !== batchGroupId) { entity.render.batchGroupId = batchGroupId; changed = true; }
-  for (const child of entity.children) if (isBatchEntity(child)) changed = assignStaticVisuals(child, batchGroupId) || changed;
-  return changed;
+  let archChanged = false;
+  if (entity.render && entity.render.batchGroupId !== batchGroupId) {
+    entity.render.batchGroupId = batchGroupId;
+    changed = true;
+    archChanged = entity.name.startsWith('arch-frame:');
+  }
+  for (const child of entity.children) {
+    if (!isBatchEntity(child)) continue;
+    const result = assignStaticVisuals(child, batchGroupId);
+    changed = result.changed || changed;
+    archChanged = result.archChanged || archChanged;
+  }
+  return { changed, archChanged };
 }
 function getRunningApplication(): BatchApplication | undefined {
   return (pc.Application as ApplicationLookup).getApplication('game-canvas') as BatchApplication | undefined;
@@ -123,9 +143,13 @@ export function installStaticWorldBatching(): void {
     }
     for (const cell of cells) {
       const batch = cellBatches.get(cell.guid) ?? allocate(app, cell);
-      if (assignStaticVisuals(cell, batch.id)) {
+      const explicitArchDirty = cell.__noclipArchPresentationDirty === true;
+      if (explicitArchDirty) cell.__noclipArchPresentationDirty = false;
+      const assignment = assignStaticVisuals(cell, batch.id);
+      if (assignment.changed || explicitArchDirty) {
         app.batcher.markGroupDirty(batch.id);
         batchingDiagnostics.dirtyCalls += 1;
+        if (assignment.archChanged || explicitArchDirty) recordArchStaticBatchDirtyCall();
       }
     }
     const reconcileMs = performance.now() - reconcileStart;

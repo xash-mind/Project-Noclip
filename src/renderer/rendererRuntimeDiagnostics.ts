@@ -2,7 +2,7 @@ import type * as pc from 'playcanvas';
 import { ProjectNoclipGame } from '../app/ProjectNoclipGame.js';
 import type { WorldRenderer } from './WorldRenderer.js';
 import { fixtureLightingDiagnosticsSnapshot } from './fixtureLighting.js';
-import { archPresentationDiagnosticsSnapshot } from './level0RegionPresentation.js';
+import { archPresentationDiagnosticsSnapshot, resetArchPresentationDiagnosticsScenario } from './level0RegionPresentation.js';
 import { staticWorldBatchingDiagnosticsSnapshot } from './StaticWorldBatching.js';
 import type { StreamingDiagnostics } from './streamingScheduler.js';
 
@@ -157,6 +157,7 @@ function beginScenario(game: ProjectNoclipGame, label: string): void {
   state.scenario = label;
   state.frameTimes.length = 0;
   state.recentEvents.length = 0;
+  resetArchPresentationDiagnosticsScenario();
   const diagnostics = streaming();
   if (diagnostics) {
     diagnostics.queueDepthPeak = diagnostics.queueDepth;
