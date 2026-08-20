@@ -4,6 +4,7 @@ import { installArchDividerRuntimeCorrection } from './archDividerRuntimeCorrect
 import { isMFluorescentPanelVisualName } from './fixtureVisualOwnership.js';
 import { installFixtureLighting } from './fixtureLighting.js';
 import { installLevel0RegionPresentation } from './level0RegionPresentation.js';
+import { installWallJunctionPresentation } from './wallJunctionPresentation.js';
 import { WorldRenderer } from './WorldRenderer.js';
 
 const STATIC_WORLD_BATCH_GROUP_ID_START = 1601;
@@ -78,6 +79,7 @@ export function installStaticWorldBatching(): void {
   if (installed) return;
   installed = true;
   installLevel0RegionPresentation();
+  installWallJunctionPresentation();
   installArchDividerRuntimeCorrection();
   installFixtureLighting();
   let currentApp: BatchApplication | undefined;
