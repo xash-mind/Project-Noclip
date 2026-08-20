@@ -145,6 +145,7 @@ test('render runtime owns modern PlayCanvas FogParams and keeps camera clear col
   assert.match(runtimeSource, /scene\.fog\.start = fog\.start/);
   assert.match(runtimeSource, /scene\.fog\.end = fog\.end/);
   assert.match(runtimeSource, /cameraComponent\.clearColor = new pc\.Color\(fog\.color\.r, fog\.color\.g, fog\.color\.b\)/);
+  assert.match(runtimeSource, /frustumCulling: true/);
   assert.match(runtimeSource, /reconcileStreaming\(this, force, radiusOverride\)/);
   assert.match(streamingSource, /visual\.root\.enabled = false/);
   assert.match(streamingSource, /distance <= profile\.retentionRadius/);
