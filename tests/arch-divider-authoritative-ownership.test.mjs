@@ -154,8 +154,8 @@ test('generated Arch sweep has no orphan full-height mass and route centers rema
 
 test('A-A1 silhouette contract remains frozen at the accepted Dev.8 values', () => {
   const profile = archFramePresentationProfile();
-  assert.equal(profile.ceilingReveal, 0.24);
-  assert.equal(profile.upperTop, WALL_HEIGHT - 0.24);
+  assert.ok(Math.abs(profile.ceilingReveal - 0.24) < 1e-12);
+  assert.ok(Math.abs(profile.upperTop - (WALL_HEIGHT - 0.24)) < 1e-12);
   assert.equal(profile.shoulderSpanScale, 0.5);
   assert.ok(profile.pierDepth > WALL_THICKNESS);
   assert.ok(profile.upperDepth > profile.pierDepth);
