@@ -19,6 +19,9 @@ const FIXTURE_PANEL_WIDTH = 0.38;
 const FIXTURE_EMITTER_CLEARANCE = 0.03;
 const FIXTURE_SHADOW_BIAS = 0.4;
 const FIXTURE_SHADOW_NORMAL_OFFSET = 0.04;
+const FIXTURE_VIEW_PREVISIBILITY_MARGIN = 2.0;
+const FIXTURE_VIEW_RETENTION_MARGIN = 4.0;
+const FIXTURE_DISTANCE_BUCKET_METERS = 2.0;
 
 interface FixtureLightComponent {
   intensity: number;
@@ -48,7 +51,16 @@ interface RendererFixtureState {
   materials: Map<string, pc.StandardMaterial>;
 }
 
+interface CameraEntity extends pc.Entity {
+  camera?: { frustum: pc.Frustum };
+}
+
+type ApplicationLookup = typeof pc.Application & {
+  getApplication(id?: string): pc.Application | undefined;
+};
+
 const states = new WeakMap<WorldRenderer, RendererFixtureState>();
+const fixtureInfluenceSphere = new pc.BoundingSphere(new pc.Vec3(), FIXTURE_LIGHT_RANGE + FIXTURE_VIEW_PREVISIBILITY_MARGIN);
 let installed = false;
 
 export interface FixtureLightingDiagnostics {
@@ -87,7 +99,6 @@ export function fixtureLightingDiagnosticsSnapshot(): FixtureLightingDiagnostics
   return { ...fixtureDiagnostics };
 }
 
-
 function stateFor(renderer: WorldRenderer): RendererFixtureState {
   const existing = states.get(renderer);
   if (existing) return existing;
@@ -102,6 +113,14 @@ function childrenOf(entity: pc.Entity): pc.Entity[] {
 
 function entityByName(root: pc.Entity, name: string): pc.Entity | undefined {
   return childrenOf(root).find((child) => child.name === name);
+}
+
+function currentCameraFrustum(): pc.Frustum | undefined {
+  const app = (pc.Application as ApplicationLookup).getApplication('game-canvas');
+  if (!app) return undefined;
+  const root = app.root as pc.Entity & { children: readonly pc.Entity[] };
+  const camera = root.children.find((child) => child.name === 'player-camera') as CameraEntity | undefined;
+  return camera?.camera?.frustum;
 }
 
 function addFixturePanelVisual(
@@ -222,6 +241,27 @@ function fixtureDistanceTo(runtime: FixtureRuntime, playerX: number, playerZ: nu
   return position ? Math.hypot(position.x - playerX, position.z - playerZ) : Number.POSITIVE_INFINITY;
 }
 
+/**
+ * A fixture does not need to be on-screen to matter. Its whole Omni influence
+ * sphere is tested against the camera frustum, so lights around corners or just
+ * outside the view stay eligible whenever they can still illuminate visible
+ * geometry. A larger radius for already-selected fixtures provides bounded
+ * directional hysteresis and prevents camera-edge chatter.
+ */
+function fixtureInfluenceIntersectsView(runtime: FixtureRuntime, frustum: pc.Frustum): boolean {
+  const position = fixtureWorldPosition(runtime);
+  const fixture = runtime.group.fixtures[runtime.fixtureIndex];
+  if (!position || !fixture) return false;
+  fixtureInfluenceSphere.center.set(
+    position.x,
+    fixture.y - FIXTURE_PANEL_HALF_HEIGHT - FIXTURE_EMITTER_CLEARANCE,
+    position.z
+  );
+  fixtureInfluenceSphere.radius = FIXTURE_LIGHT_RANGE
+    + (runtime.selected ? FIXTURE_VIEW_RETENTION_MARGIN : FIXTURE_VIEW_PREVISIBILITY_MARGIN);
+  return frustum.containsSphere(fixtureInfluenceSphere) !== 0;
+}
+
 function selectActiveFixtureIds(
   renderer: WorldRenderer,
   state: RendererFixtureState,
@@ -229,10 +269,17 @@ function selectActiveFixtureIds(
   playerZ: number,
   maxActiveLights: number
 ): Set<string> {
+  const frustum = currentCameraFrustum();
   const candidates = [...state.fixtures.values()]
     .filter((runtime) => runtime.group.state !== 'off' && cellIsInsideActiveRenderScope(renderer, runtime.descriptor))
+    .filter((runtime) => !frustum || fixtureInfluenceIntersectsView(runtime, frustum))
     .map((runtime) => ({ runtime, distance: fixtureDistanceTo(runtime, playerX, playerZ) }))
-    .sort((a, b) => a.distance - b.distance || a.runtime.id.localeCompare(b.runtime.id))
+    .sort((a, b) => {
+      if (a.runtime.selected !== b.runtime.selected) return a.runtime.selected ? -1 : 1;
+      const distanceBucketDelta = Math.floor(a.distance / FIXTURE_DISTANCE_BUCKET_METERS)
+        - Math.floor(b.distance / FIXTURE_DISTANCE_BUCKET_METERS);
+      return distanceBucketDelta || a.runtime.id.localeCompare(b.runtime.id);
+    })
     .slice(0, maxActiveLights);
   return new Set(candidates.map(({ runtime }) => runtime.id));
 }
@@ -412,6 +459,7 @@ export const FIXTURE_LIGHTING_PROFILE = Object.freeze({
   normalOffsetBias: FIXTURE_SHADOW_NORMAL_OFFSET,
   shadowUpdateMode: 'cell-local-this-frame',
   shadowCountPolicy: 'one-to-one-with-active-lights',
+  participationPolicy: 'camera-frustum-intersecting-influence-with-margin-and-retention',
   distanceCeilingPolicy: '32-per-cell-radius-tier-up-to-128'
 });
 
