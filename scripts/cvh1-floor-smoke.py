@@ -85,13 +85,15 @@ def lab_visible(driver: webdriver.Chrome) -> bool:
     return "visible" in driver.find_element(By.CSS_SELECTOR, '[data-ui="lab"]').get_attribute("class").split()
 
 
-def move_pitch(driver: webdriver.Chrome, movement_y: int) -> None:
+def move_look(driver: webdriver.Chrome, movement_x: int, movement_y: int) -> None:
     driver.execute_script(
         """
         const event = new MouseEvent('mousemove', { bubbles: true });
-        Object.defineProperty(event, 'movementY', { value: arguments[0] });
+        Object.defineProperty(event, 'movementX', { value: arguments[0] });
+        Object.defineProperty(event, 'movementY', { value: arguments[1] });
         window.dispatchEvent(event);
         """,
+        movement_x,
         movement_y,
     )
 
@@ -124,7 +126,15 @@ def capture_required(driver: webdriver.Chrome, path: Path) -> None:
 
 
 def browser_errors(driver: webdriver.Chrome) -> list[dict[str, Any]]:
-    ignored = ("favicon.ico", "AudioContext was not allowed to start")
+    # Chromium rejects the game's automatic requestPointerLock() calls in
+    # headless mode because they are not backed by a trusted gesture. The
+    # harness subsequently acquires pointer lock with a real WebDriver click.
+    # Ignore only that exact CI-only browser-policy message.
+    ignored = (
+        "favicon.ico",
+        "AudioContext was not allowed to start",
+        "A user gesture is required to request Pointer Lock.",
+    )
     return [
         entry for entry in driver.get_log("browser")
         if entry.get("level") == "SEVERE" and not any(fragment in entry.get("message", "") for fragment in ignored)
@@ -153,16 +163,29 @@ def main() -> None:
         dispatch_change(driver, '[data-lab="radius"]', "1")
         dispatch_change(driver, '[data-lab="bypass"]', True)
         dispatch_change(driver, '[data-lab="condition"]', "clear")
-        dispatch_change(driver, '[data-lab="carver"]', "floor-hole-cluster")
+        # Locate an actual deterministic CV-H1 occurrence rather than forcing a
+        # carver onto the player's current Cell. The runtime locator positions
+        # the camera on the cluster's east/outside bypass edge.
+        dispatch_change(driver, '[data-lab="carver"]', "")
+        locate_button = driver.find_element(By.CSS_SELECTOR, '[data-action="locate-hole-cluster"]')
+        driver.execute_script("arguments[0].click();", locate_button)
         metrics = wait_for_text(
             driver,
             '[data-ui="metrics"]',
             ("generation     gen3-v1", "carvers", "floor-hole-cluster"),
-            timeout=25,
-            message="forced CV-H1 Cell",
+            timeout=30,
+            message="natural CV-H1 cluster after semantic locator",
         )
-        report["forcedMetrics"] = metrics
-        report["checks"].append("forced deterministic Generation 3 CV-H1 at radius 1")
+        toast_text = wait_for_text(
+            driver,
+            '[data-ui="toasts"]',
+            ("Located a natural", "floor-hole cluster"),
+            timeout=15,
+            message="natural CV-H1 locator confirmation",
+        )
+        report["locatedMetrics"] = metrics
+        report["locatorToast"] = toast_text
+        report["checks"].append("located a natural deterministic CV-H1 cluster with timeline bypass and radius 1")
 
         toggle_lab(driver)
         wait_for(driver, lambda current: not lab_visible(current), message="World Lab close")
@@ -171,7 +194,7 @@ def main() -> None:
         # .click() is intentionally untrusted in Chromium, so use WebDriver's
         # native action path on the real canvas. This exercises the same click
         # listener a player uses without adding any runtime test hook.
-        canvas = driver.find_element(By.CSS_SELECTOR, '#game-canvas')
+        canvas = driver.find_element(By.CSS_SELECTOR, "#game-canvas")
         ActionChains(driver).move_to_element(canvas).click().perform()
         wait_for(
             driver,
@@ -180,25 +203,27 @@ def main() -> None:
             message="trusted pointer lock for CV-H1 floor inspection",
         )
 
-        # The actual draw-call cap is intentionally checked by
-        # profile-candidate-renderer.py after this visual smoke, once the Lab is
-        # closed and the radius-1 world is settled. Do not compare a World Lab
-        # diagnostic frame against that gameplay cap.
+        # New journeys begin at yaw 0. The CV-H1 locator deliberately places the
+        # player east of the occurrence, so rotate about +90 degrees to face west
+        # into the cluster and pitch down enough to frame the nearby apertures.
+        move_look(driver, -948, 300)
+        time.sleep(1.5)
         report["settledMetricsBeforeCapture"] = text_content(driver, '[data-ui="metrics"]')
 
-        move_pitch(driver, 230)
-        time.sleep(1.5)
         standing_path = ARTIFACT_DIR / "01-cvh1-standing-floor.png"
         capture_required(driver, standing_path)
         report["screenshots"].append(standing_path.name)
-        report["checks"].append("captured standing-height CV-H1 carpet and apertures under normal Level 0 lighting")
+        report["checks"].append("captured standing-height natural CV-H1 aperture edges from the outer bypass")
 
-        move_pitch(driver, -155)
+        # Raise toward a shallow floor-grazing angle without changing the westward
+        # heading; this is the angle most likely to reveal residual floor strips,
+        # internal box sides or coplanar junction artifacts.
+        move_look(driver, 0, -195)
         time.sleep(1.5)
         grazing_path = ARTIFACT_DIR / "02-cvh1-grazing-floor.png"
         capture_required(driver, grazing_path)
         report["screenshots"].append(grazing_path.name)
-        report["checks"].append("captured shallow/grazing CV-H1 carpet view where recessed strips and box-side seams were previously most visible")
+        report["checks"].append("captured shallow natural CV-H1 aperture-edge view for seam/junction inspection")
 
         errors = browser_errors(driver)
         report["browserErrors"] = errors
