@@ -81,7 +81,6 @@ declare global {
 }
 
 const caches = new WeakMap<WorldRenderer, OrdinaryPresentationCache>();
-let installed = false;
 let latestRenderer: WorldRenderer | undefined;
 
 function childrenOf(entity: pc.Entity): pc.Entity[] {
@@ -362,7 +361,7 @@ function applyPillarWallpaper(renderer: WorldRenderer, cache: OrdinaryPresentati
   }
 }
 
-function applyLevel0WallpaperPresentation(renderer: WorldRenderer, visual: CellVisual): void {
+export function applyLevel0WallpaperPresentation(renderer: WorldRenderer, visual: CellVisual): void {
   const descriptor = visual.descriptor;
   if (descriptor.world.generationVersion !== 'gen3-v1' || !wallpaperRegion(descriptor)) return;
   const cache = cacheFor(renderer);
@@ -497,16 +496,5 @@ function installQaBridge(renderer: WorldRenderer): void {
     diagnostics: () => ordinaryWallpaperPresentationDiagnostics(renderer),
     showcase: () => { showShowcase(renderer); return ordinaryWallpaperPresentationDiagnostics(renderer); },
     clearShowcase: () => clearShowcase(renderer)
-  };
-}
-
-export function installOrdinaryWallpaperPresentation(): void {
-  if (installed) return;
-  installed = true;
-  const originalLoadCell = WorldRenderer.prototype.loadCell;
-  WorldRenderer.prototype.loadCell = function patchedOrdinaryWallpaperLoad(this: WorldRenderer, descriptor: CellDescriptor): void {
-    originalLoadCell.call(this, descriptor);
-    const visual = this.loaded.get(descriptor.id);
-    if (visual) applyLevel0WallpaperPresentation(this, visual);
   };
 }
