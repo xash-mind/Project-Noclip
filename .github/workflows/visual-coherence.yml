@@ -20,7 +20,7 @@ jobs:
         run: python -m pip install --disable-pip-version-check selenium==4.46.0
       - name: Resolve deterministic visual targets
         run: |
-          mkdir -p artifacts/visual artifacts/fidelity artifacts/flashlight artifacts/lighting-finalization artifacts/fixture-finalization artifacts/render-settings
+          mkdir -p artifacts/visual artifacts/fidelity artifacts/wallpaper artifacts/flashlight artifacts/lighting-finalization artifacts/fixture-finalization artifacts/render-settings
           npx tsc -p tsconfig.test.json
           node scripts/visual-targets.mjs > artifacts/visual/targets.json
       - name: Run blocking Dev.8 world and fidelity evidence
@@ -38,16 +38,18 @@ jobs:
 
           # Dev.8 is a clean post-PAU recovery checkpoint, not a visual-retuning
           # release. Keep deterministic world/Region presentation and broad
-          # fidelity browser coverage blocking here. Fine-grained screenshot,
-          # pulse-timing and luminance calibrations are collected separately
-          # below because they are runner-sensitive and belong to later visual
-          # tuning rather than this rollback boundary.
+          # fidelity browser coverage blocking here. Dev.9.2 adds an explicit
+          # wallpaper presentation proof so green numeric renderer evidence cannot
+          # hide a procedural-fallback or missing uploaded-image path again.
           NOCLIP_VISUAL_TARGETS="artifacts/visual/targets.json" \
           NOCLIP_VISUAL_ARTIFACTS="artifacts/visual" \
           python scripts/visual-smoke.py
 
           NOCLIP_FIDELITY_ARTIFACTS="artifacts/fidelity" \
           python scripts/fidelity-smoke.py
+
+          NOCLIP_WALLPAPER_ARTIFACTS="artifacts/wallpaper" \
+          python scripts/wallpaper-presentation-smoke.py
 
           kill "$SERVER_PID" 2>/dev/null || true
           wait "$SERVER_PID" 2>/dev/null || true
@@ -98,6 +100,7 @@ jobs:
           path: |
             artifacts/visual
             artifacts/fidelity
+            artifacts/wallpaper
             artifacts/flashlight
             artifacts/lighting-finalization
             artifacts/fixture-finalization
