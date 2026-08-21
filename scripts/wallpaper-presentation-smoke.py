@@ -40,7 +40,7 @@ def build_driver() -> webdriver.Chrome:
         options.binary_location = binary
     driver = webdriver.Chrome(options=options)
     driver.set_page_load_timeout(60)
-    driver.set_script_timeout(40)
+    driver.set_script_timeout(50)
     return driver
 
 
@@ -70,7 +70,7 @@ def capture_canvas(driver: webdriver.Chrome, path: Path) -> None:
         raise AssertionError(f"Unexpected canvas capture header: {header}")
     data = base64.b64decode(encoded)
     if len(data) < 10_000:
-        raise AssertionError(f"Wallpaper showcase capture was unexpectedly small: {len(data)} bytes")
+        raise AssertionError(f"Wallpaper capture was unexpectedly small: {len(data)} bytes")
     path.write_bytes(data)
 
 
@@ -88,15 +88,45 @@ def diagnostics(driver: webdriver.Chrome) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
+def renderer_diagnostics(driver: webdriver.Chrome) -> dict[str, Any] | None:
+    value = driver.execute_script("return window.__noclipRendererRuntimeDiagnostics?.snapshot?.() ?? null;")
+    return value if isinstance(value, dict) else None
+
+
 def has_real_a_wall(driver: webdriver.Chrome) -> dict[str, Any] | bool:
     snapshot = diagnostics(driver)
-    if not snapshot or snapshot.get("wallA", 0) <= 0:
+    ordinary = (snapshot or {}).get("regions", {}).get("ordinary-level-0", {})
+    if not snapshot or snapshot.get("wallA", 0) <= 0 or ordinary.get("suppliedTextureBindings", 0) <= 0:
         return False
     return snapshot
 
 
+def qa_locate(driver: webdriver.Chrome, region: str, depth: str) -> str:
+    result = driver.execute_async_script("""
+      const region=arguments[0], depth=arguments[1], done=arguments[2], qa=window.__projectNoclipQa;
+      if(!qa){done({error:'missing __projectNoclipQa'});return;}
+      Promise.resolve(qa.locate(region,depth)).then((message)=>done({message})).catch((error)=>done({error:String(error)}));
+    """, region, depth)
+    if result.get("error"):
+        raise AssertionError(result["error"])
+    if not result.get("message"):
+        raise AssertionError(f"Could not locate {region}/{depth}")
+    time.sleep(1.2)
+    return str(result["message"])
+
+
+def region_snapshot(driver: webdriver.Chrome, region: str) -> dict[str, Any]:
+    snapshot = diagnostics(driver)
+    if not snapshot:
+        raise AssertionError("Missing wallpaper diagnostics")
+    value = snapshot.get("regions", {}).get(region, {})
+    if int(value.get("suppliedTextureBindings", 0)) <= 0:
+        raise AssertionError(f"{region} has no supplied wallpaper texture binding: {snapshot}")
+    return snapshot
+
+
 def main() -> None:
-    report: dict[str, Any] = {"baseUrl": BASE_URL, "browserErrors": []}
+    report: dict[str, Any] = {"baseUrl": BASE_URL, "regions": {}, "browserErrors": []}
     driver = build_driver()
     try:
         driver.get(BASE_URL)
@@ -115,12 +145,8 @@ def main() -> None:
             timeout=40,
             message="journey HUD",
         )
-        initial = wait_for(
-            driver,
-            lambda current: diagnostics(current),
-            timeout=20,
-            message="wallpaper QA bridge",
-        )
+        wait_for(driver, lambda current: current.execute_script("return Boolean(window.__projectNoclipQa)"), timeout=25, message="runtime QA bridge")
+        initial = wait_for(driver, lambda current: diagnostics(current), timeout=20, message="wallpaper QA bridge")
         assets = initial.get("assets", {})
         assert assets.get("prepared") is True, assets
         assert assets.get("fallbackUsed") == 0, assets
@@ -133,14 +159,25 @@ def main() -> None:
             assert state.get("decoded") is True, (family, state)
             assert int(state.get("width", 0)) > 0 and int(state.get("height", 0)) > 0, (family, state)
             assert str(state.get("runtimePath", "")).startswith("/assets/runtime/images/"), (family, state)
-        normal = wait_for(
-            driver,
-            has_real_a_wall,
-            timeout=15,
-            message="real A wallpaper material on normal Ordinary wall",
-        )
-        assert normal.get("assets", {}).get("fallbackUsed") == 0, normal
-        report["normalJourney"] = normal
+
+        ordinary = wait_for(driver, has_real_a_wall, timeout=15, message="real A wallpaper material on normal Ordinary wall")
+        assert ordinary.get("assets", {}).get("fallbackUsed") == 0, ordinary
+        assert 0.15 <= float(ordinary.get("casingSetbackFraction", 0)) <= 0.20, ordinary
+        assert int(ordinary.get("casingStrips", 0)) == int(ordinary.get("casingRuns", 0)) * 2, ordinary
+        report["regions"]["ordinary-level-0"] = ordinary
+        capture_canvas(driver, ARTIFACT_DIR / "ordinary-wallpaper.png")
+
+        pillar_message = qa_locate(driver, "pillar-field", "core")
+        pillar = region_snapshot(driver, "pillar-field")
+        report["regions"]["pillar-field"] = {"message": pillar_message, "diagnostics": pillar}
+        capture_canvas(driver, ARTIFACT_DIR / "pillar-wallpaper.png")
+
+        arch_message = qa_locate(driver, "arch-rooms", "core")
+        arch = region_snapshot(driver, "arch-rooms")
+        arch_region = arch.get("regions", {}).get("arch-rooms", {})
+        assert int(arch_region.get("paleBindings", 0)) > 0, arch
+        report["regions"]["arch-rooms"] = {"message": arch_message, "diagnostics": arch}
+        capture_canvas(driver, ARTIFACT_DIR / "arch-wallpaper.png")
 
         driver.execute_script("""
           const style=document.createElement('style');
@@ -154,6 +191,11 @@ def main() -> None:
         report["showcase"] = diagnostics(driver)
         assert report["showcase"]["assets"]["fallbackUsed"] == 0, report["showcase"]
         driver.execute_script("window.__projectNoclipWallpaper.clearShowcase();")
+
+        report["renderer"] = renderer_diagnostics(driver)
+        if report["renderer"]:
+            batching = report["renderer"].get("batching", {})
+            assert int(batching.get("activeGroups", 0)) > 0, report["renderer"]
 
         errors = severe_errors(driver)
         report["browserErrors"] = errors

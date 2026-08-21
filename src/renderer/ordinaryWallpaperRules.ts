@@ -13,6 +13,7 @@ export const ORDINARY_CASING_RUN_CHANCE = 0.35;
 export const ORDINARY_OUTLET_WALL_CHANCE = 0.065;
 export const ORDINARY_CASING_CENTER_Y = 0.48;
 export const ORDINARY_OUTLET_CENTER_Y = 0.62;
+export const ORDINARY_CASING_TERMINATION_SETBACK_FRACTION = 0.175;
 
 export interface OrdinaryWallpaperDecision {
   primary: 'A' | 'B';
@@ -25,6 +26,13 @@ export interface OrdinaryOutletPlacement {
   enabled: boolean;
   u: number;
   faceSign: -1 | 1;
+}
+
+export interface OrdinaryCasingSpan {
+  startU: number;
+  endU: number;
+  startConnected: boolean;
+  endConnected: boolean;
 }
 
 function wrap01(value: number): number {
@@ -83,6 +91,52 @@ export function ordinaryWallpaperDecision(seed: string, cellX: number, cellZ: nu
 export function ordinaryCasingEnabled(seed: string, cellX: number, cellZ: number, wall: WallSpec): boolean {
   if (!floorReaching(wall) || wallLength(wall) < 1.2) return false;
   return unitFloat(`${runKey(seed, cellX, cellZ, wall)}:casing`) < ORDINARY_CASING_RUN_CHANCE;
+}
+
+function endpoint(wall: WallSpec, positive: boolean): { x: number; z: number } {
+  if (wall.orientation === 'z') {
+    return { x: wall.cx + (positive ? 1 : -1) * wall.sx / 2, z: wall.cz };
+  }
+  return { x: wall.cx, z: wall.cz + (positive ? 1 : -1) * wall.sz / 2 };
+}
+
+function verticalOverlap(left: WallSpec, right: WallSpec): boolean {
+  const leftMin = left.cy - left.sy / 2;
+  const leftMax = left.cy + left.sy / 2;
+  const rightMin = right.cy - right.sy / 2;
+  const rightMax = right.cy + right.sy / 2;
+  return Math.min(leftMax, rightMax) - Math.max(leftMin, rightMin) > 0.2;
+}
+
+function wallTouchesPoint(wall: WallSpec, point: { x: number; z: number }): boolean {
+  const tolerance = 0.045;
+  return point.x >= wall.cx - wall.sx / 2 - tolerance
+    && point.x <= wall.cx + wall.sx / 2 + tolerance
+    && point.z >= wall.cz - wall.sz / 2 - tolerance
+    && point.z <= wall.cz + wall.sz / 2 + tolerance;
+}
+
+function endpointConnected(walls: readonly WallSpec[], source: WallSpec, positive: boolean): boolean {
+  const point = endpoint(source, positive);
+  return walls.some((candidate) => candidate.id !== source.id
+    && candidate.drawable
+    && floorReaching(candidate)
+    && verticalOverlap(source, candidate)
+    && wallTouchesPoint(candidate, point));
+}
+
+/**
+ * Presentation span for one casing run. A real architectural junction owns the
+ * endpoint, so the run may reach it. An exposed wall end owns no adjoining
+ * surface, so the casing is deliberately stopped 17.5% short instead of being
+ * allowed to turn across the box end face.
+ */
+export function ordinaryCasingSpan(walls: readonly WallSpec[], wall: WallSpec): OrdinaryCasingSpan {
+  const startConnected = endpointConnected(walls, wall, false);
+  const endConnected = endpointConnected(walls, wall, true);
+  const startU = startConnected ? 0 : ORDINARY_CASING_TERMINATION_SETBACK_FRACTION;
+  const endU = endConnected ? 1 : 1 - ORDINARY_CASING_TERMINATION_SETBACK_FRACTION;
+  return { startU, endU, startConnected, endConnected };
 }
 
 export function ordinaryOutletPlacement(seed: string, cellX: number, cellZ: number, wall: WallSpec): OrdinaryOutletPlacement {

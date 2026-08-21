@@ -16,11 +16,13 @@ import { installRenderSettingsLab } from './ui/renderSettingsLab.js';
 installLevel0SurfacePresentation();
 installRenderSettingsRuntime();
 installPauFeaturePresentationPilot();
-installStaticWorldBatching();
-// Ordinary wallpaper/casing are intentionally the final Cell presentation wrappers:
-// Region/junction/Arch reconstruction must finish before A/B/C takes visible ownership.
+// A/B/C and casing establish the final Cell-owned wall finish before static
+// batching sees a newly loaded Cell. Region/Arch reconstruction is installed by
+// StaticWorldBatching; the wallpaper pass performs a queued Arch finish after
+// that reconstruction and still before the batching reconcile interval.
 installOrdinaryWallpaperPresentation();
 installOrdinaryCasingMaterialPresentation();
+installStaticWorldBatching();
 installOutletInteractionRuntime();
 installRendererRuntimeDiagnostics();
 mountDevelopmentVersionIndicator();
