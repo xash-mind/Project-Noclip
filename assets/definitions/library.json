@@ -1,4 +1,50 @@
 {
   "schema": "nal-asset-definitions-v1",
-  "assets": []
+  "assets": [
+    {
+      "id": "level0.wallpaper.a-chevron",
+      "type": "image",
+      "role": "wall-texture",
+      "profile": "Wall Texture",
+      "source": "assets/source/images/level0-wallpaper-a-chevron.webp",
+      "provenance": "User-provided Level 0 wallpaper reference prepared as a dev.9.1 game-ready derivative.",
+      "licensingNote": "User-provided source; project-use authorization asserted in the development conversation.",
+      "image": {
+        "colorSpace": "srgb",
+        "wrap": "repeat",
+        "worldScaleMeters": 2.6,
+        "materialBinding": "level-0-wallpaper"
+      }
+    },
+    {
+      "id": "level0.wallpaper.b-dots",
+      "type": "image",
+      "role": "wall-texture",
+      "profile": "Wall Texture",
+      "source": "assets/source/images/level0-wallpaper-b-dots.webp",
+      "provenance": "User-provided Level 0 wallpaper reference prepared as a dev.9.1 game-ready derivative.",
+      "licensingNote": "User-provided source; project-use authorization asserted in the development conversation.",
+      "image": {
+        "colorSpace": "srgb",
+        "wrap": "repeat",
+        "worldScaleMeters": 2.6,
+        "materialBinding": "level-0-wallpaper"
+      }
+    },
+    {
+      "id": "level0.wallpaper.c-lines",
+      "type": "image",
+      "role": "wall-texture",
+      "profile": "Wall Texture",
+      "source": "assets/source/images/level0-wallpaper-c-lines.webp",
+      "provenance": "User-provided Level 0 wallpaper reference prepared as a dev.9.1 game-ready derivative.",
+      "licensingNote": "User-provided source; project-use authorization asserted in the development conversation.",
+      "image": {
+        "colorSpace": "srgb",
+        "wrap": "repeat",
+        "worldScaleMeters": 2.6,
+        "materialBinding": "level-0-wallpaper"
+      }
+    }
+  ]
 }
