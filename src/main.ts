@@ -1,6 +1,7 @@
 import './styles.css';
 import { ProjectNoclipGame } from './app/ProjectNoclipGame.js';
 import { installLevel0SurfacePresentation } from './renderer/level0SurfacePresentation.js';
+import { prepareOrdinaryWallpaperAssets } from './renderer/ordinaryWallpaperAssets.js';
 import { installOrdinaryCasingMaterialPresentation } from './renderer/ordinaryCasingMaterialPresentation.js';
 import { installOrdinaryWallpaperPresentation } from './renderer/ordinaryWallpaperPresentation.js';
 import { installOutletInteractionRuntime } from './renderer/outletInteractionRuntime.js';
@@ -13,12 +14,14 @@ import { installRegionDepthLab } from './ui/regionDepthLab.js';
 import { installRenderSettingsLab } from './ui/renderSettingsLab.js';
 
 installLevel0SurfacePresentation();
-installOrdinaryWallpaperPresentation();
-installOrdinaryCasingMaterialPresentation();
-installOutletInteractionRuntime();
 installRenderSettingsRuntime();
 installPauFeaturePresentationPilot();
 installStaticWorldBatching();
+// Ordinary wallpaper/casing are intentionally the final Cell presentation wrappers:
+// Region/junction/Arch reconstruction must finish before A/B/C takes visible ownership.
+installOrdinaryWallpaperPresentation();
+installOrdinaryCasingMaterialPresentation();
+installOutletInteractionRuntime();
 installRendererRuntimeDiagnostics();
 mountDevelopmentVersionIndicator();
 
@@ -34,7 +37,10 @@ if (import.meta.env.DEV) {
     worldLab.installWorldLabStudioIntegration();
   }).catch((error) => console.warn('[Noclip Studio] local bridge unavailable', error));
 }
-void game.initialize().then(() => {
+
+// A/B/C bytes must resolve, hash-match and browser-decode before New/Continue
+// can stream the first Cell. There is no old procedural wallpaper fallback here.
+void prepareOrdinaryWallpaperAssets().then(() => game.initialize()).then(() => {
   const params = new URLSearchParams(window.location.search);
   if (params.has('autostart')) (document.querySelector('[data-action="new"]') as HTMLButtonElement | null)?.click();
 }).catch((error) => {
