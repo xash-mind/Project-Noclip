@@ -3,7 +3,10 @@ import { unitFloat } from '../world/hash.js';
 
 export type OrdinaryWallpaperFamily = 'A' | 'B' | 'C';
 
-export const ORDINARY_WALLPAPER_IMAGE_TILE_METERS = 2.6;
+// The committed A texture contains roughly ten motif lanes across its square.
+// 1.3 m therefore presents the reference motif at roughly 13 cm lane spacing,
+// close to the supplied Backrooms wall rather than treating the whole image as one motif.
+export const ORDINARY_WALLPAPER_IMAGE_TILE_METERS = 1.3;
 export const ORDINARY_WALLPAPER_B_PATCH_CHANCE = 0.08;
 export const ORDINARY_WALLPAPER_SPLIT_C_CHANCE = 0.015;
 export const ORDINARY_CASING_RUN_CHANCE = 0.35;
@@ -91,6 +94,46 @@ export function ordinaryOutletPlacement(seed: string, cellX: number, cellZ: numb
     u: 0.24 + unitFloat(`${key}:outlet-u`) * 0.52,
     faceSign: unitFloat(`${key}:outlet-face`) < 0.5 ? -1 : 1
   };
+}
+
+function outletSamplePoint(wall: WallSpec, u: number, faceSign: -1 | 1): { x: number; z: number } {
+  const clearance = 0.42;
+  const alongStart = wall.orientation === 'z' ? wall.cx - wall.sx / 2 : wall.cz - wall.sz / 2;
+  const alongLength = wallLength(wall);
+  const along = alongStart + alongLength * u;
+  if (wall.orientation === 'z') return { x: along, z: wall.cz + faceSign * (wall.sz / 2 + clearance) };
+  return { x: wall.cx + faceSign * (wall.sx / 2 + clearance), z: along };
+}
+
+function pointClearOfWalls(point: { x: number; z: number }, walls: readonly WallSpec[], source: WallSpec): boolean {
+  const cellHalf = CELL_SIZE / 2;
+  if (Math.abs(point.x) > cellHalf - 0.28 || Math.abs(point.z) > cellHalf - 0.28) return false;
+  for (const candidate of walls) {
+    if (candidate.id === source.id || !candidate.drawable || !floorReaching(candidate)) continue;
+    const pad = 0.24;
+    if (
+      point.x >= candidate.cx - candidate.sx / 2 - pad
+      && point.x <= candidate.cx + candidate.sx / 2 + pad
+      && point.z >= candidate.cz - candidate.sz / 2 - pad
+      && point.z <= candidate.cz + candidate.sz / 2 + pad
+    ) return false;
+  }
+  return true;
+}
+
+/** Choose the locally traversable/presented side; never place the only outlet into a blocked wall face. */
+export function ordinaryOutletFaceSign(
+  walls: readonly WallSpec[],
+  wall: WallSpec,
+  u: number,
+  preferred: -1 | 1
+): -1 | 1 | undefined {
+  const preferredClear = pointClearOfWalls(outletSamplePoint(wall, u, preferred), walls, wall);
+  const opposite = preferred === 1 ? -1 : 1;
+  const oppositeClear = pointClearOfWalls(outletSamplePoint(wall, u, opposite), walls, wall);
+  if (preferredClear) return preferred;
+  if (oppositeClear) return opposite;
+  return undefined;
 }
 
 export function ordinaryWallpaperUv(cellX: number, cellZ: number, wall: WallSpec): { tiling: [number, number]; offset: [number, number] } {
