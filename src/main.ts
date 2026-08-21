@@ -16,11 +16,9 @@ import { installRenderSettingsLab } from './ui/renderSettingsLab.js';
 installLevel0SurfacePresentation();
 installRenderSettingsRuntime();
 installPauFeaturePresentationPilot();
-// Dev.9.4 combined presentation preview verification anchor.
-// A/B/C and casing establish the final Cell-owned wall finish before static
-// batching sees a newly loaded Cell. Region/Arch reconstruction is installed by
-// StaticWorldBatching; the wallpaper pass performs a queued Arch finish after
-// that reconstruction and still before the batching reconcile interval.
+// Supplied A/B/C wallpaper and the accepted casing finish are resolved before
+// static batching sees a newly loaded Cell. A-A1 remains under the authoritative
+// pale Arch presentation owner rather than being repainted by the wallpaper pass.
 installOrdinaryWallpaperPresentation();
 installOrdinaryCasingMaterialPresentation();
 installStaticWorldBatching();
