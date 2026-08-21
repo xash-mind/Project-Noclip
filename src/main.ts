@@ -1,6 +1,8 @@
 import './styles.css';
 import { ProjectNoclipGame } from './app/ProjectNoclipGame.js';
 import { installLevel0SurfacePresentation } from './renderer/level0SurfacePresentation.js';
+import { installOrdinaryWallpaperPresentation } from './renderer/ordinaryWallpaperPresentation.js';
+import { installOutletInteractionRuntime } from './renderer/outletInteractionRuntime.js';
 import { installRenderSettingsRuntime } from './renderer/renderSettingsRuntime.js';
 import { installPauFeaturePresentationPilot } from './renderer/pauFeaturePresentationPilot.js';
 import { installStaticWorldBatching } from './renderer/StaticWorldBatching.js';
@@ -10,6 +12,8 @@ import { installRegionDepthLab } from './ui/regionDepthLab.js';
 import { installRenderSettingsLab } from './ui/renderSettingsLab.js';
 
 installLevel0SurfacePresentation();
+installOrdinaryWallpaperPresentation();
+installOutletInteractionRuntime();
 installRenderSettingsRuntime();
 installPauFeaturePresentationPilot();
 installStaticWorldBatching();
