@@ -25,22 +25,22 @@ installOutletInteractionRuntime();
 installRendererRuntimeDiagnostics();
 mountDevelopmentVersionIndicator();
 
-const game = new ProjectNoclipGame();
-installRegionDepthLab(game);
-installRenderSettingsLab(game);
-if (import.meta.env.DEV) {
-  void Promise.all([
-    import('./dev/studioBridgeClient.js'),
-    import('./dev/worldLabStudioIntegration.js')
-  ]).then(([bridge, worldLab]) => {
-    bridge.installStudioBridgeClient(game);
-    worldLab.installWorldLabStudioIntegration();
-  }).catch((error) => console.warn('[Noclip Studio] local bridge unavailable', error));
-}
-
-// A/B/C bytes must resolve, hash-match and browser-decode before New/Continue
-// can stream the first Cell. There is no old procedural wallpaper fallback here.
-void prepareOrdinaryWallpaperAssets().then(() => game.initialize()).then(() => {
+// Do not even construct the interactive title/game callbacks until A/B/C bytes
+// resolve, hash-match and browser-decode. This makes preload a hard first-Cell gate.
+void prepareOrdinaryWallpaperAssets().then(async () => {
+  const game = new ProjectNoclipGame();
+  installRegionDepthLab(game);
+  installRenderSettingsLab(game);
+  if (import.meta.env.DEV) {
+    void Promise.all([
+      import('./dev/studioBridgeClient.js'),
+      import('./dev/worldLabStudioIntegration.js')
+    ]).then(([bridge, worldLab]) => {
+      bridge.installStudioBridgeClient(game);
+      worldLab.installWorldLabStudioIntegration();
+    }).catch((error) => console.warn('[Noclip Studio] local bridge unavailable', error));
+  }
+  await game.initialize();
   const params = new URLSearchParams(window.location.search);
   if (params.has('autostart')) (document.querySelector('[data-action="new"]') as HTMLButtonElement | null)?.click();
 }).catch((error) => {
