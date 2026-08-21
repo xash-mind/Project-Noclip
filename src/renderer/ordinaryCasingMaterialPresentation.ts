@@ -1,18 +1,18 @@
 import * as pc from 'playcanvas';
 import type { CellDescriptor, WallSpec } from '../world/types.js';
-import { ORDINARY_CASING_CENTER_Y } from './ordinaryWallpaperRules.js';
+import { ORDINARY_CASING_CENTER_Y, ordinaryCasingEnabled } from './ordinaryWallpaperRules.js';
 import { WorldRenderer } from './WorldRenderer.js';
 
-const CASING_DETAIL_PERIOD_METERS = 8;
-const CASING_HEIGHT_METERS = 0.072;
+export const ORDINARY_CASING_HEIGHT_METERS = 0.09;
 
 interface CasingMaterialCache {
-  detailTexture: pc.Texture;
+  textures: Map<string, pc.Texture>;
   materials: WeakMap<pc.StandardMaterial, Map<string, pc.StandardMaterial>>;
 }
 
 interface RendererAccess {
   app: pc.Application;
+  save: { seed: string };
 }
 
 interface DetailMapStandardMaterial extends pc.StandardMaterial {
@@ -32,78 +32,76 @@ function entityByName(root: pc.Entity, name: string): pc.Entity | undefined {
   return childrenOf(root).find((child) => child.name === name);
 }
 
-function wrap01(value: number): number {
-  return ((value % 1) + 1) % 1;
+function cacheFor(renderer: WorldRenderer): CasingMaterialCache {
+  const existing = caches.get(renderer);
+  if (existing) return existing;
+  const created: CasingMaterialCache = { textures: new Map(), materials: new WeakMap() };
+  caches.set(renderer, created);
+  return created;
 }
 
-function createCasingDetailTexture(app: pc.Application): pc.Texture {
+function wallProfileKey(wall: WallSpec): string {
+  const bottom = wall.cy - wall.sy / 2;
+  return `${wall.sy.toFixed(4)}:${bottom.toFixed(4)}`;
+}
+
+function casingDetailTexture(renderer: WorldRenderer, wall: WallSpec): pc.Texture {
+  const cache = cacheFor(renderer);
+  const key = wallProfileKey(wall);
+  const existing = cache.textures.get(key);
+  if (existing) return existing;
+
+  const app = (renderer as unknown as RendererAccess).app;
   const canvas = document.createElement('canvas');
   canvas.width = 8;
   canvas.height = 256;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Casing detail texture unavailable');
-
   context.fillStyle = '#ffffff';
   context.fillRect(0, 0, canvas.width, canvas.height);
 
-  const lower = ORDINARY_CASING_CENTER_Y - CASING_HEIGHT_METERS / 2;
-  const upper = ORDINARY_CASING_CENTER_Y + CASING_HEIGHT_METERS / 2;
-  const top = Math.max(0, Math.floor((lower / CASING_DETAIL_PERIOD_METERS) * canvas.height));
-  const bottom = Math.min(canvas.height, Math.ceil((upper / CASING_DETAIL_PERIOD_METERS) * canvas.height));
-  const height = Math.max(2, bottom - top);
+  const bottom = wall.cy - wall.sy / 2;
+  const normalizedHeight = Math.max(0, Math.min(1, (ORDINARY_CASING_CENTER_Y - bottom) / wall.sy));
+  const centerRow = Math.round((1 - normalizedHeight) * (canvas.height - 1));
+  const pixelHeight = Math.max(7, Math.round((ORDINARY_CASING_HEIGHT_METERS / wall.sy) * canvas.height));
+  const top = Math.max(1, Math.min(canvas.height - pixelHeight - 1, centerRow - Math.floor(pixelHeight / 2)));
 
-  // Multiply detail keeps this inside the existing wallpaper draw while giving
-  // the reference casing its subdued olive-painted body and slight edge depth.
-  context.fillStyle = 'rgb(132, 121, 70)';
-  context.fillRect(0, top, canvas.width, height);
-  context.fillStyle = 'rgb(176, 163, 101)';
-  context.fillRect(0, top, canvas.width, 1);
-  context.fillStyle = 'rgb(94, 84, 45)';
-  context.fillRect(0, top + height - 1, canvas.width, 1);
+  // Reference-like olive-painted raceway: visible body, fine upper highlight and lower depth line.
+  context.fillStyle = 'rgb(137, 124, 68)';
+  context.fillRect(0, top, canvas.width, pixelHeight);
+  context.fillStyle = 'rgb(190, 174, 104)';
+  context.fillRect(0, top, canvas.width, 2);
+  context.fillStyle = 'rgb(82, 73, 38)';
+  context.fillRect(0, top + pixelHeight - 2, canvas.width, 2);
 
-  const texture = new pc.Texture(app.graphicsDevice, { mipmaps: true });
+  const texture = new pc.Texture(app.graphicsDevice, { mipmaps: false });
+  texture.name = `ordinary-casing-detail:${key}`;
   texture.addressU = pc.ADDRESS_REPEAT;
-  texture.addressV = pc.ADDRESS_REPEAT;
-  texture.minFilter = pc.FILTER_LINEAR_MIPMAP_LINEAR;
+  texture.addressV = pc.ADDRESS_CLAMP_TO_EDGE;
+  texture.minFilter = pc.FILTER_LINEAR;
   texture.magFilter = pc.FILTER_LINEAR;
   texture.setSource(canvas);
+  cache.textures.set(key, texture);
   return texture;
 }
 
-function cacheFor(renderer: WorldRenderer): CasingMaterialCache {
-  const existing = caches.get(renderer);
-  if (existing) return existing;
-  const app = (renderer as unknown as RendererAccess).app;
-  const created: CasingMaterialCache = {
-    detailTexture: createCasingDetailTexture(app),
-    materials: new WeakMap()
-  };
-  caches.set(renderer, created);
-  return created;
-}
-
-function casingMaterial(
-  cache: CasingMaterialCache,
-  base: pc.StandardMaterial,
-  wall: WallSpec
-): pc.StandardMaterial {
+export function ordinaryCasingMaterial(renderer: WorldRenderer, base: pc.StandardMaterial, wall: WallSpec): pc.StandardMaterial {
+  const cache = cacheFor(renderer);
   let variants = cache.materials.get(base);
   if (!variants) {
     variants = new Map();
     cache.materials.set(base, variants);
   }
-  const worldBottom = wall.cy - wall.sy / 2;
-  const tilingY = wall.sy / CASING_DETAIL_PERIOD_METERS;
-  const offsetY = wrap01(worldBottom / CASING_DETAIL_PERIOD_METERS);
-  const key = `${tilingY.toFixed(5)}:${offsetY.toFixed(5)}`;
+  const key = wallProfileKey(wall);
   const existing = variants.get(key);
   if (existing) return existing;
 
   const created = base.clone() as pc.StandardMaterial;
+  created.name = `${base.name || 'ordinary-wallpaper'}:casing`;
   const detail = created as unknown as DetailMapStandardMaterial;
-  detail.diffuseDetailMap = cache.detailTexture;
-  detail.diffuseDetailMapTiling = new pc.Vec2(1, tilingY);
-  detail.diffuseDetailMapOffset = new pc.Vec2(0, offsetY);
+  detail.diffuseDetailMap = casingDetailTexture(renderer, wall);
+  detail.diffuseDetailMapTiling = new pc.Vec2(1, 1);
+  detail.diffuseDetailMapOffset = new pc.Vec2(0, 0);
   created.update();
   variants.set(key, created);
   return created;
@@ -113,28 +111,23 @@ function applyMaterialCasing(renderer: WorldRenderer, descriptor: CellDescriptor
   if (descriptor.world.generationVersion !== 'gen3-v1' || descriptor.world.regionId !== 'ordinary-level-0') return;
   const visual = renderer.loaded.get(descriptor.id);
   if (!visual) return;
-  const root = visual.root;
-  const cache = cacheFor(renderer);
+  const seed = (renderer as unknown as RendererAccess).save.seed;
 
   for (const wall of descriptor.walls) {
-    const casingParts = childrenOf(root).filter((child) => child.name.startsWith(`${wall.id}:casing:`));
-    if (casingParts.length === 0) continue;
-    for (const part of casingParts) part.destroy();
-
+    if (!ordinaryCasingEnabled(seed, descriptor.address.cellX, descriptor.address.cellZ, wall)) continue;
     for (const name of [wall.id, `${wall.id}:split-c`]) {
-      const entity = entityByName(root, name);
+      const entity = entityByName(visual.root, name);
       const base = entity?.render?.material;
       if (!entity?.render || !(base instanceof pc.StandardMaterial)) continue;
-      entity.render.material = casingMaterial(cache, base, wall);
+      entity.render.material = ordinaryCasingMaterial(renderer, base, wall);
     }
   }
 }
 
 /**
- * Converts the common Ordinary lower-wall casing from transient helper meshes
- * into a multiply detail layer on the already-owned wallpaper material. This
- * preserves the deterministic 35% wall-run decision while adding no separate
- * casing draw batch or collision ownership.
+ * Final Ordinary casing pass. It runs after wallpaper ownership and adds the
+ * reference-like raceway inside the existing wall material, with no helper mesh,
+ * collision or extra draw-call ownership.
  */
 export function installOrdinaryCasingMaterialPresentation(): void {
   if (installed) return;
