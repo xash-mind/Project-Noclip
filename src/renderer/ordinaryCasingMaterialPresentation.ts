@@ -21,6 +21,8 @@ interface DetailMapStandardMaterial extends pc.StandardMaterial {
   diffuseDetailMapOffset: pc.Vec2;
 }
 
+type NamedMaterial = pc.StandardMaterial & { name?: string };
+
 const caches = new WeakMap<WorldRenderer, CasingMaterialCache>();
 let installed = false;
 
@@ -30,6 +32,14 @@ function childrenOf(entity: pc.Entity): pc.Entity[] {
 
 function entityByName(root: pc.Entity, name: string): pc.Entity | undefined {
   return childrenOf(root).find((child) => child.name === name);
+}
+
+function materialName(material: pc.StandardMaterial): string {
+  return (material as unknown as NamedMaterial).name ?? 'ordinary-wallpaper';
+}
+
+function setMaterialName(material: pc.StandardMaterial, name: string): void {
+  (material as unknown as NamedMaterial).name = name;
 }
 
 function cacheFor(renderer: WorldRenderer): CasingMaterialCache {
@@ -66,7 +76,6 @@ function casingDetailTexture(renderer: WorldRenderer, wall: WallSpec): pc.Textur
   const pixelHeight = Math.max(7, Math.round((ORDINARY_CASING_HEIGHT_METERS / wall.sy) * canvas.height));
   const top = Math.max(1, Math.min(canvas.height - pixelHeight - 1, centerRow - Math.floor(pixelHeight / 2)));
 
-  // Reference-like olive-painted raceway: visible body, fine upper highlight and lower depth line.
   context.fillStyle = 'rgb(137, 124, 68)';
   context.fillRect(0, top, canvas.width, pixelHeight);
   context.fillStyle = 'rgb(190, 174, 104)';
@@ -75,9 +84,8 @@ function casingDetailTexture(renderer: WorldRenderer, wall: WallSpec): pc.Textur
   context.fillRect(0, top + pixelHeight - 2, canvas.width, 2);
 
   const texture = new pc.Texture(app.graphicsDevice, { mipmaps: false });
-  texture.name = `ordinary-casing-detail:${key}`;
   texture.addressU = pc.ADDRESS_REPEAT;
-  texture.addressV = pc.ADDRESS_CLAMP_TO_EDGE;
+  texture.addressV = (pc as unknown as { ADDRESS_CLAMP_TO_EDGE: number }).ADDRESS_CLAMP_TO_EDGE;
   texture.minFilter = pc.FILTER_LINEAR;
   texture.magFilter = pc.FILTER_LINEAR;
   texture.setSource(canvas);
@@ -97,7 +105,7 @@ export function ordinaryCasingMaterial(renderer: WorldRenderer, base: pc.Standar
   if (existing) return existing;
 
   const created = base.clone() as pc.StandardMaterial;
-  created.name = `${base.name || 'ordinary-wallpaper'}:casing`;
+  setMaterialName(created, `${materialName(base)}:casing`);
   const detail = created as unknown as DetailMapStandardMaterial;
   detail.diffuseDetailMap = casingDetailTexture(renderer, wall);
   detail.diffuseDetailMapTiling = new pc.Vec2(1, 1);
@@ -124,11 +132,6 @@ function applyMaterialCasing(renderer: WorldRenderer, descriptor: CellDescriptor
   }
 }
 
-/**
- * Final Ordinary casing pass. It runs after wallpaper ownership and adds the
- * reference-like raceway inside the existing wall material, with no helper mesh,
- * collision or extra draw-call ownership.
- */
 export function installOrdinaryCasingMaterialPresentation(): void {
   if (installed) return;
   installed = true;
