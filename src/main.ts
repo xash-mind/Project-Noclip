@@ -1,6 +1,7 @@
 import './styles.css';
 import { ProjectNoclipGame } from './app/ProjectNoclipGame.js';
 import { installLevel0SurfacePresentation } from './renderer/level0SurfacePresentation.js';
+import { installOrdinaryCasingMaterialPresentation } from './renderer/ordinaryCasingMaterialPresentation.js';
 import { installOrdinaryWallpaperPresentation } from './renderer/ordinaryWallpaperPresentation.js';
 import { installOutletInteractionRuntime } from './renderer/outletInteractionRuntime.js';
 import { installRenderSettingsRuntime } from './renderer/renderSettingsRuntime.js';
@@ -13,6 +14,7 @@ import { installRenderSettingsLab } from './ui/renderSettingsLab.js';
 
 installLevel0SurfacePresentation();
 installOrdinaryWallpaperPresentation();
+installOrdinaryCasingMaterialPresentation();
 installOutletInteractionRuntime();
 installRenderSettingsRuntime();
 installPauFeaturePresentationPilot();
