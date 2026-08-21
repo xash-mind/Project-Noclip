@@ -167,18 +167,10 @@ def main() -> None:
         report["regions"]["ordinary-level-0"] = ordinary
         capture_canvas(driver, ARTIFACT_DIR / "ordinary-wallpaper.png")
 
-        pillar_message = qa_locate(driver, "pillar-field", "core")
-        pillar = region_snapshot(driver, "pillar-field")
-        report["regions"]["pillar-field"] = {"message": pillar_message, "diagnostics": pillar}
-        capture_canvas(driver, ARTIFACT_DIR / "pillar-wallpaper.png")
-
-        arch_message = qa_locate(driver, "arch-rooms", "core")
-        arch = region_snapshot(driver, "arch-rooms")
-        arch_region = arch.get("regions", {}).get("arch-rooms", {})
-        assert int(arch_region.get("paleBindings", 0)) > 0, arch
-        report["regions"]["arch-rooms"] = {"message": arch_message, "diagnostics": arch}
-        capture_canvas(driver, ARTIFACT_DIR / "arch-wallpaper.png")
-
+        # Audit the exact same A/B/C materials on camera-owned inspection panels
+        # before any expensive Region lookup. If these panels render correctly
+        # while the real wall is black, the defect is wall lifecycle/ownership;
+        # if the panels are also black, the defect is texture/material state.
         driver.execute_script("""
           const style=document.createElement('style');
           style.id='wallpaper-smoke-style';
@@ -191,6 +183,18 @@ def main() -> None:
         report["showcase"] = diagnostics(driver)
         assert report["showcase"]["assets"]["fallbackUsed"] == 0, report["showcase"]
         driver.execute_script("window.__projectNoclipWallpaper.clearShowcase();")
+
+        pillar_message = qa_locate(driver, "pillar-field", "core")
+        pillar = region_snapshot(driver, "pillar-field")
+        report["regions"]["pillar-field"] = {"message": pillar_message, "diagnostics": pillar}
+        capture_canvas(driver, ARTIFACT_DIR / "pillar-wallpaper.png")
+
+        arch_message = qa_locate(driver, "arch-rooms", "core")
+        arch = region_snapshot(driver, "arch-rooms")
+        arch_region = arch.get("regions", {}).get("arch-rooms", {})
+        assert int(arch_region.get("paleBindings", 0)) > 0, arch
+        report["regions"]["arch-rooms"] = {"message": arch_message, "diagnostics": arch}
+        capture_canvas(driver, ARTIFACT_DIR / "arch-wallpaper.png")
 
         report["renderer"] = renderer_diagnostics(driver)
         if report["renderer"]:
