@@ -127,7 +127,10 @@ test('dev.9.2 removes the old wallpaper fallback and preloads real NAL bytes bef
   assert.match(assetSource, /content hash mismatch/);
   assert.match(assetSource, /await image\.decode\(\)/);
   assert.match(assetSource, /fallbackUsed/);
-  assert.match(mainSource, /prepareOrdinaryWallpaperAssets\(\)\.then\(\(\) => game\.initialize\(\)\)/);
+  assert.ok(
+    mainSource.indexOf('prepareOrdinaryWallpaperAssets().then') < mainSource.indexOf('new ProjectNoclipGame()'),
+    'interactive game construction must be gated behind verified wallpaper preload'
+  );
   assert.ok(
     mainSource.indexOf('installStaticWorldBatching();') < mainSource.indexOf('installOrdinaryWallpaperPresentation();'),
     'Ordinary wallpaper must own the final presentation boundary after static/Region wrapper installation'
