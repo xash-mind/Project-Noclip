@@ -8,6 +8,7 @@
     "moduleResolution": "NodeNext"
   },
   "include": [
+    "src/app/blackoutRendering.ts",
     "src/audio/**/*.ts",
     "src/world/**/*.ts",
     "src/items/**/*.ts",
