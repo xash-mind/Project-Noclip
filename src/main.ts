@@ -15,6 +15,7 @@ import { installRenderSettingsLab } from './ui/renderSettingsLab.js';
 // Level 0 surface presentation now owns the older base materials and the final
 // supplied A/B/C wallpaper finish in one Cell lifecycle. Casing follows that
 // finish, and static batching observes the completed presentation.
+// Dev.9.5 preview anchor: no runtime behavior is changed by this comment.
 installLevel0SurfacePresentation();
 installRenderSettingsRuntime();
 installPauFeaturePresentationPilot();
