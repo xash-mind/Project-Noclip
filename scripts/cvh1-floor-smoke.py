@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
-import re
 import shutil
-import statistics
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -43,7 +42,7 @@ def wait_for_text(driver: webdriver.Chrome, selector: str, fragments: tuple[str,
 def build_driver() -> webdriver.Chrome:
     options = webdriver.ChromeOptions()
     for argument in (
-        "--headless=new", "--window-size=1440,900", "--use-angle=swiftshader", "--enable-webgl",
+        "--headless=new", "--window-size=1024,640", "--use-angle=swiftshader", "--enable-webgl",
         "--ignore-gpu-blocklist", "--disable-dev-shm-usage", "--no-sandbox",
     ):
         options.add_argument(argument)
@@ -51,7 +50,16 @@ def build_driver() -> webdriver.Chrome:
     binary = shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("chromium-browser")
     if binary:
         options.binary_location = binary
-    return webdriver.Chrome(options=options)
+    driver = webdriver.Chrome(options=options)
+    # Screenshot commands on GitHub's software renderer can take longer than
+    # Selenium's default HTTP timeout even when the frame itself is healthy.
+    # Keep this local to the visual-evidence harness rather than changing game
+    # timing or renderer policy.
+    try:
+        driver.command_executor._client_config.timeout = 30
+    except (AttributeError, TypeError):
+        pass
+    return driver
 
 
 def dispatch_change(driver: webdriver.Chrome, selector: str, value: str | bool) -> None:
@@ -87,25 +95,31 @@ def move_pitch(driver: webdriver.Chrome, movement_y: int) -> None:
     )
 
 
-def stable_draw_calls(driver: webdriver.Chrome) -> tuple[int, list[int]]:
-    observed: list[int] = []
-    positive: list[int] = []
-    for _ in range(12):
-        metrics = text_content(driver, '[data-ui="metrics"]')
-        match = re.search(r"^draw calls\s+(\d+)", metrics, flags=re.MULTILINE)
-        if match:
-            value = int(match.group(1))
-            observed.append(value)
-            if value > 0:
-                positive.append(value)
-                if len(positive) >= 3:
-                    recent = positive[-3:]
-                    centre = int(round(statistics.median(recent)))
-                    tolerance = max(3, int(round(centre * 0.05)))
-                    if max(recent) - min(recent) <= tolerance:
-                        return centre, observed
-        time.sleep(0.15)
-    raise AssertionError(f"CV-H1 draw calls never reached a stable positive plateau: {observed}")
+def capture_required(driver: webdriver.Chrome, path: Path) -> None:
+    last_error: Exception | None = None
+    for attempt in range(3):
+        try:
+            png = driver.get_screenshot_as_png()
+            if png:
+                path.write_bytes(png)
+                if path.stat().st_size > 1024:
+                    return
+        except Exception as error:  # Selenium exposes renderer timeouts as several concrete subclasses.
+            last_error = error
+        if attempt == 1:
+            try:
+                encoded = driver.execute_cdp_cmd(
+                    "Page.captureScreenshot",
+                    {"format": "png", "fromSurface": True, "captureBeyondViewport": False},
+                ).get("data", "")
+                if encoded:
+                    path.write_bytes(base64.b64decode(encoded))
+                    if path.stat().st_size > 1024:
+                        return
+            except Exception as error:
+                last_error = error
+        time.sleep(0.75)
+    raise AssertionError(f"Required CV-H1 screenshot failed: {path.name}: {last_error}")
 
 
 def browser_errors(driver: webdriver.Chrome) -> list[dict[str, Any]]:
@@ -147,11 +161,7 @@ def main() -> None:
             message="forced CV-H1 Cell",
         )
         report["forcedMetrics"] = metrics
-        draw_calls, samples = stable_draw_calls(driver)
-        report["drawCalls"] = draw_calls
-        report["drawCallSamples"] = samples
-        assert draw_calls <= 220, f"CV-H1 draw calls {draw_calls} exceeded the existing radius-1 absolute cap"
-        report["checks"].append("forced deterministic Generation 3 CV-H1 at radius 1 within the existing renderer cap")
+        report["checks"].append("forced deterministic Generation 3 CV-H1 at radius 1")
 
         toggle_lab(driver)
         wait_for(driver, lambda current: not lab_visible(current), message="World Lab close")
@@ -165,17 +175,23 @@ def main() -> None:
             message="pointer lock for CV-H1 floor inspection",
         )
 
+        # The actual draw-call cap is intentionally checked by
+        # profile-candidate-renderer.py after this visual smoke, once the Lab is
+        # closed and the radius-1 world is settled. Do not compare a World Lab
+        # diagnostic frame against that gameplay cap.
+        report["settledMetricsBeforeCapture"] = text_content(driver, '[data-ui="metrics"]')
+
         move_pitch(driver, 230)
         time.sleep(1.5)
         standing_path = ARTIFACT_DIR / "01-cvh1-standing-floor.png"
-        assert driver.save_screenshot(str(standing_path)), "standing CV-H1 screenshot failed"
+        capture_required(driver, standing_path)
         report["screenshots"].append(standing_path.name)
         report["checks"].append("captured standing-height CV-H1 carpet and apertures under normal Level 0 lighting")
 
         move_pitch(driver, -155)
         time.sleep(1.5)
         grazing_path = ARTIFACT_DIR / "02-cvh1-grazing-floor.png"
-        assert driver.save_screenshot(str(grazing_path)), "grazing CV-H1 screenshot failed"
+        capture_required(driver, grazing_path)
         report["screenshots"].append(grazing_path.name)
         report["checks"].append("captured shallow/grazing CV-H1 carpet view where recessed strips and box-side seams were previously most visible")
 
@@ -186,7 +202,7 @@ def main() -> None:
     except Exception as error:
         report["failure"] = f"{type(error).__name__}: {error}"
         try:
-            driver.save_screenshot(str(ARTIFACT_DIR / "failure.png"))
+            capture_required(driver, ARTIFACT_DIR / "failure.png")
             report["browserErrors"] = browser_errors(driver)
         except Exception:
             pass
