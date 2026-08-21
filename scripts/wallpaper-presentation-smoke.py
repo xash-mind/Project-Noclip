@@ -74,6 +74,60 @@ def capture_canvas(driver: webdriver.Chrome, path: Path) -> None:
     path.write_bytes(data)
 
 
+def canvas_pixel_stats(driver: webdriver.Chrome, crop: tuple[float, float, float, float] = (0.35, 0.25, 0.65, 0.75)) -> dict[str, float]:
+    result = driver.execute_async_script("""
+      const crop=arguments[0], done=arguments[1];
+      const canvas=document.querySelector('#game-canvas');
+      if(!canvas){done({error:'missing #game-canvas'});return;}
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        try {
+          const image=new Image();
+          image.onerror=()=>done({error:'could not decode rendered canvas'});
+          image.onload=()=>{
+            const copy=document.createElement('canvas');
+            copy.width=image.naturalWidth; copy.height=image.naturalHeight;
+            const context=copy.getContext('2d',{willReadFrequently:true});
+            if(!context){done({error:'render pixel canvas unavailable'});return;}
+            context.drawImage(image,0,0);
+            const x=Math.max(0,Math.floor(copy.width*crop[0]));
+            const y=Math.max(0,Math.floor(copy.height*crop[1]));
+            const w=Math.max(1,Math.floor(copy.width*(crop[2]-crop[0])));
+            const h=Math.max(1,Math.floor(copy.height*(crop[3]-crop[1])));
+            const pixels=context.getImageData(x,y,w,h).data;
+            const total=w*h;
+            const stride=Math.max(1,Math.floor(total/12000));
+            let count=0,sum=0,sumSq=0,min=255,max=0;
+            for(let pixel=0;pixel<total;pixel+=stride){
+              const i=pixel*4;
+              const luma=0.2126*pixels[i]+0.7152*pixels[i+1]+0.0722*pixels[i+2];
+              count++; sum+=luma; sumSq+=luma*luma; min=Math.min(min,luma); max=Math.max(max,luma);
+            }
+            const mean=sum/count;
+            done({mean,min,max,stdDev:Math.sqrt(Math.max(0,sumSq/count-mean*mean)),width:w,height:h});
+          };
+          image.src=canvas.toDataURL('image/png');
+        } catch(error){done({error:String(error)});}
+      }));
+    """, list(crop))
+    if not isinstance(result, dict) or result.get("error"):
+        raise AssertionError(result)
+    return {key: float(value) for key, value in result.items()}
+
+
+def assert_textured_render(label: str, stats: dict[str, float]) -> None:
+    # The original defect measured around mean 47 with only ~2-3 luma sigma.
+    # Keep the hard darkness rejection while allowing intentionally pale/dim Arch
+    # walls to retain subtler texture contrast than Ordinary/Pillar surfaces.
+    assert stats["mean"] >= 70, (label, "render too dark", stats)
+    assert stats["max"] - stats["min"] >= 12, (label, "render too flat", stats)
+    assert stats["stdDev"] >= 2.5, (label, "texture variation missing", stats)
+
+
+def assert_nonblack_render(label: str, stats: dict[str, float]) -> None:
+    assert stats["mean"] >= 55, (label, "render unexpectedly black", stats)
+    assert stats["max"] >= 85, (label, "no readable lit surface", stats)
+
+
 def severe_errors(driver: webdriver.Chrome) -> list[dict[str, Any]]:
     ignored = ("favicon.ico", "AudioContext was not allowed to start")
     return [
@@ -93,12 +147,50 @@ def renderer_diagnostics(driver: webdriver.Chrome) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
+def source_pixel_stats(driver: webdriver.Chrome, asset_states: dict[str, Any]) -> dict[str, Any]:
+    paths = {family: str(asset_states[family]["runtimePath"]) for family in ("A", "B", "C")}
+    result = driver.execute_async_script("""
+      const paths=arguments[0], done=arguments[1];
+      (async () => {
+        const output={};
+        for (const [family,path] of Object.entries(paths)) {
+          const image=new Image(); image.src=path; await image.decode();
+          const canvas=document.createElement('canvas'); canvas.width=image.naturalWidth; canvas.height=image.naturalHeight;
+          const context=canvas.getContext('2d',{willReadFrequently:true});
+          if(!context) throw new Error('source pixel canvas unavailable');
+          context.drawImage(image,0,0);
+          const pixels=context.getImageData(0,0,canvas.width,canvas.height).data;
+          let count=0,sum=0,sumSq=0,min=255,max=0;
+          const stride=Math.max(1,Math.floor((canvas.width*canvas.height)/8192));
+          for(let pixel=0; pixel<canvas.width*canvas.height; pixel+=stride){
+            const i=pixel*4; const luma=0.2126*pixels[i]+0.7152*pixels[i+1]+0.0722*pixels[i+2];
+            count++; sum+=luma; sumSq+=luma*luma; min=Math.min(min,luma); max=Math.max(max,luma);
+          }
+          const mean=sum/count; output[family]={width:canvas.width,height:canvas.height,mean,min,max,stdDev:Math.sqrt(Math.max(0,sumSq/count-mean*mean))};
+        }
+        done(output);
+      })().catch((error)=>done({error:String(error)}));
+    """, paths)
+    if not isinstance(result, dict) or result.get("error"):
+        raise AssertionError(result)
+    return result
+
+
 def has_real_a_wall(driver: webdriver.Chrome) -> dict[str, Any] | bool:
     snapshot = diagnostics(driver)
     ordinary = (snapshot or {}).get("regions", {}).get("ordinary-level-0", {})
     if not snapshot or snapshot.get("wallA", 0) <= 0 or ordinary.get("suppliedTextureBindings", 0) <= 0:
         return False
     return snapshot
+
+
+def qa_call(driver: webdriver.Chrome, method: str, *args: Any) -> Any:
+    value = driver.execute_script("""
+      const method=arguments[0], args=Array.from(arguments).slice(1), qa=window.__projectNoclipQa;
+      if(!qa || typeof qa[method] !== 'function') return null;
+      return qa[method](...args) ?? null;
+    """, method, *args)
+    return value
 
 
 def qa_locate(driver: webdriver.Chrome, region: str, depth: str) -> str:
@@ -125,26 +217,25 @@ def region_snapshot(driver: webdriver.Chrome, region: str) -> dict[str, Any]:
     return snapshot
 
 
+def capture_verified(driver: webdriver.Chrome, name: str, textured: bool = True) -> dict[str, float]:
+    time.sleep(0.8)
+    stats = canvas_pixel_stats(driver)
+    capture_canvas(driver, ARTIFACT_DIR / f"{name}.png")
+    if textured:
+        assert_textured_render(name, stats)
+    else:
+        assert_nonblack_render(name, stats)
+    return stats
+
+
 def main() -> None:
-    report: dict[str, Any] = {"baseUrl": BASE_URL, "regions": {}, "browserErrors": []}
+    report: dict[str, Any] = {"baseUrl": BASE_URL, "regions": {}, "renderPixels": {}, "browserErrors": []}
     driver = build_driver()
     try:
         driver.get(BASE_URL)
-        new_button = wait_for(
-            driver,
-            lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="new"]'),
-            timeout=35,
-            message="New journey after wallpaper preload",
-        )
+        new_button = wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="new"]'), timeout=35, message="New journey after wallpaper preload")
         new_button.click()
-        wait_for(
-            driver,
-            lambda current: current.execute_script(
-                "return document.querySelector('[data-ui=title]').hidden && !document.querySelector('[data-ui=hud]').hidden"
-            ),
-            timeout=40,
-            message="journey HUD",
-        )
+        wait_for(driver, lambda current: current.execute_script("return document.querySelector('[data-ui=title]').hidden && !document.querySelector('[data-ui=hud]').hidden"), timeout=40, message="journey HUD")
         wait_for(driver, lambda current: current.execute_script("return Boolean(window.__projectNoclipQa)"), timeout=25, message="runtime QA bridge")
         initial = wait_for(driver, lambda current: diagnostics(current), timeout=20, message="wallpaper QA bridge")
         assets = initial.get("assets", {})
@@ -160,37 +251,61 @@ def main() -> None:
             assert int(state.get("width", 0)) > 0 and int(state.get("height", 0)) > 0, (family, state)
             assert str(state.get("runtimePath", "")).startswith("/assets/runtime/images/"), (family, state)
 
-        ordinary = wait_for(driver, has_real_a_wall, timeout=15, message="real A wallpaper material on normal Ordinary wall")
-        assert ordinary.get("assets", {}).get("fallbackUsed") == 0, ordinary
-        assert 0.15 <= float(ordinary.get("casingSetbackFraction", 0)) <= 0.20, ordinary
-        assert int(ordinary.get("casingStrips", 0)) == int(ordinary.get("casingRuns", 0)) * 2, ordinary
-        report["regions"]["ordinary-level-0"] = ordinary
-        capture_canvas(driver, ARTIFACT_DIR / "ordinary-wallpaper.png")
-
-        pillar_message = qa_locate(driver, "pillar-field", "core")
-        pillar = region_snapshot(driver, "pillar-field")
-        report["regions"]["pillar-field"] = {"message": pillar_message, "diagnostics": pillar}
-        capture_canvas(driver, ARTIFACT_DIR / "pillar-wallpaper.png")
-
-        arch_message = qa_locate(driver, "arch-rooms", "core")
-        arch = region_snapshot(driver, "arch-rooms")
-        arch_region = arch.get("regions", {}).get("arch-rooms", {})
-        assert int(arch_region.get("paleBindings", 0)) > 0, arch
-        report["regions"]["arch-rooms"] = {"message": arch_message, "diagnostics": arch}
-        capture_canvas(driver, ARTIFACT_DIR / "arch-wallpaper.png")
+        report["sourcePixels"] = source_pixel_stats(driver, asset_states)
+        for family, stats in report["sourcePixels"].items():
+            assert float(stats["max"]) - float(stats["min"]) >= 18, (family, stats)
+            assert float(stats["stdDev"]) >= 2.5, (family, stats)
 
         driver.execute_script("""
           const style=document.createElement('style');
           style.id='wallpaper-smoke-style';
           style.textContent='[data-ui="hud"], .pause-overlay, [data-ui="version-indicator"] { opacity:0 !important; pointer-events:none !important; }';
           document.head.appendChild(style);
-          return window.__projectNoclipWallpaper.showcase();
         """)
-        time.sleep(1.2)
-        capture_canvas(driver, ARTIFACT_DIR / "wallpaper-showcase.png")
+
+        ordinary = wait_for(driver, has_real_a_wall, timeout=15, message="real A wallpaper material on normal Ordinary wall")
+        assert ordinary.get("assets", {}).get("fallbackUsed") == 0, ordinary
+        assert 0.15 <= float(ordinary.get("casingSetbackFraction", 0)) <= 0.20, ordinary
+        assert int(ordinary.get("casingStrips", 0)) == int(ordinary.get("casingRuns", 0)) * 2, ordinary
+        marker = qa_call(driver, "placeAtMarkerWall")
+        assert marker, "Could not face a real Ordinary wall"
+        report["regions"]["ordinary-level-0"] = {"diagnostics": ordinary, "marker": marker}
+        report["renderPixels"]["ordinary-wallpaper"] = capture_verified(driver, "ordinary-wallpaper")
+
+        driver.execute_script("return window.__projectNoclipWallpaper.showcase();")
+        time.sleep(1.0)
         report["showcase"] = diagnostics(driver)
         assert report["showcase"]["assets"]["fallbackUsed"] == 0, report["showcase"]
+        report["renderPixels"]["split-wallpaper"] = capture_verified(driver, "wallpaper-showcase")
         driver.execute_script("window.__projectNoclipWallpaper.clearShowcase();")
+
+        # New journeys intentionally begin before advanced Region gates. Reuse the
+        # existing QA fixture placer because it establishes the canonical local
+        # gateBypass tuning without changing world generation or production state.
+        gate_probe = qa_call(driver, "placeAtFixtureState", "on")
+        assert gate_probe, "Could not establish advanced-Region QA gate bypass"
+        time.sleep(0.8)
+
+        pillar_message = qa_locate(driver, "pillar-field", "core")
+        pillar = region_snapshot(driver, "pillar-field")
+        pillar_marker = qa_call(driver, "placeAtMarkerWall")
+        assert pillar_marker, "Could not face a real Pillar Field wall"
+        report["regions"]["pillar-field"] = {"message": pillar_message, "diagnostics": pillar, "marker": pillar_marker}
+        report["renderPixels"]["pillar-wallpaper"] = capture_verified(driver, "pillar-wallpaper")
+
+        arch_message = qa_locate(driver, "arch-rooms", "core")
+        arch = region_snapshot(driver, "arch-rooms")
+        arch_region = arch.get("regions", {}).get("arch-rooms", {})
+        assert int(arch_region.get("paleBindings", 0)) > 0, arch
+        arch_marker = qa_call(driver, "placeAtMarkerWall")
+        assert arch_marker, "Could not face a real Arch Room wall"
+        report["regions"]["arch-rooms"] = {"message": arch_message, "diagnostics": arch, "marker": arch_marker}
+        report["renderPixels"]["arch-wallpaper"] = capture_verified(driver, "arch-wallpaper")
+
+        arch_overview = qa_call(driver, "placeAtArchOverview")
+        assert arch_overview, "Could not frame authoritative A-A1 divider"
+        report["regions"]["arch-rooms"]["dividerOverview"] = arch_overview
+        report["renderPixels"]["arch-divider-pale"] = capture_verified(driver, "arch-divider-pale", textured=False)
 
         report["renderer"] = renderer_diagnostics(driver)
         if report["renderer"]:

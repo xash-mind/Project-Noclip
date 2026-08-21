@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
 import type { CellDescriptor, LightState, PropSpec, WallSpec } from '../world/types.js';
+import { applyLevel0WallpaperPresentation } from './ordinaryWallpaperPresentation.js';
 import { WorldRenderer } from './WorldRenderer.js';
 import { canvasTexture, makeMaterial, type CellVisual } from './support.js';
 import {
@@ -216,13 +217,18 @@ function applyGen3SurfacePresentation(renderer: WorldRenderer, visual: CellVisua
     const value = fixtureMaterial(cache, descriptor, group.state, pulse);
     group.fixtures.forEach((_position, index) => setMaterial(entityByName(root, `${group.id}:fixture:${index}`), value));
   }
+
+  // Supplied A/B/C wallpaper is the final wall finish in this same lifecycle.
+  // Ordinary sparse pillars keep the older base material above; Pillar Field
+  // pillars/walls and normal Arch room walls are selectively replaced here.
+  applyLevel0WallpaperPresentation(renderer, visual);
 }
 
 /**
  * Installs Generation 3 Level 0 surface presentation only. Deterministic world
- * descriptors remain renderer-independent; this layer owns wallpaper, base
- * carpet/ceiling materials, pillar faces, fixture mesh appearance, and the
- * floor-reaching collider filter required by the current 2D movement solver.
+ * descriptors remain renderer-independent; this single Cell lifecycle owns the
+ * older base fallback surfaces and the final supplied wallpaper finish before
+ * casing/static batching observe the Cell.
  */
 export function installLevel0SurfacePresentation(): void {
   if (installed) return;

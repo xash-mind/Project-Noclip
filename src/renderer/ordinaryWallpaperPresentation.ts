@@ -1,6 +1,6 @@
 import * as pc from 'playcanvas';
-import { ARCH_HEADER_HEIGHT, ARCH_LOWER_HEIGHT } from '../world/gen3ArchitectureCore.js';
-import { CELL_SIZE, WALL_HEIGHT, type CellDescriptor, type PropSpec, type WallSpec } from '../world/types.js';
+import { CELL_SIZE, type CellDescriptor, type PropSpec, type WallSpec } from '../world/types.js';
+import { archStructuralRole } from './archDividerRuntimeCorrection.js';
 import { ordinaryCasingPresentationDiagnostics } from './ordinaryCasingMaterialPresentation.js';
 import {
   noteOrdinaryWallpaperFallback,
@@ -81,8 +81,6 @@ declare global {
 }
 
 const caches = new WeakMap<WorldRenderer, OrdinaryPresentationCache>();
-const scheduledArchWallpaperFinish = new WeakSet<WorldRenderer>();
-let installed = false;
 let latestRenderer: WorldRenderer | undefined;
 
 function childrenOf(entity: pc.Entity): pc.Entity[] {
@@ -249,16 +247,7 @@ function renderUnsplitWallpaper(
   wall: WallSpec,
   family: OrdinaryWallpaperFamily
 ): void {
-  const existing = entityByName(root, wall.id);
-  if (!existing) return;
-  existing.destroy();
-  box(
-    wall.id,
-    root,
-    [wall.cx, wall.cy, wall.cz],
-    [wall.sx, wall.sy, wall.sz],
-    wallpaperMaterial(cache, descriptor, wall, family)
-  );
+  setMaterial(entityByName(root, wall.id), wallpaperMaterial(cache, descriptor, wall, family));
 }
 
 function renderSplitWallpaper(
@@ -277,24 +266,6 @@ function renderSplitWallpaper(
   const positiveFamily: OrdinaryWallpaperFamily = cOnPositiveSide ? 'C' : 'A';
   box(negative.id, root, [negative.cx, negative.cy, negative.cz], [negative.sx, negative.sy, negative.sz], wallpaperMaterial(cache, descriptor, negative, negativeFamily));
   box(positive.id, root, [positive.cx, positive.cy, positive.cz], [positive.sx, positive.sy, positive.sz], wallpaperMaterial(cache, descriptor, positive, positiveFamily));
-}
-
-function wallMinY(wall: WallSpec): number { return wall.cy - wall.sy / 2; }
-function wallMaxY(wall: WallSpec): number { return wall.cy + wall.sy / 2; }
-
-/** Mirrors the authoritative A-A1 semantic-piece classification without taking geometry ownership. */
-function isOwnedArchDividerSurface(wall: WallSpec): boolean {
-  if (wall.materialId !== 'arch-pale-wallpaper') return false;
-  const header = Math.abs(wall.sy - ARCH_HEADER_HEIGHT) < 0.055
-    && Math.abs(wallMaxY(wall) - WALL_HEIGHT) < 0.045;
-  const lower = Math.abs(wall.sy - ARCH_LOWER_HEIGHT) < 0.065
-    && wallMinY(wall) <= 0.045;
-  const headerBottom = WALL_HEIGHT - ARCH_HEADER_HEIGHT;
-  const pier = wallMinY(wall) > 0.04
-    && wallMinY(wall) <= ARCH_LOWER_HEIGHT + 0.065
-    && wallMaxY(wall) >= headerBottom - 0.045
-    && wall.sy > 1.35;
-  return header || lower || pier;
 }
 
 function outletPlateMaterial(cache: OrdinaryPresentationCache): pc.StandardMaterial {
@@ -390,56 +361,7 @@ function applyPillarWallpaper(renderer: WorldRenderer, cache: OrdinaryPresentati
   }
 }
 
-function archFrameOrientation(name: string): WallSpec['orientation'] | undefined {
-  const match = name.match(/^arch-frame:(?:pier-lower|pier-upper|upper-run|lower-panel|curve):([xz]):/);
-  const orientation = match?.[1];
-  return orientation === 'x' || orientation === 'z' ? orientation : undefined;
-}
-
-function archFrameReferenceWall(entity: pc.Entity): WallSpec {
-  const position = entity.getLocalPosition();
-  const scale = entity.getLocalScale();
-  const orientation = archFrameOrientation(entity.name) ?? (scale.x >= scale.z ? 'z' : 'x');
-  return {
-    id: `${entity.name}:wallpaper`,
-    cx: position.x,
-    cy: position.y,
-    cz: position.z,
-    sx: Math.max(0.04, scale.x),
-    sy: Math.max(0.04, scale.y),
-    sz: Math.max(0.04, scale.z),
-    orientation,
-    drawable: true,
-    materialId: 'arch-pale-wallpaper',
-    materialVariant: 0
-  };
-}
-
-function applyArchFrameWallpaper(renderer: WorldRenderer, visual: CellVisual): void {
-  if (visual.descriptor.world.regionId !== 'arch-rooms') return;
-  const cache = cacheFor(renderer);
-  const seed = (renderer as unknown as RendererAccess).save.seed;
-  for (const child of childrenOf(visual.root)) {
-    if (!child.name.startsWith('arch-frame:') || !child.render) continue;
-    const reference = archFrameReferenceWall(child);
-    const decision = ordinaryWallpaperDecision(seed, visual.descriptor.address.cellX, visual.descriptor.address.cellZ, reference);
-    child.render.material = wallpaperMaterial(cache, visual.descriptor, reference, decision.primary);
-  }
-}
-
-function scheduleArchFrameWallpaper(renderer: WorldRenderer): void {
-  if (scheduledArchWallpaperFinish.has(renderer)) return;
-  scheduledArchWallpaperFinish.add(renderer);
-  // Region/Arch reconstruction queues its own microtask outside this wrapper.
-  // Two hops put this finish pass after that reconstruction while still before
-  // the 100 ms StaticWorldBatching reconciliation window.
-  queueMicrotask(() => queueMicrotask(() => {
-    scheduledArchWallpaperFinish.delete(renderer);
-    for (const visual of renderer.loaded.values()) applyArchFrameWallpaper(renderer, visual);
-  }));
-}
-
-function applyLevel0WallpaperPresentation(renderer: WorldRenderer, visual: CellVisual): void {
+export function applyLevel0WallpaperPresentation(renderer: WorldRenderer, visual: CellVisual): void {
   const descriptor = visual.descriptor;
   if (descriptor.world.generationVersion !== 'gen3-v1' || !wallpaperRegion(descriptor)) return;
   const cache = cacheFor(renderer);
@@ -447,9 +369,13 @@ function applyLevel0WallpaperPresentation(renderer: WorldRenderer, visual: CellV
 
   for (const wall of descriptor.walls) {
     if (!eligibleLevel0WallpaperWall(descriptor, wall)) continue;
+    // A-A1 is an Arch structural assembly, not a wallpaper-bearing room wall.
+    // Leave its piers/upper/lower semantic surfaces to the authoritative pale
+    // Arch owner; reconstructed arch-frame geometry follows that same owner.
+    if (descriptor.world.regionId === 'arch-rooms' && archStructuralRole(wall)) continue;
+
     const decision = ordinaryWallpaperDecision(seed, descriptor.address.cellX, descriptor.address.cellZ, wall);
-    const specializedArchSurface = descriptor.world.regionId === 'arch-rooms' && isOwnedArchDividerSurface(wall);
-    if (!specializedArchSurface && decision.splitWith === 'C' && decision.splitFraction !== undefined) {
+    if (decision.splitWith === 'C' && decision.splitFraction !== undefined) {
       renderSplitWallpaper(cache, descriptor, visual.root, wall, decision.splitFraction, decision.cOnPositiveSide ?? true);
     } else {
       renderUnsplitWallpaper(cache, descriptor, visual.root, wall, decision.primary);
@@ -463,7 +389,6 @@ function applyLevel0WallpaperPresentation(renderer: WorldRenderer, visual: CellV
   }
 
   applyPillarWallpaper(renderer, cache, visual);
-  scheduleArchFrameWallpaper(renderer);
 }
 
 function emptyRegionDiagnostics(): WallpaperRegionDiagnostics {
@@ -571,16 +496,5 @@ function installQaBridge(renderer: WorldRenderer): void {
     diagnostics: () => ordinaryWallpaperPresentationDiagnostics(renderer),
     showcase: () => { showShowcase(renderer); return ordinaryWallpaperPresentationDiagnostics(renderer); },
     clearShowcase: () => clearShowcase(renderer)
-  };
-}
-
-export function installOrdinaryWallpaperPresentation(): void {
-  if (installed) return;
-  installed = true;
-  const originalLoadCell = WorldRenderer.prototype.loadCell;
-  WorldRenderer.prototype.loadCell = function patchedOrdinaryWallpaperLoad(this: WorldRenderer, descriptor: CellDescriptor): void {
-    originalLoadCell.call(this, descriptor);
-    const visual = this.loaded.get(descriptor.id);
-    if (visual) applyLevel0WallpaperPresentation(this, visual);
   };
 }
