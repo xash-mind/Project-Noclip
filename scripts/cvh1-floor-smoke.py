@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -165,14 +166,18 @@ def main() -> None:
 
         toggle_lab(driver)
         wait_for(driver, lambda current: not lab_visible(current), message="World Lab close")
-        resume = driver.find_element(By.CSS_SELECTOR, '[data-action="resume"]')
-        if resume.is_displayed():
-            driver.execute_script("arguments[0].click();", resume)
+
+        # Pointer lock can only be granted from a trusted user gesture. A JS
+        # .click() is intentionally untrusted in Chromium, so use WebDriver's
+        # native action path on the real canvas. This exercises the same click
+        # listener a player uses without adding any runtime test hook.
+        canvas = driver.find_element(By.CSS_SELECTOR, '#game-canvas')
+        ActionChains(driver).move_to_element(canvas).click().perform()
         wait_for(
             driver,
             lambda current: current.execute_script("return document.pointerLockElement === document.querySelector('#game-canvas')"),
-            timeout=8,
-            message="pointer lock for CV-H1 floor inspection",
+            timeout=12,
+            message="trusted pointer lock for CV-H1 floor inspection",
         )
 
         # The actual draw-call cap is intentionally checked by
