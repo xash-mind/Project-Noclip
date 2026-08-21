@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - preview/dev9-4-presentation-corrections
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -13,10 +14,12 @@ jobs:
   verify-exact-head:
     runs-on: ubuntu-latest
     timeout-minutes: 55
+    env:
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
       - uses: actions/setup-node@v4
         with:
@@ -49,6 +52,7 @@ jobs:
           NOCLIP_EXPECTED_VERSION: v0.3.0-dev.9.4
         run: |
           set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
           npm run preview > /tmp/project-noclip-dev9-4-preview.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true; cat /tmp/project-noclip-dev9-4-preview.log || true' EXIT
@@ -68,7 +72,7 @@ jobs:
           NOCLIP_FLASHLIGHT_ARTIFACTS="artifacts/dev9-4-exact/flashlight" python scripts/flashlight-smoke.py
 
           NOCLIP_BASE_URL="http://127.0.0.1:4173" \
-          NOCLIP_DEPLOYMENT_COMMIT="${GITHUB_SHA}" \
+          NOCLIP_DEPLOYMENT_COMMIT="$CANDIDATE_SHA" \
           NOCLIP_DEPLOYMENT_ID="dev9-4-exact-candidate" \
           NOCLIP_EXPECTED_VERSION="v0.3.0-dev.9.4" \
           NOCLIP_PROFILE_ARTIFACTS="artifacts/dev9-4-exact/renderer" \
@@ -80,10 +84,11 @@ jobs:
 
           python - <<'PY'
           import json
+          import os
           from pathlib import Path
 
           profile = json.loads(Path('artifacts/dev9-4-exact/renderer/profile.json').read_text(encoding='utf-8'))
-          assert profile['deployment']['commit'] == __import__('os').environ['GITHUB_SHA']
+          assert profile['deployment']['commit'] == os.environ['CANDIDATE_SHA']
           assert profile['deployment']['version'] == 'v0.3.0-dev.9.4'
           assert not profile.get('browserErrors'), profile.get('browserErrors')
           caps = {
@@ -104,7 +109,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: dev9-4-exact-candidate-${{ github.sha }}
+          name: dev9-4-exact-candidate-${{ github.event.pull_request.head.sha || github.sha }}
           path: artifacts/dev9-4-exact
           if-no-files-found: warn
           retention-days: 30
