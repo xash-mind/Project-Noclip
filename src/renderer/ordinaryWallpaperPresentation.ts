@@ -10,7 +10,6 @@ import {
   ORDINARY_CASING_RUN_CHANCE,
   ORDINARY_OUTLET_CENTER_Y,
   ORDINARY_WALLPAPER_IMAGE_TILE_METERS,
-  ordinaryCasingEnabled,
   ordinaryOutletFaceSign,
   ordinaryOutletPlacement,
   ordinaryWallpaperDecision,
@@ -24,6 +23,8 @@ interface RendererAccess {
   app: pc.Application;
   save: { seed: string };
 }
+
+type NamedMaterial = pc.StandardMaterial & { name?: string };
 
 interface OrdinaryPresentationCache {
   wallpapers: Readonly<Record<OrdinaryWallpaperFamily, pc.Texture>>;
@@ -76,6 +77,14 @@ function entityByName(root: pc.Entity, name: string): pc.Entity | undefined {
   return childrenOf(root).find((child) => child.name === name);
 }
 
+function materialName(material: pc.StandardMaterial | undefined): string {
+  return material ? ((material as unknown as NamedMaterial).name ?? '') : '';
+}
+
+function setMaterialName(material: pc.StandardMaterial, name: string): void {
+  (material as unknown as NamedMaterial).name = name;
+}
+
 function diagnosticCanvas(family: OrdinaryWallpaperFamily): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = 128;
@@ -94,7 +103,6 @@ function diagnosticCanvas(family: OrdinaryWallpaperFamily): HTMLCanvasElement {
 
 function createAssetTexture(app: pc.Application, family: OrdinaryWallpaperFamily): pc.Texture {
   const texture = new pc.Texture(app.graphicsDevice, { mipmaps: true });
-  texture.name = `ordinary-wallpaper-texture:${family}`;
   texture.addressU = pc.ADDRESS_REPEAT;
   texture.addressV = pc.ADDRESS_REPEAT;
   texture.minFilter = pc.FILTER_LINEAR_MIPMAP_LINEAR;
@@ -143,8 +151,10 @@ function wallpaperMaterialForUv(
 ): pc.StandardMaterial {
   const key = `ordinary-wallpaper:${family}:${tiling.map((value) => value.toFixed(4)).join(',')}:${offset.map((value) => value.toFixed(4)).join(',')}`;
   return material(cache, key, () => {
-    const result = makeMaterial([0.96, 0.95, 0.92], cache.wallpapers[family], tiling, undefined, 1, offset);
-    result.name = `ordinary-wallpaper:${family}`;
+    const mutableTiling: [number, number] = [tiling[0], tiling[1]];
+    const mutableOffset: [number, number] = [offset[0], offset[1]];
+    const result = makeMaterial([0.96, 0.95, 0.92], cache.wallpapers[family], mutableTiling, undefined, 1, mutableOffset);
+    setMaterialName(result, `ordinary-wallpaper:${family}`);
     result.update();
     return result;
   });
@@ -219,7 +229,7 @@ function renderSplitWallpaper(
 function outletPlateMaterial(cache: OrdinaryPresentationCache): pc.StandardMaterial {
   return material(cache, 'ordinary-outlet-plate', () => {
     const result = makeMaterial([0.61, 0.58, 0.36]);
-    result.name = 'ordinary-outlet-plate';
+    setMaterialName(result, 'ordinary-outlet-plate');
     result.gloss = 0.035;
     result.update();
     return result;
@@ -229,7 +239,7 @@ function outletPlateMaterial(cache: OrdinaryPresentationCache): pc.StandardMater
 function outletSlotMaterial(cache: OrdinaryPresentationCache): pc.StandardMaterial {
   return material(cache, 'ordinary-outlet-slot', () => {
     const result = makeMaterial([0.16, 0.14, 0.065]);
-    result.name = 'ordinary-outlet-slot';
+    setMaterialName(result, 'ordinary-outlet-slot');
     return result;
   });
 }
@@ -305,7 +315,7 @@ export function ordinaryWallpaperPresentationDiagnostics(renderer: WorldRenderer
   for (const visual of renderer.loaded.values()) {
     if (visual.descriptor.world.regionId !== 'ordinary-level-0') continue;
     for (const child of childrenOf(visual.root)) {
-      const name = (child.render?.material as pc.StandardMaterial | undefined)?.name ?? '';
+      const name = materialName(child.render?.material as pc.StandardMaterial | undefined);
       if (name.startsWith('ordinary-wallpaper:A')) wallA += 1;
       else if (name.startsWith('ordinary-wallpaper:B')) wallB += 1;
       else if (name.startsWith('ordinary-wallpaper:C')) splitC += 1;
@@ -326,7 +336,7 @@ function showShowcase(renderer: WorldRenderer): void {
   const cache = cacheFor(renderer);
   clearShowcase(renderer);
   const app = (renderer as unknown as RendererAccess).app;
-  const camera = app.root.findByName('player-camera') as pc.Entity | null;
+  const camera = childrenOf(app.root).find((child) => child.name === 'player-camera');
   if (!camera) throw new Error('Wallpaper inspection requires player-camera');
   const root = new pc.Entity('wallpaper-inspection-showcase');
   camera.addChild(root);
@@ -365,12 +375,6 @@ function installQaBridge(renderer: WorldRenderer): void {
   };
 }
 
-/**
- * Final presentation-only Ordinary wallpaper/outlet pass. Install this after the
- * existing Region/junction/Arch/static-batching wrappers so later reconstruction
- * cannot replace the uploaded wallpaper material. Collision/topology remain owned
- * by the original semantic wall descriptors.
- */
 export function installOrdinaryWallpaperPresentation(): void {
   if (installed) return;
   installed = true;
