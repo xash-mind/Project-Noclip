@@ -146,7 +146,7 @@ test('three uploaded-source wallpaper derivatives are registered through NAL', (
 });
 
 test('real NAL bytes preload and one surface lifecycle owns final supplied wall finishes', () => {
-  assert.equal(version, '0.3.0-dev.9.4');
+  assert.equal(version, '0.3.0-dev.9.5');
   assert.doesNotMatch(presentationSource, /paintLevel0ChevronWallpaper|fallbackCanvas/);
   assert.match(presentationSource, /ordinaryWallpaperImage\(family\)/);
   assert.match(presentationSource, /diagnostic magenta fallback/);
