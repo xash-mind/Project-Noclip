@@ -93,6 +93,35 @@ def renderer_diagnostics(driver: webdriver.Chrome) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
+def source_pixel_stats(driver: webdriver.Chrome, asset_states: dict[str, Any]) -> dict[str, Any]:
+    paths = {family: str(asset_states[family]["runtimePath"]) for family in ("A", "B", "C")}
+    result = driver.execute_async_script("""
+      const paths=arguments[0], done=arguments[1];
+      (async () => {
+        const output={};
+        for (const [family,path] of Object.entries(paths)) {
+          const image=new Image(); image.src=path; await image.decode();
+          const canvas=document.createElement('canvas'); canvas.width=image.naturalWidth; canvas.height=image.naturalHeight;
+          const context=canvas.getContext('2d',{willReadFrequently:true});
+          if(!context) throw new Error('source pixel canvas unavailable');
+          context.drawImage(image,0,0);
+          const pixels=context.getImageData(0,0,canvas.width,canvas.height).data;
+          let count=0,sum=0,sumSq=0,min=255,max=0;
+          const stride=Math.max(1,Math.floor((canvas.width*canvas.height)/8192));
+          for(let pixel=0; pixel<canvas.width*canvas.height; pixel+=stride){
+            const i=pixel*4; const luma=0.2126*pixels[i]+0.7152*pixels[i+1]+0.0722*pixels[i+2];
+            count++; sum+=luma; sumSq+=luma*luma; min=Math.min(min,luma); max=Math.max(max,luma);
+          }
+          const mean=sum/count; output[family]={width:canvas.width,height:canvas.height,mean,min,max,stdDev:Math.sqrt(Math.max(0,sumSq/count-mean*mean))};
+        }
+        done(output);
+      })().catch((error)=>done({error:String(error)}));
+    """, paths)
+    if not isinstance(result, dict) or result.get("error"):
+        raise AssertionError(result)
+    return result
+
+
 def has_real_a_wall(driver: webdriver.Chrome) -> dict[str, Any] | bool:
     snapshot = diagnostics(driver)
     ordinary = (snapshot or {}).get("regions", {}).get("ordinary-level-0", {})
@@ -130,21 +159,9 @@ def main() -> None:
     driver = build_driver()
     try:
         driver.get(BASE_URL)
-        new_button = wait_for(
-            driver,
-            lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="new"]'),
-            timeout=35,
-            message="New journey after wallpaper preload",
-        )
+        new_button = wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="new"]'), timeout=35, message="New journey after wallpaper preload")
         new_button.click()
-        wait_for(
-            driver,
-            lambda current: current.execute_script(
-                "return document.querySelector('[data-ui=title]').hidden && !document.querySelector('[data-ui=hud]').hidden"
-            ),
-            timeout=40,
-            message="journey HUD",
-        )
+        wait_for(driver, lambda current: current.execute_script("return document.querySelector('[data-ui=title]').hidden && !document.querySelector('[data-ui=hud]').hidden"), timeout=40, message="journey HUD")
         wait_for(driver, lambda current: current.execute_script("return Boolean(window.__projectNoclipQa)"), timeout=25, message="runtime QA bridge")
         initial = wait_for(driver, lambda current: diagnostics(current), timeout=20, message="wallpaper QA bridge")
         assets = initial.get("assets", {})
@@ -160,6 +177,11 @@ def main() -> None:
             assert int(state.get("width", 0)) > 0 and int(state.get("height", 0)) > 0, (family, state)
             assert str(state.get("runtimePath", "")).startswith("/assets/runtime/images/"), (family, state)
 
+        report["sourcePixels"] = source_pixel_stats(driver, asset_states)
+        for family, stats in report["sourcePixels"].items():
+            assert float(stats["max"]) - float(stats["min"]) >= 18, (family, stats)
+            assert float(stats["stdDev"]) >= 2.5, (family, stats)
+
         ordinary = wait_for(driver, has_real_a_wall, timeout=15, message="real A wallpaper material on normal Ordinary wall")
         assert ordinary.get("assets", {}).get("fallbackUsed") == 0, ordinary
         assert 0.15 <= float(ordinary.get("casingSetbackFraction", 0)) <= 0.20, ordinary
@@ -167,10 +189,6 @@ def main() -> None:
         report["regions"]["ordinary-level-0"] = ordinary
         capture_canvas(driver, ARTIFACT_DIR / "ordinary-wallpaper.png")
 
-        # Audit the exact same A/B/C materials on camera-owned inspection panels
-        # before any expensive Region lookup. If these panels render correctly
-        # while the real wall is black, the defect is wall lifecycle/ownership;
-        # if the panels are also black, the defect is texture/material state.
         driver.execute_script("""
           const style=document.createElement('style');
           style.id='wallpaper-smoke-style';
