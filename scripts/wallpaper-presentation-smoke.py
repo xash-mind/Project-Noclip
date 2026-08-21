@@ -88,6 +88,13 @@ def diagnostics(driver: webdriver.Chrome) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
+def has_real_a_wall(driver: webdriver.Chrome) -> dict[str, Any] | bool:
+    snapshot = diagnostics(driver)
+    if not snapshot or snapshot.get("wallA", 0) <= 0:
+        return False
+    return snapshot
+
+
 def main() -> None:
     report: dict[str, Any] = {"baseUrl": BASE_URL, "browserErrors": []}
     driver = build_driver()
@@ -128,7 +135,7 @@ def main() -> None:
             assert str(state.get("runtimePath", "")).startswith("/assets/runtime/images/"), (family, state)
         normal = wait_for(
             driver,
-            lambda current: (snapshot := diagnostics(current)) if snapshot and snapshot.get("wallA", 0) > 0 else False,
+            has_real_a_wall,
             timeout=15,
             message="real A wallpaper material on normal Ordinary wall",
         )
