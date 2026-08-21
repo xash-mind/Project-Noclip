@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import shutil
 import time
 from pathlib import Path
@@ -16,7 +17,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 BASE_URL = os.environ.get("NOCLIP_BASE_URL", "http://127.0.0.1:4173")
 ARTIFACT_DIR = Path(os.environ.get("NOCLIP_FLASHLIGHT_ARTIFACTS", "artifacts/flashlight"))
 ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
-FIXED_FLASHLIGHT_NOW = 1_700_000_000_014
+NATURAL_BLACKOUT_SEED = "dev9-black-2"
+FIXED_FLASHLIGHT_NOW = 1_700_000_000_041
 
 
 def wait_for(driver: webdriver.Chrome, predicate: Callable[[webdriver.Chrome], Any], timeout: float = 30, message: str = "condition") -> Any:
@@ -89,15 +91,41 @@ def luminance(driver: webdriver.Chrome) -> dict[str, float]:
     return {"mean": float(value["mean"]), "p90": float(value["p90"])}
 
 
-def set_condition(driver: webdriver.Chrome, value: str) -> None:
+def metrics_text(driver: webdriver.Chrome) -> str:
+    return str(driver.execute_script("return document.querySelector('[data-ui=metrics]')?.textContent ?? '';"))
+
+
+def blackout_strength(driver: webdriver.Chrome) -> float:
+    match = re.search(r"/ blackout\s+([0-9.]+)", metrics_text(driver))
+    if not match:
+        raise AssertionError(f"Missing blackout strength metric: {metrics_text(driver)}")
+    return float(match.group(1))
+
+
+def enable_gate_bypass(driver: webdriver.Chrome) -> None:
     changed = driver.execute_script("""
-      const element=document.querySelector('[data-lab="condition"]');
-      if(!element)return false; element.value=arguments[0];
-      element.dispatchEvent(new Event('change',{bubbles:true})); return true;
-    """, value)
+      const element=document.querySelector('[data-lab="bypass"]');
+      if(!element)return false;
+      element.checked=true;
+      element.dispatchEvent(new Event('change',{bubbles:true}));
+      return true;
+    """)
     if not changed:
-        raise AssertionError("Missing World Lab condition control")
-    time.sleep(1.1)
+        raise AssertionError("Missing World Lab gate bypass control")
+    time.sleep(0.7)
+
+
+def locate_natural_blackout(driver: webdriver.Chrome) -> None:
+    located = driver.execute_script("""
+      const button=document.querySelector('[data-action="locate-blackout"]');
+      if(!button)return false;
+      button.click();
+      return true;
+    """)
+    if not located:
+        raise AssertionError("Missing natural Blackout locator")
+    wait_for(driver, lambda current: blackout_strength(current) >= 0.9995, timeout=15, message="exact natural Blackout core")
+    time.sleep(0.8)
 
 
 def toggle_flashlight(driver: webdriver.Chrome) -> None:
@@ -112,10 +140,13 @@ def visible_delta(off: dict[str, float], on: dict[str, float]) -> float:
 
 def main() -> None:
     driver = driver_for_webgl()
-    report: dict[str, Any] = {}
+    report: dict[str, Any] = {"seed": NATURAL_BLACKOUT_SEED}
     try:
         driver.get(BASE_URL)
         wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="new"]'), message="new journey")
+        seed_input = driver.find_element(By.CSS_SELECTOR, '[data-ui="seed"]')
+        seed_input.clear()
+        seed_input.send_keys(NATURAL_BLACKOUT_SEED)
         driver.execute_script("window.__realDateNow=Date.now; Date.now=()=>arguments[0];", FIXED_FLASHLIGHT_NOW)
         driver.find_element(By.CSS_SELECTOR, '[data-action="new"]').click()
         wait_for(driver, lambda current: current.execute_script("return document.querySelector('[data-ui=title]').hidden && !document.querySelector('[data-ui=hud]').hidden"), timeout=35, message="journey HUD")
@@ -130,7 +161,6 @@ def main() -> None:
           document.head.appendChild(style);
         """)
 
-        set_condition(driver, "clear")
         ordinary_off = luminance(driver); capture_canvas(driver, "ordinary-off.png")
         toggle_flashlight(driver)
         ordinary_on = luminance(driver); capture_canvas(driver, "ordinary-on.png")
@@ -139,21 +169,28 @@ def main() -> None:
             raise AssertionError(f"Flashlight did not affect ordinary geometry: {ordinary_off} -> {ordinary_on}")
         toggle_flashlight(driver)
 
-        set_condition(driver, "blackout")
-        blackout_off = luminance(driver); capture_canvas(driver, "blackout-off.png")
-        if blackout_off["p90"] <= 0.4:
-            raise AssertionError(f"Blackout collapsed to pitch black: {blackout_off}")
-        if blackout_off["mean"] >= ordinary_off["mean"] * 0.90:
-            raise AssertionError(f"Blackout is not substantially darker than ordinary Level 0: ordinary={ordinary_off}, blackout={blackout_off}")
+        # This seed's existing natural locator lands at (-16, -16), where the
+        # canonical geography produces blackoutStrength === 1. No Condition
+        # override is used: the bypass only opens the normal timeline gate.
+        enable_gate_bypass(driver)
+        locate_natural_blackout(driver)
+        natural_strength = blackout_strength(driver)
+        blackout_off = luminance(driver); capture_canvas(driver, "blackout-natural-core-off.png")
+        if blackout_off["mean"] > 0.75 or blackout_off["p90"] > 1.0:
+            raise AssertionError(f"Natural full Blackout core retained navigable environmental luminance: {blackout_off}")
+
         toggle_flashlight(driver)
-        blackout_on = luminance(driver); capture_canvas(driver, "blackout-on.png")
+        blackout_on = luminance(driver); capture_canvas(driver, "blackout-natural-core-on.png")
         blackout_delta = visible_delta(blackout_off, blackout_on)
         if blackout_delta <= 0.35:
-            raise AssertionError(f"Flashlight did not affect Blackout geometry: {blackout_off} -> {blackout_on}")
+            raise AssertionError(f"Flashlight did not illuminate legitimate geometry in the natural Blackout core: {blackout_off} -> {blackout_on}")
 
         report = {
+            "seed": NATURAL_BLACKOUT_SEED,
+            "naturalBlackoutStrength": natural_strength,
             "ordinary": {"off": ordinary_off, "on": ordinary_on, "delta": ordinary_delta},
             "blackout": {"off": blackout_off, "on": blackout_on, "delta": blackout_delta},
+            "files": ["ordinary-off.png", "ordinary-on.png", "blackout-natural-core-off.png", "blackout-natural-core-on.png"],
         }
     finally:
         (ARTIFACT_DIR / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
