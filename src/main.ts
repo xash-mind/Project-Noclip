@@ -3,7 +3,6 @@ import { ProjectNoclipGame } from './app/ProjectNoclipGame.js';
 import { installLevel0SurfacePresentation } from './renderer/level0SurfacePresentation.js';
 import { prepareOrdinaryWallpaperAssets } from './renderer/ordinaryWallpaperAssets.js';
 import { installOrdinaryCasingMaterialPresentation } from './renderer/ordinaryCasingMaterialPresentation.js';
-import { installOrdinaryWallpaperPresentation } from './renderer/ordinaryWallpaperPresentation.js';
 import { installOutletInteractionRuntime } from './renderer/outletInteractionRuntime.js';
 import { installRenderSettingsRuntime } from './renderer/renderSettingsRuntime.js';
 import { installPauFeaturePresentationPilot } from './renderer/pauFeaturePresentationPilot.js';
@@ -13,13 +12,12 @@ import { mountDevelopmentVersionIndicator } from './ui/DevelopmentVersionIndicat
 import { installRegionDepthLab } from './ui/regionDepthLab.js';
 import { installRenderSettingsLab } from './ui/renderSettingsLab.js';
 
+// Level 0 surface presentation now owns the older base materials and the final
+// supplied A/B/C wallpaper finish in one Cell lifecycle. Casing follows that
+// finish, and static batching observes the completed presentation.
 installLevel0SurfacePresentation();
 installRenderSettingsRuntime();
 installPauFeaturePresentationPilot();
-// Supplied A/B/C wallpaper and the accepted casing finish are resolved before
-// static batching sees a newly loaded Cell. A-A1 remains under the authoritative
-// pale Arch presentation owner rather than being repainted by the wallpaper pass.
-installOrdinaryWallpaperPresentation();
 installOrdinaryCasingMaterialPresentation();
 installStaticWorldBatching();
 installOutletInteractionRuntime();
