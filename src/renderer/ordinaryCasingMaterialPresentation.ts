@@ -15,6 +15,12 @@ interface RendererAccess {
   app: pc.Application;
 }
 
+interface DetailMapStandardMaterial extends pc.StandardMaterial {
+  diffuseDetailMap: pc.Texture | null;
+  diffuseDetailMapTiling: pc.Vec2;
+  diffuseDetailMapOffset: pc.Vec2;
+}
+
 const caches = new WeakMap<WorldRenderer, CasingMaterialCache>();
 let installed = false;
 
@@ -94,9 +100,10 @@ function casingMaterial(
   if (existing) return existing;
 
   const created = base.clone() as pc.StandardMaterial;
-  created.diffuseDetailMap = cache.detailTexture;
-  created.diffuseDetailMapTiling = new pc.Vec2(1, tilingY);
-  created.diffuseDetailMapOffset = new pc.Vec2(0, offsetY);
+  const detail = created as unknown as DetailMapStandardMaterial;
+  detail.diffuseDetailMap = cache.detailTexture;
+  detail.diffuseDetailMapTiling = new pc.Vec2(1, tilingY);
+  detail.diffuseDetailMapOffset = new pc.Vec2(0, offsetY);
   created.update();
   variants.set(key, created);
   return created;
