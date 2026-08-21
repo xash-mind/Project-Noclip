@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
-import { CELL_SIZE, type CellDescriptor, type PropSpec, type WallSpec } from '../world/types.js';
+import { ARCH_HEADER_HEIGHT, ARCH_LOWER_HEIGHT } from '../world/gen3ArchitectureCore.js';
+import { CELL_SIZE, WALL_HEIGHT, type CellDescriptor, type PropSpec, type WallSpec } from '../world/types.js';
 import { ordinaryCasingPresentationDiagnostics } from './ordinaryCasingMaterialPresentation.js';
 import {
   noteOrdinaryWallpaperFallback,
@@ -278,6 +279,24 @@ function renderSplitWallpaper(
   box(positive.id, root, [positive.cx, positive.cy, positive.cz], [positive.sx, positive.sy, positive.sz], wallpaperMaterial(cache, descriptor, positive, positiveFamily));
 }
 
+function wallMinY(wall: WallSpec): number { return wall.cy - wall.sy / 2; }
+function wallMaxY(wall: WallSpec): number { return wall.cy + wall.sy / 2; }
+
+/** Mirrors the authoritative A-A1 semantic-piece classification without taking geometry ownership. */
+function isOwnedArchDividerSurface(wall: WallSpec): boolean {
+  if (wall.materialId !== 'arch-pale-wallpaper') return false;
+  const header = Math.abs(wall.sy - ARCH_HEADER_HEIGHT) < 0.055
+    && Math.abs(wallMaxY(wall) - WALL_HEIGHT) < 0.045;
+  const lower = Math.abs(wall.sy - ARCH_LOWER_HEIGHT) < 0.065
+    && wallMinY(wall) <= 0.045;
+  const headerBottom = WALL_HEIGHT - ARCH_HEADER_HEIGHT;
+  const pier = wallMinY(wall) > 0.04
+    && wallMinY(wall) <= ARCH_LOWER_HEIGHT + 0.065
+    && wallMaxY(wall) >= headerBottom - 0.045
+    && wall.sy > 1.35;
+  return header || lower || pier;
+}
+
 function outletPlateMaterial(cache: OrdinaryPresentationCache): pc.StandardMaterial {
   return material(cache, 'ordinary-outlet-plate', () => {
     const result = makeMaterial([0.61, 0.58, 0.36]);
@@ -429,7 +448,7 @@ function applyLevel0WallpaperPresentation(renderer: WorldRenderer, visual: CellV
   for (const wall of descriptor.walls) {
     if (!eligibleLevel0WallpaperWall(descriptor, wall)) continue;
     const decision = ordinaryWallpaperDecision(seed, descriptor.address.cellX, descriptor.address.cellZ, wall);
-    const specializedArchSurface = descriptor.world.regionId === 'arch-rooms' && wall.materialId === 'arch-pale-wallpaper';
+    const specializedArchSurface = descriptor.world.regionId === 'arch-rooms' && isOwnedArchDividerSurface(wall);
     if (!specializedArchSurface && decision.splitWith === 'C' && decision.splitFraction !== undefined) {
       renderSplitWallpaper(cache, descriptor, visual.root, wall, decision.splitFraction, decision.cOnPositiveSide ?? true);
     } else {
