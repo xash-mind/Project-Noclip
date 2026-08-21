@@ -7,26 +7,31 @@ const {
   ORDINARY_CASING_RUN_CHANCE,
   ORDINARY_OUTLET_WALL_CHANCE,
   ORDINARY_WALLPAPER_B_PATCH_CHANCE,
+  ORDINARY_WALLPAPER_IMAGE_TILE_METERS,
   ORDINARY_WALLPAPER_SPLIT_C_CHANCE,
   ordinaryCasingEnabled,
+  ordinaryOutletFaceSign,
   ordinaryOutletPlacement,
   ordinaryWallpaperDecision
 } = rules;
 
 const sourceDefinitions = JSON.parse(await readFile(new URL('../assets/definitions/library.json', import.meta.url), 'utf8'));
 const presentationSource = await readFile(new URL('../src/renderer/ordinaryWallpaperPresentation.ts', import.meta.url), 'utf8');
+const assetSource = await readFile(new URL('../src/renderer/ordinaryWallpaperAssets.ts', import.meta.url), 'utf8');
+const casingSource = await readFile(new URL('../src/renderer/ordinaryCasingMaterialPresentation.ts', import.meta.url), 'utf8');
 const interactionSource = await readFile(new URL('../src/renderer/outletInteractionRuntime.ts', import.meta.url), 'utf8');
 const mainSource = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
+const version = (await readFile(new URL('../VERSION', import.meta.url), 'utf8')).trim();
 
-function wall(id, cx = 0, cz = 0, orientation = 'z') {
+function wall(id, cx = 0, cz = 0, orientation = 'z', sx = 6, sz = 6) {
   return {
     id,
     cx,
     cy: 1.6,
     cz,
-    sx: orientation === 'z' ? 6 : 0.28,
+    sx: orientation === 'z' ? sx : 0.28,
     sy: 3.2,
-    sz: orientation === 'z' ? 0.28 : 6,
+    sz: orientation === 'z' ? 0.28 : sz,
     orientation,
     drawable: true,
     materialId: 'level-0-wallpaper',
@@ -49,6 +54,7 @@ test('wallpaper, casing and outlet decisions are deterministic from stable world
 });
 
 test('B is clustered, C is split-only, casing is common and outlets are materially rarer', () => {
+  assert.equal(ORDINARY_WALLPAPER_IMAGE_TILE_METERS, 1.3);
   assert.equal(ORDINARY_WALLPAPER_B_PATCH_CHANCE, 0.08);
   assert.equal(ORDINARY_WALLPAPER_SPLIT_C_CHANCE, 0.015);
   assert.equal(ORDINARY_CASING_RUN_CHANCE, 0.35);
@@ -83,6 +89,16 @@ test('B is clustered, C is split-only, casing is common and outlets are material
   assert.ok(outletRate < casingRate / 2, 'outlets should remain substantially rarer than casing');
 });
 
+test('outlet face ownership prefers a clear traversable side and rejects a wall blocked on both sides', () => {
+  const target = wall('target', 0, 0, 'z');
+  const plusBlocker = wall('plus-blocker', 0, 0.58, 'z');
+  assert.equal(ordinaryOutletFaceSign([target, plusBlocker], target, 0.5, 1), -1);
+
+  const minusBlocker = wall('minus-blocker', 0, -0.58, 'z');
+  assert.equal(ordinaryOutletFaceSign([target, plusBlocker, minusBlocker], target, 0.5, 1), undefined);
+  assert.equal(ordinaryOutletFaceSign([target], target, 0.5, -1), -1);
+});
+
 test('three uploaded-source wallpaper derivatives are registered through NAL', () => {
   assert.equal(sourceDefinitions.schema, 'nal-asset-definitions-v1');
   const ids = sourceDefinitions.assets.map((asset) => asset.id).sort();
@@ -101,13 +117,35 @@ test('three uploaded-source wallpaper derivatives are registered through NAL', (
   }
 });
 
-test('presentation is Ordinary-only and outlet uses the existing interaction path', () => {
-  assert.match(presentationSource, /descriptor\.world\.regionId !== 'ordinary-level-0'/);
-  assert.match(presentationSource, /decision\.splitWith === 'C'/);
-  assert.match(presentationSource, /ordinaryCasingEnabled/);
+test('dev.9.2 removes the old wallpaper fallback and preloads real NAL bytes before streaming', () => {
+  assert.equal(version, '0.3.0-dev.9.2');
+  assert.doesNotMatch(presentationSource, /paintLevel0ChevronWallpaper|fallbackCanvas/);
+  assert.match(presentationSource, /ordinaryWallpaperImage\(family\)/);
+  assert.match(presentationSource, /diagnostic magenta fallback/);
+  assert.match(assetSource, /fetch\(asset\.runtimePath/);
+  assert.match(assetSource, /crypto\.subtle\.digest/);
+  assert.match(assetSource, /content hash mismatch/);
+  assert.match(assetSource, /await image\.decode\(\)/);
+  assert.match(assetSource, /fallbackUsed/);
+  assert.match(mainSource, /prepareOrdinaryWallpaperAssets\(\)\.then\(\(\) => game\.initialize\(\)\)/);
+  assert.ok(
+    mainSource.indexOf('installStaticWorldBatching();') < mainSource.indexOf('installOrdinaryWallpaperPresentation();'),
+    'Ordinary wallpaper must own the final presentation boundary after static/Region wrapper installation'
+  );
+  assert.ok(
+    mainSource.indexOf('installOrdinaryWallpaperPresentation();') < mainSource.indexOf('installOrdinaryCasingMaterialPresentation();'),
+    'casing must decorate the final uploaded wallpaper material'
+  );
+});
+
+test('casing remains material-backed and outlet uses the existing interaction path', () => {
+  assert.match(casingSource, /ORDINARY_CASING_HEIGHT_METERS = 0\.09/);
+  assert.match(casingSource, /ordinaryCasingEnabled/);
+  assert.match(casingSource, /diffuseDetailMap/);
+  assert.doesNotMatch(casingSource, /new pc\.Entity\(|addComponent\('render'/);
+  assert.match(presentationSource, /ordinaryOutletFaceSign/);
   assert.match(presentationSource, /renderer\.interactions\.set\(id, boundary\)/);
   assert.match(interactionSource, /\[E\] Inspect outlet/);
   assert.match(interactionSource, /The outlet is inert\./);
-  assert.match(mainSource, /installOrdinaryWallpaperPresentation\(\)/);
   assert.match(mainSource, /installOutletInteractionRuntime\(\)/);
 });
