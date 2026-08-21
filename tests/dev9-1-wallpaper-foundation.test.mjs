@@ -5,11 +5,13 @@ import test from 'node:test';
 const rules = await import('../.test-dist/src/renderer/ordinaryWallpaperRules.js');
 const {
   ORDINARY_CASING_RUN_CHANCE,
+  ORDINARY_CASING_TERMINATION_SETBACK_FRACTION,
   ORDINARY_OUTLET_WALL_CHANCE,
   ORDINARY_WALLPAPER_B_PATCH_CHANCE,
   ORDINARY_WALLPAPER_IMAGE_TILE_METERS,
   ORDINARY_WALLPAPER_SPLIT_C_CHANCE,
   ordinaryCasingEnabled,
+  ordinaryCasingSpan,
   ordinaryOutletFaceSign,
   ordinaryOutletPlacement,
   ordinaryWallpaperDecision
@@ -89,6 +91,31 @@ test('B is clustered, C is split-only, casing is common and outlets are material
   assert.ok(outletRate < casingRate / 2, 'outlets should remain substantially rarer than casing');
 });
 
+test('casing termination distinguishes exposed wall ends from real L junctions', () => {
+  assert.equal(ORDINARY_CASING_TERMINATION_SETBACK_FRACTION, 0.175);
+  assert.ok(ORDINARY_CASING_TERMINATION_SETBACK_FRACTION >= 0.15 && ORDINARY_CASING_TERMINATION_SETBACK_FRACTION <= 0.20);
+
+  const target = wall('target', 0, 0, 'z', 6, 6);
+  assert.deepEqual(ordinaryCasingSpan([target], target), {
+    startU: 0.175,
+    endU: 0.825,
+    startConnected: false,
+    endConnected: false
+  });
+
+  const positiveTurn = wall('positive-turn', 3, 2, 'x', 6, 4);
+  const positive = ordinaryCasingSpan([target, positiveTurn], target);
+  assert.equal(positive.startConnected, false);
+  assert.equal(positive.endConnected, true);
+  assert.equal(positive.startU, 0.175);
+  assert.equal(positive.endU, 1);
+
+  const convexTurn = wall('convex-turn', 3, -2, 'x', 6, 4);
+  const convex = ordinaryCasingSpan([target, convexTurn], target);
+  assert.equal(convex.endConnected, true);
+  assert.equal(convex.endU, 1);
+});
+
 test('outlet face ownership prefers a clear traversable side and rejects a wall blocked on both sides', () => {
   const target = wall('target', 0, 0, 'z');
   const plusBlocker = wall('plus-blocker', 0, 0.58, 'z');
@@ -117,11 +144,15 @@ test('three uploaded-source wallpaper derivatives are registered through NAL', (
   }
 });
 
-test('dev.9.2 removes the old wallpaper fallback and preloads real NAL bytes before streaming', () => {
-  assert.equal(version, '0.3.0-dev.9.2');
+test('real NAL bytes preload and supplied wallpaper owns all three Level 0 Region finish paths', () => {
+  assert.equal(version, '0.3.0-dev.9.4');
   assert.doesNotMatch(presentationSource, /paintLevel0ChevronWallpaper|fallbackCanvas/);
   assert.match(presentationSource, /ordinaryWallpaperImage\(family\)/);
   assert.match(presentationSource, /diagnostic magenta fallback/);
+  assert.match(presentationSource, /'pillar-field'/);
+  assert.match(presentationSource, /'arch-rooms'/);
+  assert.match(presentationSource, /arch-pale/);
+  assert.match(presentationSource, /suppliedTextureBindings/);
   assert.match(assetSource, /fetch\(asset\.runtimePath/);
   assert.match(assetSource, /crypto\.subtle\.digest/);
   assert.match(assetSource, /content hash mismatch/);
@@ -132,20 +163,23 @@ test('dev.9.2 removes the old wallpaper fallback and preloads real NAL bytes bef
     'interactive game construction must be gated behind verified wallpaper preload'
   );
   assert.ok(
-    mainSource.indexOf('installStaticWorldBatching();') < mainSource.indexOf('installOrdinaryWallpaperPresentation();'),
-    'Ordinary wallpaper must own the final presentation boundary after static/Region wrapper installation'
+    mainSource.indexOf('installOrdinaryWallpaperPresentation();') < mainSource.indexOf('installOrdinaryCasingMaterialPresentation();'),
+    'casing must follow wallpaper finish ownership'
   );
   assert.ok(
-    mainSource.indexOf('installOrdinaryWallpaperPresentation();') < mainSource.indexOf('installOrdinaryCasingMaterialPresentation();'),
-    'casing must decorate the final uploaded wallpaper material'
+    mainSource.indexOf('installOrdinaryCasingMaterialPresentation();') < mainSource.indexOf('installStaticWorldBatching();'),
+    'static batching must observe the completed wallpaper/casing Cell presentation'
   );
 });
 
-test('casing remains material-backed and outlet uses the existing interaction path', () => {
+test('casing uses face-owned batched strips while outlets preserve the existing interaction path', () => {
   assert.match(casingSource, /ORDINARY_CASING_HEIGHT_METERS = 0\.09/);
   assert.match(casingSource, /ordinaryCasingEnabled/);
-  assert.match(casingSource, /diffuseDetailMap/);
-  assert.doesNotMatch(casingSource, /new pc\.Entity\(|addComponent\('render'/);
+  assert.match(casingSource, /ordinaryCasingSpan/);
+  assert.match(casingSource, /ordinary-casing-strip/);
+  assert.match(casingSource, /addComponent\('render'/);
+  assert.doesNotMatch(casingSource, /diffuseDetailMap/);
+  assert.doesNotMatch(casingSource, /batchGroupId\s*=\s*-1/);
   assert.match(presentationSource, /ordinaryOutletFaceSign/);
   assert.match(presentationSource, /renderer\.interactions\.set\(id, boundary\)/);
   assert.match(interactionSource, /\[E\] Inspect outlet/);

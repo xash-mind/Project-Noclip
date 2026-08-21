@@ -1,5 +1,6 @@
 import * as pc from 'playcanvas';
 import { CameraFrame } from 'playcanvas/build/playcanvas/src/extras/render-passes/camera-frame.js';
+import { LEVEL0_AMBIENT, LEVEL0_FOG_COLOR, resolveBlackoutRenderState } from './blackoutRendering.js';
 import { ProceduralAmbience } from '../audio/Ambience.js';
 import { PlayerIntent } from '../input/PlayerIntent.js';
 import { addToInventory, INVENTORY_CAPACITY, removeFromInventory, updateInventoryItem } from '../inventory/inventory.js';
@@ -29,8 +30,6 @@ const CROUCH_SPEED = 1.8;
 const SAVE_INTERVAL = 1.5;
 const TOUCH_LOOK_MULTIPLIER = 2.25;
 const EMPTY_LIGHT_FIELD: LightFieldSample = { energy: 0, activeGroups: 0, flickerGroups: 0, nearbyGroups: 0, flickerPulse: 0, temperature: 0.94 };
-const LEVEL0_AMBIENT = { r: 0.09, g: 0.084, b: 0.048 } as const;
-const BLACKOUT_AMBIENT_FLOOR = { r: 0.009, g: 0.0085, b: 0.005 } as const;
 const BASE_SCENE_EXPOSURE = 1;
 const MAX_DARK_ADAPTED_EXPOSURE = 1.8;
 const DARK_ADAPT_SECONDS = 8;
@@ -171,9 +170,9 @@ export class ProjectNoclipGame {
     const app = new pc.Application(this.canvas);
     app.setCanvasResolution(pc.RESOLUTION_AUTO); app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
     app.scene.ambientLight = new pc.Color(LEVEL0_AMBIENT.r, LEVEL0_AMBIENT.g, LEVEL0_AMBIENT.b); app.scene.exposure = BASE_SCENE_EXPOSURE; app.scene.skyboxIntensity = 0;
-    app.scene.fog = pc.FOG_LINEAR; app.scene.fogColor = new pc.Color(0.15, 0.135, 0.075); app.scene.fogStart = LEVEL0_FOG_START; app.scene.fogEnd = LEVEL0_FOG_END;
+    app.scene.fog = pc.FOG_LINEAR; app.scene.fogColor = new pc.Color(LEVEL0_FOG_COLOR.r, LEVEL0_FOG_COLOR.g, LEVEL0_FOG_COLOR.b); app.scene.fogStart = LEVEL0_FOG_START; app.scene.fogEnd = LEVEL0_FOG_END;
     const camera = new pc.Entity('player-camera');
-    camera.addComponent('camera', { clearColor: new pc.Color(0.15, 0.135, 0.075), nearClip: 0.05, farClip: 125, fov: 73 }); app.root.addChild(camera);
+    camera.addComponent('camera', { clearColor: new pc.Color(LEVEL0_FOG_COLOR.r, LEVEL0_FOG_COLOR.g, LEVEL0_FOG_COLOR.b), nearClip: 0.05, farClip: 125, fov: 73 }); app.root.addChild(camera);
     const cameraComponent = (camera as unknown as { camera?: ConstructorParameters<typeof CameraFrame>[1] }).camera;
     if (cameraComponent) {
       const cameraFrame = new CameraFrame(app as unknown as ConstructorParameters<typeof CameraFrame>[0], cameraComponent);
@@ -505,26 +504,18 @@ export class ProjectNoclipGame {
     this.blackoutStrength = blackoutStrength;
     this.ambience.setEnvironment(blackoutStrength, blackoutEscapeCue);
 
-    const visibleAmbient = Math.pow(1 - blackoutStrength, 1.7);
-    const atmosphericCue = Math.pow(blackoutStrength, 2.1);
-    this.app.scene.ambientLight = new pc.Color(
-      LEVEL0_AMBIENT.r * visibleAmbient + BLACKOUT_AMBIENT_FLOOR.r,
-      LEVEL0_AMBIENT.g * visibleAmbient + BLACKOUT_AMBIENT_FLOOR.g,
-      LEVEL0_AMBIENT.b * visibleAmbient + BLACKOUT_AMBIENT_FLOOR.b
-    );
-    const fogR = 0.15 * visibleAmbient + 0.018 * atmosphericCue;
-    const fogG = 0.135 * visibleAmbient + 0.017 * atmosphericCue;
-    const fogB = 0.075 * visibleAmbient + 0.011 * atmosphericCue;
-    this.app.scene.fogColor = new pc.Color(fogR, fogG, fogB);
+    const renderState = resolveBlackoutRenderState(blackoutStrength, blackoutEscapeCue);
+    this.app.scene.ambientLight = new pc.Color(renderState.ambient.r, renderState.ambient.g, renderState.ambient.b);
+    this.app.scene.fogColor = new pc.Color(renderState.fog.r, renderState.fog.g, renderState.fog.b);
     this.app.scene.fogStart = LEVEL0_FOG_START - blackoutStrength * (LEVEL0_FOG_START - 7);
     this.app.scene.fogEnd = LEVEL0_FOG_END - blackoutStrength * (LEVEL0_FOG_END - 29);
     const cameraComponent = (this.camera as unknown as { camera?: { clearColor: pc.Color } }).camera;
-    if (cameraComponent) cameraComponent.clearColor = new pc.Color(fogR, fogG, fogB);
+    if (cameraComponent) cameraComponent.clearColor = new pc.Color(renderState.clear.r, renderState.clear.g, renderState.clear.b);
 
-    if (this.blackoutGuideLight?.light && sampled && blackoutStrength > 0.52) {
+    if (this.blackoutGuideLight?.light && sampled && renderState.guideLightEnabled) {
       this.blackoutGuideLight.enabled = true;
       this.blackoutGuideLight.setPosition(position.x + sampled.blackoutExitDirection.x * 18, 2.35, position.z + sampled.blackoutExitDirection.z * 18);
-      this.blackoutGuideLight.light.intensity = 0.025 + blackoutEscapeCue * 0.24;
+      this.blackoutGuideLight.light.intensity = renderState.guideLightIntensity;
     } else if (this.blackoutGuideLight) this.blackoutGuideLight.enabled = false;
   }
 
