@@ -19,6 +19,7 @@ const {
 
 const sourceDefinitions = JSON.parse(await readFile(new URL('../assets/definitions/library.json', import.meta.url), 'utf8'));
 const presentationSource = await readFile(new URL('../src/renderer/ordinaryWallpaperPresentation.ts', import.meta.url), 'utf8');
+const surfaceSource = await readFile(new URL('../src/renderer/level0SurfacePresentation.ts', import.meta.url), 'utf8');
 const assetSource = await readFile(new URL('../src/renderer/ordinaryWallpaperAssets.ts', import.meta.url), 'utf8');
 const casingSource = await readFile(new URL('../src/renderer/ordinaryCasingMaterialPresentation.ts', import.meta.url), 'utf8');
 const interactionSource = await readFile(new URL('../src/renderer/outletInteractionRuntime.ts', import.meta.url), 'utf8');
@@ -144,8 +145,8 @@ test('three uploaded-source wallpaper derivatives are registered through NAL', (
   }
 });
 
-test('real NAL bytes preload and supplied wallpaper owns all three Level 0 Region finish paths', () => {
-  assert.equal(version, '0.3.0-dev.9.4');
+test('real NAL bytes preload and one surface lifecycle owns final supplied wall finishes', () => {
+  assert.equal(version, '0.3.0-dev.9.5');
   assert.doesNotMatch(presentationSource, /paintLevel0ChevronWallpaper|fallbackCanvas/);
   assert.match(presentationSource, /ordinaryWallpaperImage\(family\)/);
   assert.match(presentationSource, /diagnostic magenta fallback/);
@@ -162,14 +163,34 @@ test('real NAL bytes preload and supplied wallpaper owns all three Level 0 Regio
     mainSource.indexOf('prepareOrdinaryWallpaperAssets().then') < mainSource.indexOf('new ProjectNoclipGame()'),
     'interactive game construction must be gated behind verified wallpaper preload'
   );
+
+  assert.match(surfaceSource, /import \{ applyLevel0WallpaperPresentation \} from '\.\/ordinaryWallpaperPresentation\.js'/);
+  assert.match(surfaceSource, /applyLevel0WallpaperPresentation\(renderer, visual\)/);
+  assert.match(presentationSource, /export function applyLevel0WallpaperPresentation/);
+  assert.doesNotMatch(presentationSource, /installOrdinaryWallpaperPresentation|patchedOrdinaryWallpaperLoad/);
+  assert.doesNotMatch(mainSource, /installOrdinaryWallpaperPresentation/);
   assert.ok(
-    mainSource.indexOf('installOrdinaryWallpaperPresentation();') < mainSource.indexOf('installOrdinaryCasingMaterialPresentation();'),
-    'casing must follow wallpaper finish ownership'
+    mainSource.indexOf('installLevel0SurfacePresentation();') < mainSource.indexOf('installOrdinaryCasingMaterialPresentation();'),
+    'casing must follow the single Level 0 surface/wallpaper lifecycle'
   );
   assert.ok(
     mainSource.indexOf('installOrdinaryCasingMaterialPresentation();') < mainSource.indexOf('installStaticWorldBatching();'),
     'static batching must observe the completed wallpaper/casing Cell presentation'
   );
+});
+
+test('wallpaper finish keeps unsplit geometry and delegates the entire A-A1 divider to the pale Arch owner', () => {
+  const unsplitStart = presentationSource.indexOf('function renderUnsplitWallpaper');
+  const unsplitEnd = presentationSource.indexOf('function renderSplitWallpaper');
+  assert.ok(unsplitStart >= 0 && unsplitEnd > unsplitStart);
+  const unsplitSource = presentationSource.slice(unsplitStart, unsplitEnd);
+  assert.match(unsplitSource, /setMaterial\(entityByName\(root, wall\.id\)/);
+  assert.doesNotMatch(unsplitSource, /\.destroy\(\)|box\(/);
+
+  assert.match(presentationSource, /import \{ archStructuralRole \} from '\.\/archDividerRuntimeCorrection\.js'/);
+  assert.match(presentationSource, /descriptor\.world\.regionId === 'arch-rooms' && archStructuralRole\(wall\)/);
+  assert.doesNotMatch(presentationSource, /isOwnedArchDividerSurface|applyArchFrameWallpaper|scheduleArchFrameWallpaper|scheduledArchWallpaperFinish/);
+  assert.doesNotMatch(presentationSource, /queueMicrotask/);
 });
 
 test('casing uses face-owned batched strips while outlets preserve the existing interaction path', () => {
