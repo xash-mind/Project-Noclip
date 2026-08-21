@@ -169,19 +169,24 @@ def main() -> None:
         dispatch_change(driver, '[data-lab="carver"]', "")
         locate_button = driver.find_element(By.CSS_SELECTOR, '[data-action="locate-hole-cluster"]')
         driver.execute_script("arguments[0].click();", locate_button)
-        metrics = wait_for_text(
-            driver,
-            '[data-ui="metrics"]',
-            ("generation     gen3-v1", "carvers", "floor-hole-cluster"),
-            timeout=30,
-            message="natural CV-H1 cluster after semantic locator",
-        )
+        # The locator intentionally places the player just outside the cluster,
+        # so the *current* Cell can correctly report no local carver even though
+        # the occurrence is immediately west and loaded. The locator toast is
+        # therefore the authoritative semantic confirmation; current-Cell
+        # `carvers` text would be the wrong assertion here.
         toast_text = wait_for_text(
             driver,
             '[data-ui="toasts"]',
-            ("Located a natural", "floor-hole cluster"),
-            timeout=15,
+            ("Located a natural", "floor-hole cluster", "outer bypass side"),
+            timeout=20,
             message="natural CV-H1 locator confirmation",
+        )
+        metrics = wait_for_text(
+            driver,
+            '[data-ui="metrics"]',
+            ("generation     gen3-v1", "position"),
+            timeout=20,
+            message="post-locator Level 0 metrics",
         )
         report["locatedMetrics"] = metrics
         report["locatorToast"] = toast_text
