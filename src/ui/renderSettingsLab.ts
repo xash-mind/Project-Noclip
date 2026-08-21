@@ -1,4 +1,5 @@
 import type { ProjectNoclipGame } from '../app/ProjectNoclipGame.js';
+import { ordinaryWallpaperPresentationDiagnostics } from '../renderer/ordinaryWallpaperPresentation.js';
 import {
   applyRenderPreset,
   getRenderSettings,
@@ -51,9 +52,6 @@ export function installRenderSettingsLab(game: ProjectNoclipGame): void {
   if (legacyRadius && legacyRadiusLabel) {
     legacyRadius.disabled = true;
     legacyRadiusLabel.hidden = true;
-    // Existing browser/profile tooling still dispatches this hidden control.
-    // Translate that QA-only signal into the canonical Render Distance setting
-    // rather than reviving a second streaming architecture or user-facing knob.
     const qaRadiusToDistance: Record<string, RenderDistanceLevel> = {
       '1': 'low',
       '2': 'medium',
@@ -139,6 +137,13 @@ export function installRenderSettingsLab(game: ProjectNoclipGame): void {
     const settings = getRenderSettings();
     const profile = renderDistanceProfile(settings);
     const runtime = renderSettingsDiagnostics(game);
+    const wallpaper = ordinaryWallpaperPresentationDiagnostics();
+    const wallpaperLines = (['A', 'B', 'C'] as const).map((family) => {
+      const asset = wallpaper.assets.assets[family];
+      const status = asset.ready ? 'READY' : 'NOT READY';
+      const dimensions = asset.decoded ? `${asset.width}×${asset.height}` : 'not decoded';
+      return `Wallpaper ${family}: ${status} · ${dimensions} · ${asset.runtimePath ?? 'no runtime path'}`;
+    });
     diagnostics.textContent = [
       `Preset: ${settings.preset[0]!.toUpperCase()}${settings.preset.slice(1)}`,
       `Render Distance: ${settings.renderDistance} · ${profile.loadRadius} Cell radius · ~${profile.approximateRenderDistanceMeters} m`,
@@ -148,7 +153,13 @@ export function installRenderSettingsLab(game: ProjectNoclipGame): void {
       `Shadow Resolution: ${settings.shadowResolution}`,
       `Render Scale: ${Math.round(settings.renderScale * 100)}%`,
       `Fog: ${runtime.fogStart?.toFixed(1) ?? profile.fogStart.toFixed(1)} m → ${runtime.fogEnd?.toFixed(1) ?? profile.fogEnd.toFixed(1)} m`,
-      ...(runtime.drawCalls === undefined ? [] : [`Draw Calls: ${runtime.drawCalls}`])
+      ...(runtime.drawCalls === undefined ? [] : [`Draw Calls: ${runtime.drawCalls}`]),
+      '',
+      ...wallpaperLines,
+      `Wallpaper fallback: ${wallpaper.assets.fallbackUsed}`,
+      `Ordinary wallpaper surfaces: A ${wallpaper.wallA} · B ${wallpaper.wallB} · split C ${wallpaper.splitC}`,
+      `Wallpaper scale: ${wallpaper.worldScaleMeters.toFixed(2)} m/image`,
+      `Casing runs: ${wallpaper.casingRuns} · Outlets: ${wallpaper.outlets}`
     ].join('\n');
   };
 
