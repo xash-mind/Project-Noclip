@@ -9,121 +9,117 @@ import { canvasTexture, makeMaterial, markWorldPoint, clamp01, rayAabb, type Cel
 import { RendererCellBuilder } from './cellBuilder.js';
 export type { InteractionVisual, WorldItemVisual } from './support.js';
 
-export interface Cvh1FloorPiece {
+export interface Cvh1FloorSurfaceMeshData {
+  positions: number[];
+  normals: number[];
+  uvs: number[];
+  indices: number[];
+  visibleArea: number;
+}
+
+export interface Cvh1FloorSurfaceProfile {
+  strategy: 'single-indexed-planar-mesh';
+  topY: number;
+  carpetRepeatMeters: number;
+  materialTiling: readonly [number, number];
+  renderEntitiesPerHoleCell: 1;
+  internalSideFaces: false;
+  handoffGeometry: false;
+}
+
+interface Cvh1HoleBounds {
   minX: number;
   maxX: number;
   minZ: number;
   maxZ: number;
 }
 
-export interface Cvh1FloorSeamHandoff {
-  axis: 'x' | 'z';
-  fixed: number;
-  start: number;
-  end: number;
-}
+const CVH1_FLOOR_TOP_Y = 0;
+const CVH1_CARPET_REPEAT_METERS = CELL_SIZE / 5;
+const CVH1_ORDINARY_FLOOR_TINT: [number, number, number] = [0.79, 0.72, 0.55];
 
-export interface Cvh1SegmentedFloorLayout {
-  pieces: Cvh1FloorPiece[];
-  seams: Cvh1FloorSeamHandoff[];
-}
-
-const CVH1_FLOOR_SEAM_HANDOFF = 0.012;
-const CVH1_FLOOR_SEAM_TOP_INSET = 0.002;
-const CVH1_FLOOR_EDGE_EPSILON = 0.000001;
-
-function near(left: number, right: number): boolean {
-  return Math.abs(left - right) <= CVH1_FLOOR_EDGE_EPSILON;
-}
-
-function mergeCvh1FloorSeams(seams: readonly Cvh1FloorSeamHandoff[]): Cvh1FloorSeamHandoff[] {
-  const sorted = [...seams].sort((left, right) =>
-    left.axis.localeCompare(right.axis)
-    || left.fixed - right.fixed
-    || left.start - right.start
-    || left.end - right.end
-  );
-  const merged: Cvh1FloorSeamHandoff[] = [];
-  for (const seam of sorted) {
-    const last = merged[merged.length - 1];
-    if (
-      last
-      && last.axis === seam.axis
-      && near(last.fixed, seam.fixed)
-      && seam.start <= last.end + CVH1_FLOOR_EDGE_EPSILON
-    ) {
-      last.end = Math.max(last.end, seam.end);
-      continue;
-    }
-    merged.push({ ...seam });
-  }
-  return merged;
-}
-
-/**
- * Pure CV-H1 presentation layout. Semantic Hole bounds remain exact; only
- * floor-to-floor mesh joins receive a thin recessed handoff behind the join.
- */
-export function cvh1SegmentedFloorLayout(holes: readonly FloorPatchSpec[]): Cvh1SegmentedFloorLayout {
+function cvh1HoleBounds(hole: FloorPatchSpec): Cvh1HoleBounds {
   const half = CELL_SIZE / 2;
-  const normalized = holes.map((hole) => ({
+  return {
     minX: Math.max(-half, hole.position.x - hole.scale.x / 2),
     maxX: Math.min(half, hole.position.x + hole.scale.x / 2),
     minZ: Math.max(-half, hole.position.z - hole.scale.z / 2),
     maxZ: Math.min(half, hole.position.z + hole.scale.z / 2)
-  }));
-  const zEdges = [...new Set([-half, half, ...normalized.flatMap((entry) => [entry.minZ, entry.maxZ])])].sort((a, b) => a - b);
-  const pieces: Cvh1FloorPiece[] = [];
+  };
+}
+
+function cvh1PointInsideHole(x: number, z: number, holes: readonly Cvh1HoleBounds[]): boolean {
+  return holes.some((hole) => x > hole.minX && x < hole.maxX && z > hole.minZ && z < hole.maxZ);
+}
+
+/**
+ * One watertight top surface for a CV-H1 Cell. Hole bounds are the exact
+ * semantic FloorPatchSpec bounds; the internal grid exists only to triangulate
+ * rectangular apertures and never becomes visible geometry of its own.
+ */
+export function cvh1FloorSurfaceMesh(holes: readonly FloorPatchSpec[]): Cvh1FloorSurfaceMeshData {
+  const half = CELL_SIZE / 2;
+  const bounds = holes.map(cvh1HoleBounds);
+  const xEdges = [...new Set([-half, half, ...bounds.flatMap((hole) => [hole.minX, hole.maxX])])].sort((a, b) => a - b);
+  const zEdges = [...new Set([-half, half, ...bounds.flatMap((hole) => [hole.minZ, hole.maxZ])])].sort((a, b) => a - b);
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const vertices = new Map<string, number>();
+  let visibleArea = 0;
+
+  const vertex = (xIndex: number, zIndex: number): number => {
+    const key = `${xIndex}:${zIndex}`;
+    const existing = vertices.get(key);
+    if (existing !== undefined) return existing;
+    const x = xEdges[xIndex]!;
+    const z = zEdges[zIndex]!;
+    const index = positions.length / 3;
+    positions.push(x, CVH1_FLOOR_TOP_Y, z);
+    normals.push(0, 1, 0);
+    // A Cell is exactly five carpet repeats wide. Local UVs therefore meet the
+    // ordinary full-floor [5,5] phase exactly at both Cell borders without a
+    // per-piece material clone or large world-coordinate precision growth.
+    uvs.push((x + half) / CVH1_CARPET_REPEAT_METERS, (z + half) / CVH1_CARPET_REPEAT_METERS);
+    vertices.set(key, index);
+    return index;
+  };
+
   for (let zIndex = 1; zIndex < zEdges.length; zIndex += 1) {
     const minZ = zEdges[zIndex - 1]!;
     const maxZ = zEdges[zIndex]!;
-    if (maxZ - minZ < 0.01) continue;
-    const centerZ = (minZ + maxZ) / 2;
-    const active = normalized.filter((entry) => centerZ > entry.minZ && centerZ < entry.maxZ);
-    const xEdges = [...new Set([-half, half, ...active.flatMap((entry) => [entry.minX, entry.maxX])])].sort((a, b) => a - b);
+    if (maxZ - minZ <= 0.000001) continue;
     for (let xIndex = 1; xIndex < xEdges.length; xIndex += 1) {
       const minX = xEdges[xIndex - 1]!;
       const maxX = xEdges[xIndex]!;
-      if (maxX - minX < 0.01) continue;
+      if (maxX - minX <= 0.000001) continue;
       const centerX = (minX + maxX) / 2;
-      if (active.some((entry) => centerX > entry.minX && centerX < entry.maxX)) continue;
-      pieces.push({ minX, maxX, minZ, maxZ });
+      const centerZ = (minZ + maxZ) / 2;
+      if (cvh1PointInsideHole(centerX, centerZ, bounds)) continue;
+
+      const southwest = vertex(xIndex - 1, zIndex - 1);
+      const northwest = vertex(xIndex - 1, zIndex);
+      const northeast = vertex(xIndex, zIndex);
+      const southeast = vertex(xIndex, zIndex - 1);
+      indices.push(southwest, northwest, northeast, southwest, northeast, southeast);
+      visibleArea += (maxX - minX) * (maxZ - minZ);
     }
   }
 
-  const seams: Cvh1FloorSeamHandoff[] = [];
-  for (let leftIndex = 0; leftIndex < pieces.length; leftIndex += 1) {
-    const left = pieces[leftIndex]!;
-    for (let rightIndex = leftIndex + 1; rightIndex < pieces.length; rightIndex += 1) {
-      const right = pieces[rightIndex]!;
-      if (near(left.maxX, right.minX) || near(right.maxX, left.minX)) {
-        const start = Math.max(left.minZ, right.minZ);
-        const end = Math.min(left.maxZ, right.maxZ);
-        if (end - start >= 0.01) seams.push({ axis: 'x', fixed: near(left.maxX, right.minX) ? left.maxX : right.maxX, start, end });
-      }
-      if (near(left.maxZ, right.minZ) || near(right.maxZ, left.minZ)) {
-        const start = Math.max(left.minX, right.minX);
-        const end = Math.min(left.maxX, right.maxX);
-        if (end - start >= 0.01) seams.push({ axis: 'z', fixed: near(left.maxZ, right.minZ) ? left.maxZ : right.maxZ, start, end });
-      }
-    }
-  }
-
-  // Generated CV-H1 patches are fully Cell-local. A recessed handoff under each
-  // floor-bearing Cell edge also prevents a Cell root boundary from flashing as
-  // a grid line while neighboring Cells stream independently.
-  for (const piece of pieces) {
-    if (near(piece.minX, -half)) seams.push({ axis: 'x', fixed: -half, start: piece.minZ, end: piece.maxZ });
-    if (near(piece.maxX, half)) seams.push({ axis: 'x', fixed: half, start: piece.minZ, end: piece.maxZ });
-    if (near(piece.minZ, -half)) seams.push({ axis: 'z', fixed: -half, start: piece.minX, end: piece.maxX });
-    if (near(piece.maxZ, half)) seams.push({ axis: 'z', fixed: half, start: piece.minX, end: piece.maxX });
-  }
-
-  return { pieces, seams: mergeCvh1FloorSeams(seams) };
+  return { positions, normals, uvs, indices, visibleArea };
 }
 
-export function cvh1FloorSeamHandoffProfile(): { width: number; topInset: number } {
-  return { width: CVH1_FLOOR_SEAM_HANDOFF, topInset: CVH1_FLOOR_SEAM_TOP_INSET };
+export function cvh1FloorSurfaceProfile(): Cvh1FloorSurfaceProfile {
+  return {
+    strategy: 'single-indexed-planar-mesh',
+    topY: CVH1_FLOOR_TOP_Y,
+    carpetRepeatMeters: CVH1_CARPET_REPEAT_METERS,
+    materialTiling: [1, 1],
+    renderEntitiesPerHoleCell: 1,
+    internalSideFaces: false,
+    handoffGeometry: false
+  };
 }
 
 export class WorldRenderer {
@@ -291,47 +287,34 @@ export class WorldRenderer {
     const rootNode = visual.root as pc.Entity & { children?: pc.Entity[] };
     for (const child of [...(rootNode.children ?? [])]) {
       const name = (child as pc.Entity & { name?: string }).name;
-      if (name && removableNames.has(name)) child.destroy();
+      if (name && (removableNames.has(name) || name.startsWith('floor-piece:') || name === 'cvh1-floor-surface')) child.destroy();
     }
 
-    const profile = ZONE_PROFILES[descriptor.address.zoneId];
-    const floorMat = this.getMaterial(`floor:${profile.id}`, profile.floorTint, 'carpet', descriptor.world.generationVersion === 'gen3-v1' ? 0 : descriptor.variant % 3, [5, 5]);
-    this.addSegmentedFloor(visual.root, holes, floorMat);
-    for (const hole of holes) this.addRecessedHole(visual.root, hole, profile.floorTint);
+    const legacyProfile = ZONE_PROFILES[descriptor.address.zoneId];
+    const gen3 = descriptor.world.generationVersion === 'gen3-v1';
+    const floorMat = gen3
+      ? this.getMaterial('floor:cvh1-coherent', CVH1_ORDINARY_FLOOR_TINT, 'carpet', 0, [1, 1])
+      : this.getMaterial(`floor:${legacyProfile.id}:cvh1-coherent`, legacyProfile.floorTint, 'carpet', descriptor.variant % 3, [1, 1]);
+    this.addCvh1FloorSurface(visual.root, holes, floorMat);
+    for (const hole of holes) this.addRecessedHole(visual.root, hole, legacyProfile.floorTint);
   }
 
-  private addSegmentedFloor(root: pc.Entity, holes: readonly FloorPatchSpec[], floorMat: pc.StandardMaterial): void {
-    const layout = cvh1SegmentedFloorLayout(holes);
-    layout.pieces.forEach((piece, pieceIndex) => {
-      const centerX = (piece.minX + piece.maxX) / 2;
-      const centerZ = (piece.minZ + piece.maxZ) / 2;
-      this.box(
-        `floor-piece:${pieceIndex}`,
-        root,
-        [centerX, -0.16, centerZ],
-        [piece.maxX - piece.minX, 0.32, piece.maxZ - piece.minZ],
-        floorMat
-      );
-    });
-
-    const seamHeight = 0.32 - CVH1_FLOOR_SEAM_TOP_INSET * 2;
-    for (let seamIndex = 0; seamIndex < layout.seams.length; seamIndex += 1) {
-      const seam = layout.seams[seamIndex]!;
-      const along = (seam.start + seam.end) / 2;
-      const length = seam.end - seam.start;
-      this.box(
-        `floor-piece:handoff:${seamIndex}`,
-        root,
-        seam.axis === 'x' ? [seam.fixed, -0.16, along] : [along, -0.16, seam.fixed],
-        seam.axis === 'x'
-          ? [CVH1_FLOOR_SEAM_HANDOFF, seamHeight, length]
-          : [length, seamHeight, CVH1_FLOOR_SEAM_HANDOFF],
-        floorMat
-      );
-    }
+  private addCvh1FloorSurface(root: pc.Entity, holes: readonly FloorPatchSpec[], floorMat: pc.StandardMaterial): void {
+    const data = cvh1FloorSurfaceMesh(holes);
+    if (data.indices.length === 0) return;
+    const mesh = new pc.Mesh(this.app.graphicsDevice);
+    mesh.setPositions(data.positions);
+    mesh.setNormals(data.normals);
+    mesh.setUvs(0, data.uvs);
+    mesh.setIndices(data.indices);
+    mesh.update();
+    const entity = new pc.Entity('cvh1-floor-surface');
+    entity.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, floorMat)] });
+    root.addChild(entity);
   }
 
   private addRecessedHole(root: pc.Entity, hole: FloorPatchSpec, floorTint: [number, number, number]): void {
+    void floorTint;
     const voidMat = this.getMaterial('hole:void:recessed', [0.002, 0.002, 0.001]);
     const sideMat = this.getMaterial('hole:side:recessed', [0.006, 0.006, 0.004]);
     const x = hole.position.x; const z = hole.position.z; const sx = hole.scale.x; const sz = hole.scale.z;

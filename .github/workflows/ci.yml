@@ -23,7 +23,7 @@ jobs:
       - run: npm run build
       - name: Install browser-smoke driver
         run: python -m pip install --disable-pip-version-check selenium==4.46.0
-      - name: Run mobile, desktop and world-cohesion Chromium journeys
+      - name: Run mobile, desktop, CV-H1 floor and world-cohesion Chromium journeys
         shell: bash
         run: |
           set -euo pipefail
@@ -43,15 +43,26 @@ jobs:
           NOCLIP_VERSION_ARTIFACTS="artifacts/browser-smoke" python scripts/version-smoke.py
           NOCLIP_MOBILE_ARTIFACTS="artifacts/mobile-smoke" python scripts/mobile-smoke.py
           python scripts/browser-smoke.py
+          NOCLIP_CVH1_ARTIFACTS="artifacts/cvh1-floor-smoke" python scripts/cvh1-floor-smoke.py
+          candidate_version="v$(tr -d '[:space:]' < VERSION)"
+          NOCLIP_BASE_URL="http://127.0.0.1:4173" \
+          NOCLIP_DEPLOYMENT_COMMIT="$GITHUB_SHA" \
+          NOCLIP_DEPLOYMENT_ID="local-ci-cvh1" \
+          NOCLIP_EXPECTED_VERSION="$candidate_version" \
+          NOCLIP_PROFILE_STATIC_SECONDS="1.5" \
+          NOCLIP_PROFILE_ARTIFACTS="artifacts/cvh1-renderer-profile" \
+          python scripts/profile-candidate-renderer.py
           python scripts/world-cohesion-smoke.py
       - name: Upload browser-smoke evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-mobile-cohesion-smoke-${{ github.sha }}
+          name: browser-mobile-cvh1-cohesion-smoke-${{ github.sha }}
           path: |
             artifacts/browser-smoke
             artifacts/mobile-smoke
+            artifacts/cvh1-floor-smoke
+            artifacts/cvh1-renderer-profile
             artifacts/world-cohesion-smoke
           if-no-files-found: warn
           retention-days: 14
