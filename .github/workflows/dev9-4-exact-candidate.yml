@@ -49,7 +49,7 @@ jobs:
       - name: Exact-head browser, visual and gameplay verification
         shell: bash
         env:
-          NOCLIP_EXPECTED_VERSION: v0.3.0-dev.9.4
+          NOCLIP_EXPECTED_VERSION: 0.3.0-dev.9.4
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
