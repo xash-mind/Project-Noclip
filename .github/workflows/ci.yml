@@ -23,6 +23,26 @@ jobs:
       - run: npm run build
       - name: Install browser-smoke driver
         run: python -m pip install --disable-pip-version-check selenium==4.46.0
+      - name: Run real Noclip Studio authoring journey
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Pull-request checkouts are detached. Give the disposable CI worktree
+          # the exact allowed authoring branch name so Save-to-Project safety
+          # guards are exercised rather than bypassed.
+          git switch -C agent/dev9-7-studio-completion
+          # Earlier verification commands intentionally regenerate the tracked
+          # Feature presentation output. It is a disposable CI artifact, not a
+          # user edit. Restore only that generated file before Studio starts so
+          # its dirty-file guard is exercised against a genuinely clean Save
+          # target. Never restore either canonical JSON source here.
+          git restore --source=HEAD --worktree -- \
+            src/presentation/generatedLevel0FeatureDefinitions.ts
+          python tools/studio/browser-acceptance.py
+          git diff --exit-code -- \
+            src/presentation/definitions/level0-features.json \
+            src/presentation/definitions/level0-materials.json \
+            src/presentation/generated
       - name: Run mobile, desktop, CV-H1 floor and world-cohesion Chromium journeys
         shell: bash
         run: |
@@ -57,10 +77,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-mobile-cvh1-cohesion-smoke-${{ github.sha }}
+          name: browser-mobile-studio-cvh1-cohesion-smoke-${{ github.sha }}
           path: |
             artifacts/browser-smoke
             artifacts/mobile-smoke
+            artifacts/studio-browser
             artifacts/cvh1-floor-smoke
             artifacts/cvh1-renderer-profile
             artifacts/world-cohesion-smoke

@@ -3,10 +3,6 @@ import { unitFloat } from '../world/hash.js';
 
 export type OrdinaryWallpaperFamily = 'A' | 'B' | 'C';
 
-// The committed A texture contains roughly ten motif lanes across its square.
-// 1.3 m therefore presents the reference motif at roughly 13 cm lane spacing,
-// close to the supplied Backrooms wall rather than treating the whole image as one motif.
-export const ORDINARY_WALLPAPER_IMAGE_TILE_METERS = 1.3;
 export const ORDINARY_WALLPAPER_B_PATCH_CHANCE = 0.08;
 export const ORDINARY_WALLPAPER_SPLIT_C_CHANCE = 0.015;
 export const ORDINARY_CASING_RUN_CHANCE = 0.35;
@@ -77,7 +73,6 @@ function runKey(seed: string, cellX: number, cellZ: number, wall: WallSpec): str
 export function ordinaryWallpaperDecision(seed: string, cellX: number, cellZ: number, wall: WallSpec): OrdinaryWallpaperDecision {
   const primary: 'A' | 'B' = unitFloat(patchKey(seed, cellX, cellZ, wall)) < ORDINARY_WALLPAPER_B_PATCH_CHANCE ? 'B' : 'A';
   if (primary === 'B' || !floorReaching(wall) || wallLength(wall) < 2.4) return { primary };
-
   const key = stableWallKey(seed, cellX, cellZ, wall);
   if (unitFloat(`${key}:split-c`) >= ORDINARY_WALLPAPER_SPLIT_C_CHANCE) return { primary };
   return {
@@ -94,9 +89,7 @@ export function ordinaryCasingEnabled(seed: string, cellX: number, cellZ: number
 }
 
 function endpoint(wall: WallSpec, positive: boolean): { x: number; z: number } {
-  if (wall.orientation === 'z') {
-    return { x: wall.cx + (positive ? 1 : -1) * wall.sx / 2, z: wall.cz };
-  }
+  if (wall.orientation === 'z') return { x: wall.cx + (positive ? 1 : -1) * wall.sx / 2, z: wall.cz };
   return { x: wall.cx, z: wall.cz + (positive ? 1 : -1) * wall.sz / 2 };
 }
 
@@ -125,12 +118,6 @@ function endpointConnected(walls: readonly WallSpec[], source: WallSpec, positiv
     && wallTouchesPoint(candidate, point));
 }
 
-/**
- * Presentation span for one casing run. A real architectural junction owns the
- * endpoint, so the run may reach it. An exposed wall end owns no adjoining
- * surface, so the casing is deliberately stopped 17.5% short instead of being
- * allowed to turn across the box end face.
- */
 export function ordinaryCasingSpan(walls: readonly WallSpec[], wall: WallSpec): OrdinaryCasingSpan {
   const startConnected = endpointConnected(walls, wall, false);
   const endConnected = endpointConnected(walls, wall, true);
@@ -175,7 +162,6 @@ function pointClearOfWalls(point: { x: number; z: number }, walls: readonly Wall
   return true;
 }
 
-/** Choose the locally traversable/presented side; never place the only outlet into a blocked wall face. */
 export function ordinaryOutletFaceSign(
   walls: readonly WallSpec[],
   wall: WallSpec,
@@ -190,7 +176,14 @@ export function ordinaryOutletFaceSign(
   return undefined;
 }
 
-export function ordinaryWallpaperUv(cellX: number, cellZ: number, wall: WallSpec): { tiling: [number, number]; offset: [number, number] } {
+export function ordinaryWallpaperUv(
+  cellX: number,
+  cellZ: number,
+  wall: WallSpec,
+  patternSizeMeters: number,
+  phase: readonly [number, number] = [0, 0]
+): { tiling: [number, number]; offset: [number, number] } {
+  const repeat = Math.max(0.05, patternSizeMeters);
   const horizontal = wall.orientation === 'z';
   const length = horizontal ? wall.sx : wall.sz;
   const worldStart = horizontal
@@ -198,7 +191,7 @@ export function ordinaryWallpaperUv(cellX: number, cellZ: number, wall: WallSpec
     : cellZ * CELL_SIZE + wall.cz - wall.sz / 2;
   const worldBottom = wall.cy - wall.sy / 2;
   return {
-    tiling: [Math.max(0.02, length / ORDINARY_WALLPAPER_IMAGE_TILE_METERS), Math.max(0.02, wall.sy / ORDINARY_WALLPAPER_IMAGE_TILE_METERS)],
-    offset: [wrap01(worldStart / ORDINARY_WALLPAPER_IMAGE_TILE_METERS), wrap01(worldBottom / ORDINARY_WALLPAPER_IMAGE_TILE_METERS)]
+    tiling: [Math.max(0.02, length / repeat), Math.max(0.02, wall.sy / repeat)],
+    offset: [wrap01(worldStart / repeat + phase[0]), wrap01(worldBottom / repeat + phase[1])]
   };
 }

@@ -5,6 +5,7 @@ const files = [
   'tools/studio/canonical-cli.mjs',
   'tools/studio/canonical-client.mjs',
   'tools/studio/server-core.mjs',
+  'tools/studio/structured-authoring.mjs',
   'tools/studio/server.mjs',
   'tools/studio/validate-target.mjs',
   'tools/studio/smoke.mjs',

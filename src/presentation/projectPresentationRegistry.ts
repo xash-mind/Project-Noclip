@@ -1,11 +1,20 @@
 import { LEVEL0_FEATURE_PRESENTATION_REGISTRY } from './level0FeatureRepresentations.js';
+import { LEVEL0_MATERIAL_PRESENTATION_REGISTRY } from './level0MaterialRepresentations.js';
 import { READ_ONLY_PRESENTATION_REGISTRY } from './readOnlyPresentationMetadata.js';
 import { validateRepresentationRegistry } from './registry.js';
 import type { RepresentationRegistrySnapshot } from './types.js';
 
 export const PROJECT_PRESENTATION_REGISTRY: RepresentationRegistrySnapshot = Object.freeze({
-  representations: [...LEVEL0_FEATURE_PRESENTATION_REGISTRY.representations, ...READ_ONLY_PRESENTATION_REGISTRY.representations],
-  bindings: [...LEVEL0_FEATURE_PRESENTATION_REGISTRY.bindings, ...READ_ONLY_PRESENTATION_REGISTRY.bindings]
+  representations: [
+    ...LEVEL0_FEATURE_PRESENTATION_REGISTRY.representations,
+    ...LEVEL0_MATERIAL_PRESENTATION_REGISTRY.representations,
+    ...READ_ONLY_PRESENTATION_REGISTRY.representations
+  ],
+  bindings: [
+    ...LEVEL0_FEATURE_PRESENTATION_REGISTRY.bindings,
+    ...LEVEL0_MATERIAL_PRESENTATION_REGISTRY.bindings,
+    ...READ_ONLY_PRESENTATION_REGISTRY.bindings
+  ]
 });
 
 const errors = validateRepresentationRegistry(PROJECT_PRESENTATION_REGISTRY);

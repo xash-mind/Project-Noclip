@@ -1,11 +1,6 @@
-import { GENERATED_ASSET_REGISTRY } from '../presentation/generatedAssetRegistry.js';
+import { materialAssetId } from '../presentation/materialRuntime.js';
 import type { OrdinaryWallpaperFamily } from './ordinaryWallpaperRules.js';
-
-export const ORDINARY_WALLPAPER_ASSET_IDS: Readonly<Record<OrdinaryWallpaperFamily, string>> = Object.freeze({
-  A: 'level0.wallpaper.a-chevron',
-  B: 'level0.wallpaper.b-dots',
-  C: 'level0.wallpaper.c-lines'
-});
+import { preparePresentationImageAsset, presentationImageDimensions, presentationImageReady, presentationImageRuntimePath } from './presentationImageTextures.js';
 
 export interface OrdinaryWallpaperAssetState {
   family: OrdinaryWallpaperFamily;
@@ -19,107 +14,34 @@ export interface OrdinaryWallpaperAssetState {
   height: number;
   error?: string;
 }
+export interface OrdinaryWallpaperAssetDiagnostics { prepared: boolean; fallbackUsed: number; assets: Readonly<Record<OrdinaryWallpaperFamily, OrdinaryWallpaperAssetState>>; }
+const FAMILIES: readonly OrdinaryWallpaperFamily[] = ['A','B','C'];
+const SLOT_BY_FAMILY: Readonly<Record<OrdinaryWallpaperFamily,string>> = Object.freeze({A:'familyA',B:'familyB',C:'familyC'});
+let preparePromise: Promise<void>|undefined;
+let prepared=false;
+let fallbackUsed=0;
+const errors=new Map<OrdinaryWallpaperFamily,string>();
 
-export interface OrdinaryWallpaperAssetDiagnostics {
-  prepared: boolean;
-  fallbackUsed: number;
-  assets: Readonly<Record<OrdinaryWallpaperFamily, OrdinaryWallpaperAssetState>>;
+export function ordinaryWallpaperAssetId(family: OrdinaryWallpaperFamily): string {
+  const id=materialAssetId('material.level-0-wallpaper',SLOT_BY_FAMILY[family]);
+  if(!id)throw new Error(`[Level 0 wallpaper] canonical M-W1 Asset slot ${SLOT_BY_FAMILY[family]} is unbound`);
+  return id;
 }
-
-const FAMILIES: readonly OrdinaryWallpaperFamily[] = ['A', 'B', 'C'];
-const images = new Map<OrdinaryWallpaperFamily, HTMLImageElement>();
-const states = new Map<OrdinaryWallpaperFamily, OrdinaryWallpaperAssetState>();
-let preparePromise: Promise<void> | undefined;
-let prepared = false;
-let fallbackUsed = 0;
-
-for (const family of FAMILIES) {
-  states.set(family, {
-    family,
-    id: ORDINARY_WALLPAPER_ASSET_IDS[family],
-    ready: false,
-    fetched: false,
-    hashVerified: false,
-    decoded: false,
-    width: 0,
-    height: 0
-  });
+async function prepareFamily(family: OrdinaryWallpaperFamily): Promise<void> {
+  const id=ordinaryWallpaperAssetId(family);
+  try{await preparePresentationImageAsset(id);errors.delete(family);}catch(error){const message=String(error instanceof Error?error.message:error);errors.set(family,message);throw error;}
 }
-
-function assetFor(family: OrdinaryWallpaperFamily) {
-  const id = ORDINARY_WALLPAPER_ASSET_IDS[family];
-  return GENERATED_ASSET_REGISTRY.find((candidate) => candidate.id === id && candidate.runtimeStatus === 'ready');
-}
-
-async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join('');
-}
-
-async function decodeFamily(family: OrdinaryWallpaperFamily): Promise<void> {
-  const state = states.get(family)!;
-  const asset = assetFor(family);
-  if (!asset) {
-    state.error = `NAL runtime asset missing: ${state.id}`;
-    throw new Error(`[Level 0 wallpaper] ${state.error}`);
-  }
-  state.runtimePath = asset.runtimePath;
-  try {
-    const response = await fetch(asset.runtimePath, { cache: 'no-store' });
-    if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
-    state.fetched = true;
-    const bytes = await response.arrayBuffer();
-    const digest = await sha256Hex(bytes);
-    if (digest !== asset.contentHash) throw new Error(`content hash mismatch: expected ${asset.contentHash}, got ${digest}`);
-    state.hashVerified = true;
-
-    const blob = new Blob([bytes], { type: response.headers.get('content-type') ?? 'image/webp' });
-    const objectUrl = URL.createObjectURL(blob);
-    try {
-      const image = new Image();
-      image.decoding = 'async';
-      image.src = objectUrl;
-      await image.decode();
-      if (image.naturalWidth <= 0 || image.naturalHeight <= 0) throw new Error('decoded image has no dimensions');
-      images.set(family, image);
-      state.decoded = true;
-      state.width = image.naturalWidth;
-      state.height = image.naturalHeight;
-      state.ready = true;
-    } finally {
-      URL.revokeObjectURL(objectUrl);
-    }
-  } catch (error) {
-    state.error = String(error instanceof Error ? error.message : error);
-    console.error(`[Level 0 wallpaper] ${family}/${state.id} failed: ${state.error}`);
-    throw error;
-  }
-}
-
-/**
- * Hard preview boundary: the real NAL wallpaper bytes must be fetched, hash-verified
- * and browser-decoded before any journey can stream its first Ordinary Cell.
- */
 export function prepareOrdinaryWallpaperAssets(): Promise<void> {
-  if (prepared) return Promise.resolve();
-  preparePromise ??= Promise.all(FAMILIES.map((family) => decodeFamily(family))).then(() => {
-    prepared = true;
-  });
+  if(prepared)return Promise.resolve();
+  preparePromise??=Promise.all(FAMILIES.map(prepareFamily)).then(()=>{prepared=true;});
   return preparePromise;
 }
-
-export function ordinaryWallpaperImage(family: OrdinaryWallpaperFamily): HTMLImageElement | undefined {
-  return images.get(family);
+export async function prepareCurrentOrdinaryWallpaperAssets(): Promise<void> { await Promise.all(FAMILIES.map(prepareFamily)); }
+export function noteOrdinaryWallpaperFallback(): void { fallbackUsed+=1; }
+function stateFor(family: OrdinaryWallpaperFamily): OrdinaryWallpaperAssetState {
+  const id=ordinaryWallpaperAssetId(family),ready=presentationImageReady(id),dimensions=presentationImageDimensions(id),runtimePath=presentationImageRuntimePath(id);
+  return {family,id,...(runtimePath?{runtimePath}:{}),ready,fetched:ready,hashVerified:ready,decoded:ready,width:dimensions?.width??0,height:dimensions?.height??0,...(errors.get(family)?{error:errors.get(family)}:{})};
 }
-
-export function noteOrdinaryWallpaperFallback(): void {
-  fallbackUsed += 1;
-}
-
 export function ordinaryWallpaperAssetDiagnostics(): OrdinaryWallpaperAssetDiagnostics {
-  return {
-    prepared,
-    fallbackUsed,
-    assets: Object.freeze(Object.fromEntries(FAMILIES.map((family) => [family, { ...states.get(family)! }])) as Record<OrdinaryWallpaperFamily, OrdinaryWallpaperAssetState>)
-  };
+  return {prepared,fallbackUsed,assets:Object.freeze(Object.fromEntries(FAMILIES.map((family)=>[family,stateFor(family)])) as Record<OrdinaryWallpaperFamily,OrdinaryWallpaperAssetState>)};
 }
