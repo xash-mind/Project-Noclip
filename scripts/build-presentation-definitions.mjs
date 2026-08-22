@@ -4,12 +4,25 @@ import { fileURLToPath } from 'node:url';
 import { mkdirSync } from 'node:fs';
 
 const ROOT = process.cwd();
-const SOURCE = resolve(ROOT, 'src/presentation/definitions/level0-features.json');
-const OUTPUT = resolve(ROOT, 'src/presentation/generatedLevel0FeatureDefinitions.ts');
+const SOURCES = Object.freeze([
+  {
+    source: 'src/presentation/definitions/level0-features.json',
+    output: 'src/presentation/generatedLevel0FeatureDefinitions.ts',
+    exportName: 'LEVEL0_FEATURE_DEFINITION_SOURCE'
+  },
+  {
+    source: 'src/presentation/definitions/level0-materials.json',
+    output: 'src/presentation/generatedLevel0MaterialDefinitions.ts',
+    exportName: 'LEVEL0_MATERIAL_DEFINITION_SOURCE'
+  }
+]);
 const PRESENTATION_CATEGORIES = new Set(['Region','Architecture Pattern','Feature','Material','Condition','Carver','Structure','Item','Transition','renderer/runtime subsystem']);
 const COLLISION_MODES = new Set(['none','box','capsule','simple-hull','authored-simple']);
 const LCG = new Set(['LCG-0','LCG-1','LCG-2','LCG-3','LCG-X']);
 const VALUE_TYPES = new Set(['string','number','boolean']);
+const EDITABLE_KINDS = new Set(['number','boolean','text','enum','color']);
+const ASSET_TYPES = new Set(['image','audio','mesh']);
+const COLOR = /^#[0-9a-f]{6}$/i;
 
 function fail(message) { throw new Error(`[PAU] ${message}`); }
 function cleanPath(path) {
@@ -21,7 +34,7 @@ function cleanPath(path) {
 }
 
 export function validateRepresentationSource(parsed) {
-  if (!parsed || parsed.schema !== 'representation-source-v1') fail('level0-features.json must use representation-source-v1');
+  if (!parsed || parsed.schema !== 'representation-source-v1') fail('presentation definition source must use representation-source-v1');
   if (!Array.isArray(parsed.representations) || !Array.isArray(parsed.bindings)) fail('representation source needs representations and bindings arrays');
   const ids = new Set();
   for (const definition of parsed.representations) {
@@ -39,13 +52,29 @@ export function validateRepresentationSource(parsed) {
       if (!parameter || typeof parameter.key !== 'string' || !(parameter.key in definition.parameters)) fail(`${definition.id} editable parameter must reference a canonical parameter`);
       if (editableKeys.has(parameter.key)) fail(`${definition.id} duplicate editable parameter ${parameter.key}`);
       editableKeys.add(parameter.key);
-      if (!['number','boolean','text','enum'].includes(parameter.kind)) fail(`${definition.id}.${parameter.key} has unsupported editable kind`);
+      if (!EDITABLE_KINDS.has(parameter.kind)) fail(`${definition.id}.${parameter.key} has unsupported editable kind`);
       if (parameter.kind === 'number') {
         const value = definition.parameters[parameter.key];
         if (typeof value !== 'number' || !Number.isFinite(value)) fail(`${definition.id}.${parameter.key} must be a finite number`);
         if (parameter.min !== undefined && value < parameter.min) fail(`${definition.id}.${parameter.key} is below min`);
         if (parameter.max !== undefined && value > parameter.max) fail(`${definition.id}.${parameter.key} is above max`);
       }
+      if (parameter.kind === 'enum') {
+        const value = definition.parameters[parameter.key];
+        if (!Array.isArray(parameter.values) || !parameter.values.includes(value)) fail(`${definition.id}.${parameter.key} enum value is not allowed`);
+      }
+      if (parameter.kind === 'color' && (typeof definition.parameters[parameter.key] !== 'string' || !COLOR.test(definition.parameters[parameter.key]))) fail(`${definition.id}.${parameter.key} must be a #RRGGBB colour`);
+    }
+    const slotKeys = new Set();
+    for (const slot of definition.assetSlots ?? []) {
+      if (!slot || typeof slot.key !== 'string' || !slot.key) fail(`${definition.id} asset slot needs a key`);
+      if (slotKeys.has(slot.key)) fail(`${definition.id} duplicate asset slot ${slot.key}`);
+      slotKeys.add(slot.key);
+      if (!ASSET_TYPES.has(slot.assetType)) fail(`${definition.id}.${slot.key} has invalid asset type`);
+      if (typeof slot.profile !== 'string' || !slot.profile) fail(`${definition.id}.${slot.key} needs an Asset Profile`);
+      if (!Array.isArray(slot.roles) || slot.roles.length === 0) fail(`${definition.id}.${slot.key} needs at least one allowed role`);
+      if (!slot.optional && !slot.assetId) fail(`${definition.id}.${slot.key} requires a canonical Asset ID`);
+      if (typeof slot.editable !== 'boolean') fail(`${definition.id}.${slot.key} needs explicit editable state`);
     }
     if (!COLLISION_MODES.has(definition.collisionMode)) fail(`${definition.id} has invalid collisionMode`);
     if (definition.lcg && !LCG.has(definition.lcg.classification)) fail(`${definition.id} has invalid LCG classification`);
@@ -64,13 +93,24 @@ export function validateRepresentationSource(parsed) {
   return parsed;
 }
 
-export function generateRepresentationModule(parsed) {
-  return `// Generated by scripts/build-presentation-definitions.mjs. Edit src/presentation/definitions/level0-features.json instead.\nexport const LEVEL0_FEATURE_DEFINITION_SOURCE = ${JSON.stringify(parsed)} as const;\n`;
+export function generateRepresentationModule(parsed, exportName = 'PRESENTATION_DEFINITION_SOURCE') {
+  return `// Generated by scripts/build-presentation-definitions.mjs. Edit src/presentation/definitions/*.json instead.\nexport const ${exportName} = ${JSON.stringify(parsed)} as const;\n`;
+}
+
+export function buildPresentationDefinitions() {
+  const built = [];
+  for (const entry of SOURCES) {
+    const source = resolve(ROOT, entry.source);
+    const output = resolve(ROOT, entry.output);
+    const parsed = validateRepresentationSource(JSON.parse(readFileSync(source, 'utf8')));
+    mkdirSync(dirname(output), { recursive: true });
+    writeFileSync(output, generateRepresentationModule(parsed, entry.exportName));
+    built.push({ ...entry, representations: parsed.representations.length, bindings: parsed.bindings.length });
+  }
+  return built;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
-  const parsed = validateRepresentationSource(JSON.parse(readFileSync(SOURCE, 'utf8')));
-  mkdirSync(dirname(OUTPUT), { recursive: true });
-  writeFileSync(OUTPUT, generateRepresentationModule(parsed));
-  console.log(`[PAU] validated ${parsed.representations.length} representation(s), ${parsed.bindings.length} binding(s)`);
+  const built = buildPresentationDefinitions();
+  console.log(`[PAU] validated ${built.reduce((sum, item) => sum + item.representations, 0)} representation(s), ${built.reduce((sum, item) => sum + item.bindings, 0)} binding(s) across ${built.length} source file(s)`);
 }
