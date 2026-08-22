@@ -1,0 +1,95 @@
+name: Dev.9.6 Integrated Browser Isolation
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-isolation:
+    name: browser-${{ matrix.task }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    strategy:
+      fail-fast: false
+      matrix:
+        task:
+          - character
+          - desktop
+          - mobile
+          - cvh1
+          - renderer
+          - cohesion
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - name: Install browser driver
+        run: python -m pip install --disable-pip-version-check selenium==4.46.0
+      - name: Run isolated browser gate
+        shell: bash
+        env:
+          NOCLIP_BROWSER_TASK: ${{ matrix.task }}
+        run: |
+          set -euo pipefail
+          npm run preview > "/tmp/project-noclip-${NOCLIP_BROWSER_TASK}.log" 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; cat "/tmp/project-noclip-${NOCLIP_BROWSER_TASK}.log" || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              echo "Preview server did not become ready" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+
+          case "$NOCLIP_BROWSER_TASK" in
+            character)
+              NOCLIP_VERSION_ARTIFACTS="artifacts/version-smoke" python scripts/version-smoke.py
+              NOCLIP_CHARACTER_ARTIFACTS="artifacts/character-creator-smoke" \
+                python scripts/run-screenshot-tolerant-smoke.py scripts/character-creator-smoke.py
+              ;;
+            desktop)
+              python scripts/run-legacy-smoke-with-character-creator.py scripts/browser-smoke.py
+              ;;
+            mobile)
+              NOCLIP_MOBILE_ARTIFACTS="artifacts/mobile-smoke" \
+                python scripts/run-legacy-smoke-with-character-creator.py scripts/mobile-smoke.py
+              ;;
+            cvh1)
+              NOCLIP_CVH1_ARTIFACTS="artifacts/cvh1-floor-smoke" \
+                python scripts/run-legacy-smoke-with-character-creator.py scripts/cvh1-floor-smoke.py
+              ;;
+            renderer)
+              candidate_version="v$(tr -d '[:space:]' < VERSION)"
+              NOCLIP_BASE_URL="http://127.0.0.1:4173" \
+              NOCLIP_DEPLOYMENT_COMMIT="$GITHUB_SHA" \
+              NOCLIP_DEPLOYMENT_ID="local-ci-renderer" \
+              NOCLIP_EXPECTED_VERSION="$candidate_version" \
+              NOCLIP_PROFILE_STATIC_SECONDS="1.5" \
+              NOCLIP_PROFILE_ARTIFACTS="artifacts/renderer-profile" \
+                python scripts/run-legacy-smoke-with-character-creator.py scripts/profile-candidate-renderer.py
+              ;;
+            cohesion)
+              python scripts/run-legacy-smoke-with-character-creator.py scripts/world-cohesion-smoke.py
+              ;;
+            *)
+              echo "Unknown browser task: $NOCLIP_BROWSER_TASK" >&2
+              exit 2
+              ;;
+          esac
+      - name: Upload isolated browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev9-6-${{ matrix.task }}-${{ github.sha }}
+          path: artifacts
+          if-no-files-found: ignore
+          retention-days: 14

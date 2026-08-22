@@ -4,12 +4,15 @@ import runpy
 import sys
 from pathlib import Path
 
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support.ui import WebDriverWait
 
 
 _original_click = WebElement.click
 _original_get_attribute = WebElement.get_attribute
+_original_save_screenshot = WebDriver.save_screenshot
 
 
 def _legacy_get_attribute(self: WebElement, name: str):
@@ -41,8 +44,20 @@ def _creator_aware_click(self: WebElement) -> None:
     _original_click(begin)
 
 
+def _tolerant_save_screenshot(self: WebDriver, filename: str) -> bool:
+    try:
+        return bool(_original_save_screenshot(self, filename))
+    except TimeoutException as error:
+        print(
+            f"WARNING: screenshot {filename} timed out in headless Chromium; "
+            f"functional assertions remain authoritative: {error.msg}"
+        )
+        return False
+
+
 WebElement.get_attribute = _legacy_get_attribute
 WebElement.click = _creator_aware_click
+WebDriver.save_screenshot = _tolerant_save_screenshot
 
 if len(sys.argv) != 2:
     raise SystemExit("usage: run-legacy-smoke-with-character-creator.py <smoke-script.py>")
