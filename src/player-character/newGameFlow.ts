@@ -25,7 +25,7 @@ export function beginJourneyWithCharacterProfile(
 ): BeginJourneyResult {
   const profile = finalizePlayerCharacterProfile(draft, now);
   const errors = validatePlayerCharacterProfile(profile);
-  if (errors.length > 0) return { ok: false, error: errors[0] };
+  if (errors.length > 0) return { ok: false, error: errors[0]! };
   if (!profileStore.save(profile)) return { ok: false, error: 'Character Profile could not be saved locally. No Journey was created.' };
   startJourney(seed);
   return { ok: true, profile };
