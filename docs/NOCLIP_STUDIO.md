@@ -1,217 +1,240 @@
 # Noclip Studio
 
-Noclip Studio is Project Noclip's **local source-backed developer companion**. It consumes the Presentation Architecture Upgrade (PAU) contracts; it is not a second world model and it is not shipped as gameplay.
+Noclip Studio is Project Noclip's **local source-backed developer companion**. It consumes Presentation Architecture Upgrade (PAU) and Noclip Asset Library (NAL) contracts; it is not a second world model and it is not shipped as gameplay.
 
 ```text
 WORLD LAB     = runtime inspection / QA / forcing
-NOCLIP STUDIO = authoring / assets / structured edits / diffs / validation / context / receipts
+NOCLIP STUDIO = authoring / assets / structured edits / diffs / validation / receipts
 ```
 
 ## Start
 
-Requirements are the same as the game (`Node >= 22.12`, `npm install`). From a working Project Noclip branch:
-
 ```bash
+npm install
 npm run studio
 ```
 
-One command:
+Studio binds to `127.0.0.1:4311`, starts the normal Vite development game, and gives the game/Studio bridge one random per-run token. The privileged bridge exists only in development builds started through `npm run studio`.
 
-1. validates/generates the canonical PAU representation source used by Studio;
-2. compiles the canonical PAU contracts for the local Studio backend;
-3. starts the loopback Studio server at `http://127.0.0.1:4311`;
-4. starts the existing Vite game dev server;
-5. gives the game and Studio server one random per-run bridge token.
+## Security and Git boundary
 
-Use the loopback Vite URL (`localhost` / `127.0.0.1`) when using the bridge. A normal `npm run dev` still runs the game without Studio authoring authority.
+Studio remains deliberately narrow:
 
-## Security boundary
-
-Studio privileged APIs exist only under `tools/studio/` and the server binds to `127.0.0.1`. The game-side bridge is dynamically imported only when `import.meta.env.DEV` is true and only activates when `VITE_NOCLIP_STUDIO_TOKEN` was provided by `npm run studio`.
-
-Studio does not expose arbitrary shell/eval endpoints. Validation actions are a fixed whitelist. File writes are restricted to PAU/NAL authoring directories and `.noclip-studio/` local evidence. Path traversal is rejected.
-
-`npm run build` finishes by scanning the production bundle for Studio bridge/write markers. A production bundle containing a privileged Studio marker fails the build.
-
-## Git safety
-
-Studio is deliberately conservative:
-
+- privileged APIs bind to loopback only;
+- production bundles are scanned for Studio bridge/write markers;
 - project writes are blocked on `main`, `master`, and detached HEAD;
-- the worktree is sampled when Studio starts;
-- Studio refuses to overwrite a canonical file that was already dirty before Studio started;
-- Studio-touched paths are tracked separately from pre-existing and other worktree changes;
-- Studio never merges, pushes, deploys, opens a PR, or resets the worktree;
-- targeted revert checks post-write file hashes and refuses if another operation changed the same file.
+- files already dirty when Studio starts are protected from Studio overwrite;
+- Studio-touched paths are tracked separately;
+- targeted revert is hash-guarded and refuses if a file changed after the Studio operation;
+- validation commands are whitelisted;
+- there is no arbitrary shell/eval/source-writing endpoint;
+- Studio never commits, pushes, merges, deploys, or opens PRs.
 
-Use Git normally for commits/PRs after reviewing Studio's source diff.
+Use Git normally after reviewing Studio's source diff.
 
-## Canonical target flow
+## Canonical authoring sources
 
-```text
-npm run studio
-  -> run game + Studio
-  -> play / inspect in World Lab
-  -> Open in Studio
-  -> inspect DevelopmentContext
-  -> edit PAU-owned fields
-  -> Apply Runtime Preview
-  -> Revert Preview or Save to Project
-  -> review source diff
-  -> targeted validation
-  -> ChangeReceipt
-  -> continue development
-```
-
-World Lab's Studio section contains semantic target selection plus **Inspect**, **Isolate**, and **Open in Studio**. It does not gain filesystem or Git authority.
-
-## Design target vs runtime instance
-
-Studio always names the semantic **design target**. When the running game can identify a real generated pilot Feature in the current Cell, the canonical `DevelopmentContext` adds a distinct **runtime instance** with stable generated ID, seed, generation version, Region, Conditions, Cell and world position.
-
-Disposable World Lab showcase objects never pretend to be deterministic generated instances. If Studio cannot prove an instance identity it shows design-target context only.
-
-## Semantic navigation
-
-Run 2 initially exposes:
-
-- `A-A1` — Arch Divider;
-- `P-A1` — Pillar Pier;
-- Medium Bucket;
-- Small Grey Open Paint Can;
-- `M-W1`, `M-A1`, `M-C1`, `M-CE1`, `M-F1`;
-- `C-B1` — Blackout;
-- `CV-H1` — Floor-hole Carver.
-
-Bucket and Paint Can are structured PAU authoring targets. The other targets are intentionally read-only until their presentation is migrated; Studio still provides canonical source ownership, diagnostics, relevant tests and agent handoff instead of pretending they have safe sliders.
-
-## Runtime preview
-
-Preview data lives only in `src/presentation/previewOverrides.ts` memory in the running development page:
-
-```text
-canonical Representation Definition
-+ temporary Studio parameter / binding override
-= runtime preview
-```
-
-Preview never mutates `CellDescriptor`, `PropSpec`, Journey saves, world seeds or generated IDs. A forced presentation refresh rebuilds loaded deterministic Cell visuals using the same descriptors. Restarting the game clears preview state.
-
-Studio marks active preview as **UNSAVED PREVIEW** and exposes **Revert Preview** and **Clear All Previews**.
-
-## Structured project changes
-
-PAU Run 2 makes the two Run 1 pilot definitions source-backed:
+Structured authoring is no longer tied to the Bucket/Can pilot file.
 
 ```text
 src/presentation/definitions/level0-features.json
-  -> npm run presentation:build
   -> src/presentation/generatedLevel0FeatureDefinitions.ts
-  -> existing PAU Representation Registry
+
+src/presentation/definitions/level0-materials.json
+  -> src/presentation/generatedLevel0MaterialDefinitions.ts
 ```
 
-Studio reads editable controls from `RepresentationDefinition.editableParameters`. Save validates that every requested key is explicitly editable and obeys its metadata. It does not search TypeScript for matching numbers.
+`scripts/build-presentation-definitions.mjs` validates and generates both sources. Studio discovers the source that owns the selected semantic target, edits only that canonical JSON, regenerates its typed output, recompiles the canonical Studio view, validates, refreshes runtime presentation, and records a ChangeReceipt.
 
-**Save to Project** writes the canonical JSON, regenerates the typed source, recompiles Studio's canonical PAU view, runs focused validation, refreshes runtime presentation, and creates a `change-receipt-v1` record.
+Studio's structured write authority is limited to explicitly known presentation-definition sources/generated outputs and NAL authoring paths. It is not permission to edit arbitrary `src/**` code.
 
-If a request cannot be expressed by PAU metadata, Studio labels it **CODE CHANGE REQUIRED**. Use the context/prompt export rather than giving Studio arbitrary source-writing authority.
+## Source Asset vs material usage
 
-## DevelopmentContext exports
-
-Studio uses `development-context-v1` from `src/presentation/developmentContext.ts`. Human packets and agent prompts are generated from the same object by `src/presentation/developmentContextExports.ts`.
-
-Available exports:
-
-- Copy Context;
-- Copy Context JSON;
-- Copy Context + Observation;
-- Copy Context + Change Request;
-- Copy Full Development Prompt.
-
-Observation and Requested Change are development notes only. They do not enter canonical game/world data.
-
-## ChangeReceipts and history
-
-Persisted structured operations use `change-receipt-v1` from `src/presentation/changeReceipt.ts`. Human text and JSON are generated from the same canonical receipt.
-
-A lightweight local envelope is written under:
+Dev.9.6 makes the distinction explicit:
 
 ```text
-.noclip-studio/receipts/
+NAL SOURCE ASSET
+  immutable imported file + metadata + content hash
+
+ASSET SLOT
+  which compatible Asset a Representation currently uses
+
+PRESENTATION PARAMETERS
+  how that Asset/use is presented
 ```
 
-The directory is gitignored and safe to delete. It stores convenience evidence and the hash-guarded targeted-revert plan; Git/source files remain authoritative.
+Changing brightness, contrast, saturation, pattern size, tint, UV phase, rotation, or flip does **not** rewrite the source image bytes. The source Asset remains immutable.
 
-Studio displays the saved target, before/after values, files and generated outputs, validation actually executed, deterministic/save result, warnings and source diff. It never marks an unexecuted check PASS.
+A Representation can expose typed editable Asset slots such as:
 
-## Validation
+- Wallpaper A -> Wall Texture;
+- Wallpaper B -> Wall Texture;
+- Wallpaper C -> Wall Texture;
+- Carpet image -> Floor Texture;
+- Ceiling image -> Ceiling Texture.
 
-Slider/field preview performs no heavy test run.
+Studio only offers Assets compatible with the slot's type, Asset Profile, and allowed role. Invalid or non-runtime-ready bindings are rejected on Save.
 
-A structured Save runs focused PAU/Studio validation. Explicit buttons provide:
+## Image treatment
 
-- Validate Target;
-- Run Typecheck;
-- Run Tests;
-- Run Build;
-- Run Full Project Check.
+Image-backed materials may expose non-destructive controls including:
 
-Commands are whitelisted; Studio is not a general shell UI.
+- Image Asset;
+- Pattern size / metres per source-image repeat;
+- Brightness;
+- Contrast;
+- Saturation;
+- Tint colour and tint amount;
+- UV phase where relevant;
+- 0/90/180/270 rotation where relevant;
+- horizontal/vertical flip where relevant.
 
-`npm test` also runs a Studio-specific smoke gate: tool/client syntax checks, canonical PAU compilation, loopback Studio server startup, UI shell/bootstrap verification and a canonical `development-context-v1` response for Medium Bucket.
+Runtime image treatment uses a cached derived-texture path. Derived textures are keyed by source Asset content hash plus the transform signature, shared across users of that signature, and bounded so repeated Studio previews do not grow GPU texture count without limit. No per-frame Canvas processing is used.
 
-## NAL Asset Library
+## Editable Level 0 visual targets
 
-The Asset Library has Images, Audio and Meshes views. It reads current NAL source/generated metadata and representation usages.
+### M-W1 — Level 0 Wallpaper
 
-Import flow:
+M-W1 owns the canonical supplied wallpaper family inputs:
+
+- Family A Asset;
+- Family B Asset;
+- Family C Asset;
+- pattern size;
+- image treatment;
+- tint/phase controls;
+- slightly paler Arch Room normal-wall treatment.
+
+Deterministic A/B/C family selection remains renderer/world-coordinate derived and does not enter Journey saves.
+
+Normal Ordinary Level 0 walls, Pillar Field walls, sparse Ordinary Level 0 wallpaper-bearing pillars, and Pillar Field wallpaper-bearing pillars consume the same M-W1 inputs. The old split where sparse Ordinary pillars retained procedural wallpaper is removed.
+
+A-A1 is deliberately excluded from M-W1.
+
+### M-A1 — Arch Pale Structural Finish
+
+M-A1 owns the non-wallpaper structural finish of A-A1, including the authoritative semantic and reconstructed visible Arch pieces. Safe colour/gloss fields are editable. Arch geometry/topology is not.
+
+### M-C1 — Level 0 Carpet
+
+M-C1 owns safe carpet presentation fields. The existing procedural carpet remains a truthful `Procedural` source mode. A compatible NAL `Floor Texture` may be selected as an image source without changing world identity or CV-H1 geometry.
+
+### M-CE1 — Level 0 Ceiling
+
+M-CE1 follows the same model: procedural source remains supported; a compatible NAL `Ceiling Texture` may be bound; safe tint/image-treatment fields are structured.
+
+### Casing / Raceway
+
+The accepted casing geometry, junction behavior, occurrence law, and wall-end setback remain code-owned. Studio edits presentation-only base/highlight/shadow colours and gloss.
+
+### Outlet presentation
+
+Outlet placement/frequency/interaction remain code-owned. Studio edits the plate/slot appearance only.
+
+### M-F1 fluorescent panel appearance
+
+Studio edits only the visible panel material fields, such as diffuse/emissive presentation and a visual panel-glow multiplier.
+
+It does **not** edit:
+
+- fluorescent fixture generation;
+- real Omni intensity/range;
+- flicker law;
+- shadow participation;
+- the one-fixture/one-real-light ownership law.
+
+### CV-H1 visible Hole materials
+
+Studio may edit presentation-only upper/middle/deep/void colours. Hole aperture position, dimensions, lattice grammar, Carver occurrence, collision/navigation, and deterministic identity remain world-owned.
+
+### Bucket / Paint Can
+
+The existing structured PAU geometry pilot remains supported through `level0-features.json` and continues using the same preview/save/revert workflow.
+
+## What remains read-only
+
+Studio intentionally does not make every game variable a slider.
+
+Read-only/code-owned areas include:
+
+- A-A1 geometry/topology/dimensions;
+- P-A1 geometry/placement/density;
+- world topology and Region geography;
+- Carver geography/aperture law;
+- collision and navigation;
+- movement;
+- save schema / stable generated IDs;
+- Cell streaming and Render Distance;
+- C-B1 Blackout world law;
+- M-F1 physical lighting/shadow allocation;
+- fixture generation;
+- gameplay/item behavior.
+
+Studio should surface ownership/context for these targets and generate an engineering handoff rather than pretending they have safe structured controls.
+
+## Runtime preview
+
+Preview state lives only in the running development page.
 
 ```text
-choose local file
-  -> Asset ID + PAU Asset Profile
-  -> extension / size / path validation
-  -> copy into assets/source/{images|audio|meshes}/
-  -> update assets/definitions/studio-imports.json
-  -> npm run assets:build
-  -> SHA-256 + runtime registry/output
+canonical Representation
++ temporary parameter overrides
++ temporary Asset-slot overrides
+= runtime preview
+```
+
+Preview never mutates `CellDescriptor`, `PropSpec`, Journey saves, seeds, generated IDs, topology, or world geography.
+
+For image Asset swaps, the selected NAL image is fetched/hash-verified/decoded before the forced presentation refresh. Already loaded deterministic Cells are rebuilt/refreshed from the same descriptors so visual changes can be inspected immediately.
+
+`Revert Preview` restores the selected target's canonical values. `Clear All Previews` clears all temporary presentation overrides. Restarting the game also clears preview state.
+
+## Save to Project
+
+For a structured target:
+
+```text
+Edit fields / Asset slots
+  -> Apply Runtime Preview
+  -> inspect real game renderer
+  -> Save to Project
+  -> canonical JSON change
+  -> typed source regeneration
+  -> Studio canonical compile
+  -> focused validation
+  -> runtime refresh
   -> ChangeReceipt
 ```
 
-Supported v1 source extensions:
+Save records parameter and Asset-ID before/after state, source/generated files, validation actually executed, deterministic/save compatibility result, and a source diff. Asset-slot Save also synchronizes the Representation's canonical `assetIds`, so NAL usage reporting remains truthful.
 
-- images: PNG, JPEG, WebP;
-- audio: MP3, OGG, WAV, M4A;
-- meshes: GLB.
+## NAL Asset Library
 
-Images render in Studio. Audio uses browser play/stop controls. Mesh cards expose authoritative metadata (statistics when supplied, runtime status, pivot/collision/profile/usages). A true isolated GLB 3D viewport is intentionally deferred until imported-mesh runtime presentation is migrated; Studio does not fake one with a bounding box.
+The Asset Library supports Images, Audio, and Meshes. It shows source/runtime metadata, hash/status, current Representation usages, and compatible `Use for…` actions where a structured Asset slot can consume an Asset.
 
-Asset import alone does not alter world identity. Run 2 does not automatically bind a newly imported GLB into an unsupported renderer path.
+Import flow remains:
 
-## Representation Binding
+```text
+choose local file
+  -> Asset ID + Asset Profile
+  -> validation
+  -> assets/source/{images|audio|meshes}/
+  -> assets/definitions/studio-imports.json
+  -> npm run assets:build
+  -> generated registry/runtime output
+  -> ChangeReceipt
+```
 
-For PAU-migrated targets Studio shows the canonical semantic → Representation binding and compatible registered representations. Binding changes can be previewed through the same temporary override layer. Saving a rebind edits the canonical structured binding and generates a ChangeReceipt.
+Import alone does not change world identity and does not automatically replace a material. Binding an imported image is a separate explicit structured edit.
 
-A missing/unavailable custom representation continues through PAU's deterministic fallback chain; world generation is not involved.
+## DevelopmentContext and ChangeReceipt
 
-## Agent handoff
+Studio uses canonical `development-context-v1` packets and `change-receipt-v1` evidence. Material contexts now include Asset-slot metadata and active Asset-slot preview overrides in addition to parameter preview values.
 
-For a change that needs engineering work:
+Observation and Requested Change fields remain development notes only; they do not enter game/world data.
 
-1. select the semantic target;
-2. inspect a runtime instance when useful;
-3. enter **Observation** and **Requested Change**;
-4. choose **Copy Full Development Prompt**;
-5. send that prompt to the coding agent;
-6. let the agent reconcile current repository reality and implement the code change;
-7. return to Studio/runtime to inspect the resulting presentation and evidence.
+## Validation
 
-The future agent contract remains `DevelopmentContext + request -> structured PAU proposal OR code patch proposal`. Studio remains responsible for preview, diff, validation, approval and ChangeReceipt evidence.
+Preview performs no heavy test run. Save runs focused Studio/PAU validation. Explicit actions provide targeted validation, typecheck, tests, build, and full project checks.
 
-## Current limitations
-
-- Structured source authoring is intentionally limited to the Run 1 Bucket/Can pilot.
-- A-A1, P-A1, Materials, M-F1, Blackout and CV-H1 are semantic read-only targets until PAU migration supplies safe editable presentation fields.
-- Runtime-instance selection is currently reliable for a natural Bucket/Can in the current Cell; other scene geometry opens as a design target rather than inventing an instance ID.
-- Imported GLB assets do not yet have an isolated Studio 3D viewport or generic runtime mesh adapter.
-- Asset replacement and creating a new custom Representation from an import are foundations for later PAU migrations.
-- Studio does not commit, push, merge, deploy, or open PRs.
+Project verification also includes the production Studio-boundary scan so privileged local-authoring code cannot silently ship in the gameplay bundle.
