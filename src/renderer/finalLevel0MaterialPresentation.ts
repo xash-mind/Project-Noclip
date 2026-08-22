@@ -7,7 +7,7 @@ import { makeMaterial, type CellVisual } from './support.js';
 
 interface RendererAccess { app: pc.Application; }
 interface FinalMaterialCache { app: pc.Application; materials: Map<string, pc.StandardMaterial>; }
-interface RenderWithMeshInstances { material: pc.StandardMaterial; meshInstances?: Array<{ material: pc.Material }>; }
+interface RenderWithMeshInstances { material: pc.StandardMaterial; meshInstances?: Array<{ material: pc.StandardMaterial }>; }
 const caches = new WeakMap<WorldRenderer, FinalMaterialCache>();
 let installed = false;
 const ARCH_TARGET = 'material.arch-pale-wallpaper';
