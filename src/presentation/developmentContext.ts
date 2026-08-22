@@ -3,7 +3,7 @@ import { semanticTargetForPropKind } from './level0FeatureRepresentations.js';
 import { PROJECT_PRESENTATION_REGISTRY } from './projectPresentationRegistry.js';
 import { resolveRepresentation } from './registry.js';
 import { stableSerialize } from './stableSerialization.js';
-import type { AssetId, CollisionMode, DeterministicPresentationVariation, GeometryId, LcgClassification, PresentationCategory, PresentationMaterialId, PresentationValue, RepresentationBinding, RepresentationId, SemanticPresentationTargetId } from './types.js';
+import type { AssetId, CollisionMode, DeterministicPresentationVariation, EditablePresentationAssetSlot, GeometryId, LcgClassification, PresentationCategory, PresentationMaterialId, PresentationValue, RepresentationBinding, RepresentationId, SemanticPresentationTargetId } from './types.js';
 
 export const DEVELOPMENT_CONTEXT_SCHEMA = 'development-context-v1' as const;
 
@@ -33,12 +33,14 @@ export interface DevelopmentContext {
     geometryId?: GeometryId;
     materialIds: readonly PresentationMaterialId[];
     assetIds: readonly AssetId[];
+    assetSlots: readonly EditablePresentationAssetSlot[];
     binding: RepresentationBinding;
     lcg?: LcgClassification;
     collisionMode: CollisionMode;
     editableParameters: readonly string[];
     canonicalValues: Readonly<Record<string, PresentationValue>>;
     activePreviewOverrides: Readonly<Record<string, PresentationValue>>;
+    activeAssetSlotOverrides: Readonly<Record<string, AssetId>>;
     deterministicVariation?: DeterministicPresentationVariation;
     fallback?: RepresentationId;
   };
@@ -53,6 +55,7 @@ export interface DevelopmentContext {
 export interface DevelopmentContextOptions {
   branchOrRef?: string;
   activePreviewOverrides?: Readonly<Record<string, PresentationValue>>;
+  activeAssetSlotOverrides?: Readonly<Record<string, AssetId>>;
   userObservation?: string;
   requestedChange?: string;
 }
@@ -69,12 +72,14 @@ function developmentContextForTarget(semanticTargetId: SemanticPresentationTarge
       geometryId: resolved.definition.geometryId,
       materialIds: resolved.definition.materialIds,
       assetIds: resolved.definition.assetIds,
+      assetSlots: resolved.definition.assetSlots ?? [],
       binding: resolved.binding,
       lcg: resolved.definition.lcg?.classification,
       collisionMode: resolved.definition.collisionMode,
       editableParameters: resolved.definition.editableParameters.map((parameter) => parameter.key),
       canonicalValues: resolved.definition.parameters,
       activePreviewOverrides: options.activePreviewOverrides ?? {},
+      activeAssetSlotOverrides: options.activeAssetSlotOverrides ?? {},
       deterministicVariation: resolved.definition.deterministicVariation,
       fallback: resolved.definition.fallback
     },
