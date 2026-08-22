@@ -169,7 +169,7 @@ export function finalizePlayerCharacterProfile(profile: PlayerCharacterProfile, 
 
 function pickId<T extends readonly { id: string }[]>(options: T, random: () => number): OptionId<T> {
   const index = Math.min(options.length - 1, Math.max(0, Math.floor(random() * options.length)));
-  return options[index].id as OptionId<T>;
+  return options[index]!.id as OptionId<T>;
 }
 
 export function randomizePlayerCharacterAppearance(random: () => number = Math.random): PlayerCharacterAppearance {
