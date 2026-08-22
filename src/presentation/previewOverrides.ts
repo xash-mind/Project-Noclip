@@ -3,12 +3,12 @@ import { resolveRepresentation, withRepresentationBinding } from './registry.js'
 import { assetId, type AssetId, type PresentationValue, type RepresentationDefinition, type RepresentationId, type ResolvedRepresentation, type SemanticPresentationTargetId } from './types.js';
 
 const parameterOverrides = new Map<SemanticPresentationTargetId, Readonly<Record<string, PresentationValue>>>();
-const assetSlotOverrides = new Map<SemanticPresentationTargetId, Readonly<Record<string, AssetId>>>();
+const assetSlotOverrides = new Map<SemanticPresentationTargetId, Readonly<Record<string, AssetId | null>>>();
 const bindingOverrides = new Map<SemanticPresentationTargetId, RepresentationId>();
 
 export interface PresentationPreviewSnapshot {
   parameters: Readonly<Record<string, Readonly<Record<string, PresentationValue>>>>;
-  assetSlots: Readonly<Record<string, Readonly<Record<string, AssetId>>>>;
+  assetSlots: Readonly<Record<string, Readonly<Record<string, string>>>>;
   bindings: Readonly<Record<string, RepresentationId>>;
 }
 
@@ -19,7 +19,7 @@ export function setPresentationPreviewParameters(target: SemanticPresentationTar
 export function setPresentationPreviewAssetSlots(target: SemanticPresentationTargetId, patch: Readonly<Record<string, string>>): void {
   assetSlotOverrides.set(target, Object.freeze({
     ...(assetSlotOverrides.get(target) ?? {}),
-    ...Object.fromEntries(Object.entries(patch).map(([key, value]) => [key, assetId(value)]))
+    ...Object.fromEntries(Object.entries(patch).map(([key, value]) => [key, value === '' ? null : assetId(value)]))
   }));
 }
 
@@ -43,14 +43,14 @@ export function presentationPreviewParameters(target: SemanticPresentationTarget
   return parameterOverrides.get(target) ?? {};
 }
 
-export function presentationPreviewAssetSlots(target: SemanticPresentationTargetId): Readonly<Record<string, AssetId>> {
-  return assetSlotOverrides.get(target) ?? {};
+export function presentationPreviewAssetSlots(target: SemanticPresentationTargetId): Readonly<Record<string, string>> {
+  return Object.fromEntries(Object.entries(assetSlotOverrides.get(target) ?? {}).map(([key, value]) => [key, value ?? '']));
 }
 
 export function presentationPreviewSnapshot(): PresentationPreviewSnapshot {
   return {
     parameters: Object.fromEntries([...parameterOverrides].map(([target, values]) => [target, values])),
-    assetSlots: Object.fromEntries([...assetSlotOverrides].map(([target, values]) => [target, values])),
+    assetSlots: Object.fromEntries([...assetSlotOverrides].map(([target, values]) => [target, Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value ?? '']))])),
     bindings: Object.fromEntries(bindingOverrides)
   };
 }
@@ -67,7 +67,12 @@ export function resolvePreviewRepresentation(
   const assetPatch = assetSlotOverrides.get(target);
   if ((!parameterPatch || Object.keys(parameterPatch).length === 0) && (!assetPatch || Object.keys(assetPatch).length === 0)) return resolved;
   const assetSlots = resolved.definition.assetSlots?.map((slot) => {
-    const override = assetPatch?.[slot.key];
+    if (!assetPatch || !(slot.key in assetPatch)) return slot;
+    const override = assetPatch[slot.key];
+    if (override === null) {
+      const { assetId: _assetId, ...withoutAsset } = slot;
+      return withoutAsset;
+    }
     return override ? { ...slot, assetId: override } : slot;
   });
   const assetIds = assetSlots
