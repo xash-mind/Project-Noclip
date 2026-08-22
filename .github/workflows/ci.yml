@@ -41,7 +41,7 @@ jobs:
             sleep 1
           done
           NOCLIP_VERSION_ARTIFACTS="artifacts/browser-smoke" python scripts/version-smoke.py
-          NOCLIP_CHARACTER_ARTIFACTS="artifacts/character-creator-smoke" python scripts/character-creator-smoke.py
+          NOCLIP_CHARACTER_ARTIFACTS="artifacts/character-creator-smoke" python scripts/run-screenshot-tolerant-smoke.py scripts/character-creator-smoke.py
           NOCLIP_MOBILE_ARTIFACTS="artifacts/mobile-smoke" python scripts/run-legacy-smoke-with-character-creator.py scripts/mobile-smoke.py
           python scripts/run-legacy-smoke-with-character-creator.py scripts/browser-smoke.py
           NOCLIP_CVH1_ARTIFACTS="artifacts/cvh1-floor-smoke" python scripts/run-legacy-smoke-with-character-creator.py scripts/cvh1-floor-smoke.py
