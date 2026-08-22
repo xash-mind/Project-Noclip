@@ -19,6 +19,7 @@ export type PresentationCategory =
 export type LcgClassification = 'LCG-0' | 'LCG-1' | 'LCG-2' | 'LCG-3' | 'LCG-X';
 export type CollisionMode = 'none' | 'box' | 'capsule' | 'simple-hull' | 'authored-simple';
 export type PresentationValue = string | number | boolean;
+export type PresentationAssetType = 'image' | 'audio' | 'mesh';
 
 export interface LcgProfile {
   classification: LcgClassification;
@@ -40,12 +41,24 @@ export interface DeterministicPresentationVariation {
 export interface EditablePresentationParameter {
   key: string;
   label: string;
-  kind: 'number' | 'boolean' | 'text' | 'enum';
+  kind: 'number' | 'boolean' | 'text' | 'enum' | 'color';
   unit?: 'm' | 'ratio' | 'degrees' | 'count';
   min?: number;
   max?: number;
   step?: number;
   values?: readonly string[];
+  description?: string;
+}
+
+export interface EditablePresentationAssetSlot {
+  key: string;
+  label: string;
+  assetType: PresentationAssetType;
+  profile: string;
+  roles: readonly string[];
+  assetId?: AssetId;
+  optional?: boolean;
+  editable: boolean;
   description?: string;
 }
 
@@ -56,6 +69,7 @@ export interface RepresentationDefinition {
   geometryId?: GeometryId;
   materialIds: readonly PresentationMaterialId[];
   assetIds: readonly AssetId[];
+  assetSlots?: readonly EditablePresentationAssetSlot[];
   parameters: Readonly<Record<string, PresentationValue>>;
   editableParameters: readonly EditablePresentationParameter[];
   deterministicVariation?: DeterministicPresentationVariation;
