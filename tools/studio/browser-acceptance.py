@@ -80,7 +80,11 @@ def text(driver: webdriver.Chrome, selector: str) -> str:
 
 
 def wait_text(driver: webdriver.Chrome, selector: str, fragment: str, timeout: float = 25.0) -> str:
-    return str(wait_for(driver, lambda current: (value := text(current, selector)) if fragment in value else False, timeout, f"{selector} containing {fragment}"))
+    def containing_text(current: webdriver.Chrome) -> str | bool:
+        current_text = text(current, selector)
+        return current_text if fragment in current_text else False
+
+    return str(wait_for(driver, containing_text, timeout, f"{selector} containing {fragment}"))
 
 
 def click(driver: webdriver.Chrome, selector: str) -> None:
