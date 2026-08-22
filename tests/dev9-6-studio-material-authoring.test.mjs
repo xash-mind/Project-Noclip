@@ -52,14 +52,16 @@ test('Dev.9.6 has an independent canonical material source with editable visual 
   assert.doesNotMatch(readOnlySource, /semanticTargetId: 'material\.fluorescent-panel'/);
 });
 
-test('M-W1 owns typed A/B/C Asset slots and pattern scale instead of renderer hardcodes', () => {
+test('M-W1 owns typed A/B/C Asset slots and canonical pattern scale instead of renderer hardcodes', () => {
   const mw1 = definition('material.level-0-wallpaper');
-  assert.deepEqual(mw1.assetSlots.map((slot) => [slot.key, slot.profile, slot.assetId]), [
-    ['familyA', 'Wall Texture', 'level0.wallpaper.a-chevron'],
-    ['familyB', 'Wall Texture', 'level0.wallpaper.b-dots'],
-    ['familyC', 'Wall Texture', 'level0.wallpaper.c-lines']
+  assert.deepEqual(mw1.assetSlots.map((slot) => [slot.key, slot.profile, slot.assetType, slot.editable]), [
+    ['familyA', 'Wall Texture', 'image', true],
+    ['familyB', 'Wall Texture', 'image', true],
+    ['familyC', 'Wall Texture', 'image', true]
   ]);
-  assert.equal(mw1.parameters.patternSizeMeters, 1.3);
+  for (const slot of mw1.assetSlots) assert.equal(typeof slot.assetId, 'string', `${slot.key} has a canonical Asset binding`);
+  assert.equal(typeof mw1.parameters.patternSizeMeters, 'number');
+  assert.ok(mw1.parameters.patternSizeMeters > 0);
   assert.doesNotMatch(wallpaperAssetsSource, /ORDINARY_WALLPAPER_ASSET_IDS/);
   assert.doesNotMatch(wallpaperRulesSource, /ORDINARY_WALLPAPER_IMAGE_TILE_METERS/);
   assert.match(wallpaperAssetsSource, /materialAssetId\('material\.level-0-wallpaper'/);
@@ -70,17 +72,25 @@ test('Studio preview overrides support material parameters and first-class Asset
   const target = semanticPresentationTargetId('material.level-0-wallpaper');
   clearAllPresentationPreviews();
   const before = resolvePreviewRepresentation(target);
-  assert.equal(before.definition.parameters.saturation, 1);
-  assert.equal(before.definition.assetSlots.find((slot) => slot.key === 'familyA').assetId, 'level0.wallpaper.a-chevron');
-  setPresentationPreviewParameters(target, { saturation: 0.72, patternSizeMeters: 1.8 });
-  setPresentationPreviewAssetSlots(target, { familyA: 'level0.wallpaper.b-dots' });
+  const baselineSaturation = before.definition.parameters.saturation;
+  const baselinePatternSize = before.definition.parameters.patternSizeMeters;
+  const baselineFamilyA = before.definition.assetSlots.find((slot) => slot.key === 'familyA').assetId;
+  const replacementAsset = before.definition.assetSlots.map((slot) => slot.assetId).find((id) => id && id !== baselineFamilyA);
+  assert.ok(replacementAsset, 'M-W1 exposes another compatible wallpaper Asset for preview testing');
+  const previewSaturation = baselineSaturation === 0.72 ? 0.73 : 0.72;
+  const previewPatternSize = baselinePatternSize === 1.8 ? 1.7 : 1.8;
+
+  setPresentationPreviewParameters(target, { saturation: previewSaturation, patternSizeMeters: previewPatternSize });
+  setPresentationPreviewAssetSlots(target, { familyA: replacementAsset });
   const preview = resolvePreviewRepresentation(target);
-  assert.equal(preview.definition.parameters.saturation, 0.72);
-  assert.equal(preview.definition.parameters.patternSizeMeters, 1.8);
-  assert.equal(preview.definition.assetSlots.find((slot) => slot.key === 'familyA').assetId, 'level0.wallpaper.b-dots');
-  assert.equal(presentationPreviewAssetSlots(target).familyA, 'level0.wallpaper.b-dots');
+  assert.equal(preview.definition.parameters.saturation, previewSaturation);
+  assert.equal(preview.definition.parameters.patternSizeMeters, previewPatternSize);
+  assert.equal(preview.definition.assetSlots.find((slot) => slot.key === 'familyA').assetId, replacementAsset);
+  assert.equal(presentationPreviewAssetSlots(target).familyA, replacementAsset);
   clearAllPresentationPreviews();
-  assert.equal(resolvePreviewRepresentation(target).definition.parameters.saturation, 1);
+  assert.equal(resolvePreviewRepresentation(target).definition.parameters.saturation, baselineSaturation);
+  assert.equal(resolvePreviewRepresentation(target).definition.parameters.patternSizeMeters, baselinePatternSize);
+  assert.equal(resolvePreviewRepresentation(target).definition.assetSlots.find((slot) => slot.key === 'familyA').assetId, baselineFamilyA);
 });
 
 test('Ordinary sparse pillars and Pillar Field pillars share the exact M-W1 resolver', () => {
