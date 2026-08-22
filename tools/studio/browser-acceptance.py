@@ -112,6 +112,25 @@ def select_target(driver: webdriver.Chrome, target_id: str) -> None:
     wait_text(driver, "#target-id", target_id)
 
 
+def alternate_number(driver: webdriver.Chrome, selector: str) -> str:
+    current, minimum, maximum, step = driver.execute_script(
+        """
+        const e=document.querySelector(arguments[0]);
+        return [Number(e.value), Number(e.min), Number(e.max), Number(e.step || 0.01)];
+        """,
+        selector,
+    )
+    delta = step if step > 0 else 0.01
+    candidate = current + delta
+    if maximum == maximum and candidate > maximum:  # NaN-safe finite check
+        candidate = current - delta
+    if minimum == minimum and candidate < minimum:
+        candidate = current + delta * 2
+    if abs(candidate - current) < 1e-12:
+        candidate = current + 0.01
+    return f"{candidate:.6f}".rstrip("0").rstrip(".")
+
+
 class MockRuntime:
     def __init__(self) -> None:
         self.stop = threading.Event()
@@ -196,7 +215,6 @@ class MockRuntime:
 
 
 def main() -> None:
-    # save/revert acceptance must run on the actual allowed working branch, never detached.
     branch = subprocess.run(["git", "branch", "--show-current"], cwd=ROOT, text=True, capture_output=True, check=True).stdout.strip()
     if branch != "agent/dev9-7-studio-completion":
         raise AssertionError(f"Studio browser acceptance requires agent/dev9-7-studio-completion, got {branch or 'detached HEAD'}")
@@ -228,7 +246,7 @@ def main() -> None:
         wait_text(driver, "#scope-note", "A-A1")
         saturation_selector = '[data-param-number="saturation"]'
         saved_saturation = value(driver, saturation_selector)
-        set_input(driver, saturation_selector, "0.82")
+        set_input(driver, saturation_selector, alternate_number(driver, saturation_selector))
         wait_text(driver, "#editor-state", "unsaved")
         click(driver, "#preview")
         wait_text(driver, "#preview-state", "Active")
@@ -261,22 +279,36 @@ def main() -> None:
         wait_text(driver, "#preview-state", "None")
         checks.append("carpet typed tint preview/revert")
 
+        select_target(driver, "material.level-0-wallpaper")
+        family_selector = '[data-asset-slot="familyA"]'
+        saved_family = value(driver, family_selector)
+        compatible_families = driver.execute_script(
+            """
+            const input=document.querySelector(arguments[0]);
+            return [...input.list.options].map((option)=>option.value).filter((id)=>id && id!==arguments[1]);
+            """,
+            family_selector,
+            saved_family,
+        )
+        if not compatible_families:
+            raise AssertionError("M-W1 Family A needs at least one different compatible runtime-ready Asset for acceptance")
+        replacement_family = str(compatible_families[0])
+
         click(driver, '[data-tab="assets"]')
         wait_text(driver, "#assets-panel", "Asset Library")
-        set_input(driver, "#asset-search", "level0.wallpaper.b-dots")
-        wait_text(driver, "#asset-list", "B Dots")
+        set_input(driver, "#asset-search", replacement_family)
+        wait_text(driver, "#asset-list", replacement_family)
         click(driver, '[data-use-target="material.level-0-wallpaper"][data-use-slot="familyA"]')
         wait_text(driver, "#target-id", "material.level-0-wallpaper")
-        family_selector = '[data-asset-slot="familyA"]'
-        assert value(driver, family_selector) == "level0.wallpaper.a-chevron", "Use for… must navigate without changing the binding"
-        set_input(driver, family_selector, "level0.wallpaper.b-dots", event="change")
+        assert value(driver, family_selector) == saved_family, "Use for… must navigate without changing the binding"
+        set_input(driver, family_selector, replacement_family, event="change")
         wait_text(driver, "#editor-state", "unsaved")
         click(driver, "#preview")
         wait_text(driver, "#preview-state", "Active")
         click(driver, "#revert-preview")
         wait_text(driver, "#preview-state", "None")
-        assert value(driver, family_selector) == "level0.wallpaper.a-chevron"
-        checks.append("Asset used/compatible navigation plus replacement preview/revert")
+        assert value(driver, family_selector) == saved_family
+        checks.append("Asset used/compatible navigation plus value-agnostic replacement preview/revert")
 
         select_target(driver, "architecture.a-a1")
         wait_text(driver, "#read-only-explanation", "Generation 3 topology")
@@ -285,9 +317,8 @@ def main() -> None:
 
         select_target(driver, "feature.medium-bucket")
         rim_selector = '[data-param-number="rimHeightRatio"]'
-        rim_saved = float(value(driver, rim_selector))
-        rim_new = min(0.09, rim_saved + 0.005)
-        set_input(driver, rim_selector, f"{rim_new:.3f}")
+        rim_new = float(alternate_number(driver, rim_selector))
+        set_input(driver, rim_selector, f"{rim_new:.6f}".rstrip("0").rstrip("."))
         click(driver, "#save")
         wait_for(driver, lambda current: not current.find_element(By.ID, "receipt-panel").get_attribute("hidden"), timeout=90, message="ChangeReceipt after Save to Project")
         wait_text(driver, "#receipt-summary", "Canonical source changed", timeout=90)
