@@ -7,6 +7,7 @@ import { makeMaterial, type CellVisual } from './support.js';
 
 interface RendererAccess { app: pc.Application; }
 interface FinalMaterialCache { app: pc.Application; materials: Map<string, pc.StandardMaterial>; }
+interface RenderWithMeshInstances { material: pc.StandardMaterial; meshInstances?: Array<{ material: pc.Material }>; }
 const caches = new WeakMap<WorldRenderer, FinalMaterialCache>();
 let installed = false;
 const ARCH_TARGET = 'material.arch-pale-wallpaper';
@@ -24,7 +25,8 @@ function cachedMaterial(cache: FinalMaterialCache, key: string, factory: () => p
 function setEntityMaterial(entity: pc.Entity, value: pc.StandardMaterial): void {
   if (!entity.render) return;
   entity.render.material = value;
-  for (const instance of entity.render.meshInstances ?? []) instance.material = value;
+  const render = entity.render as unknown as RenderWithMeshInstances;
+  for (const instance of render.meshInstances ?? []) instance.material = value;
 }
 
 function archMaterial(cache: FinalMaterialCache, role: 'pier'|'upper'|'panel'): pc.StandardMaterial {
@@ -89,7 +91,6 @@ function applyAfterArchReconstruction(renderer: WorldRenderer, descriptor: CellD
   }));
 }
 
-/** Final presentation owner for materials on renderer-created Region geometry. It never changes semantic descriptors, topology or collision. */
 export function installFinalLevel0MaterialPresentation(): void {
   if (installed) return; installed = true;
   const originalLoadCell = WorldRenderer.prototype.loadCell;
