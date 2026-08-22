@@ -31,14 +31,13 @@ jobs:
           # the exact allowed authoring branch name so Save-to-Project safety
           # guards are exercised rather than bypassed.
           git switch -C agent/dev9-7-studio-completion
-          # Earlier verification commands intentionally regenerate canonical
-          # presentation outputs. They are disposable CI artifacts, not user
-          # edits. Restore only those generated files before Studio starts so
-          # its dirty-file guard is exercised against a genuinely clean target.
-          # Never restore either canonical JSON source here.
+          # Earlier verification commands intentionally regenerate the tracked
+          # Feature presentation output. It is a disposable CI artifact, not a
+          # user edit. Restore only that generated file before Studio starts so
+          # its dirty-file guard is exercised against a genuinely clean Save
+          # target. Never restore either canonical JSON source here.
           git restore --source=HEAD --worktree -- \
-            src/presentation/generatedLevel0FeatureDefinitions.ts \
-            src/presentation/generatedLevel0MaterialDefinitions.ts
+            src/presentation/generatedLevel0FeatureDefinitions.ts
           python tools/studio/browser-acceptance.py
           git diff --exit-code -- \
             src/presentation/definitions/level0-features.json \
