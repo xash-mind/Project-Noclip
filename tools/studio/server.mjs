@@ -50,11 +50,11 @@ const server=createServer(async(req,res)=>{
     if(req.method==='POST'&&url.pathname==='/api/command'){const input=await body(req);return json(res,200,queueBridgeCommand(state,{type:input.type,targetId:input.targetId,payload:input.payload}));}
     if(req.method==='POST'&&url.pathname==='/api/save'){
       const input=await body(req);if(!isStructuredSourceTarget(ROOT,input.targetId))throw new Error(`${input.targetId} is not a structured Studio authoring target`);
-      const result=saveStructuredSourceChange(ROOT,input);for(const path of result.receipt.filesChanged??[])state.studioTouched.add(path);
+      const result=saveStructuredSourceChange(state,input);
       queueBridgeCommand(state,{type:'clear-preview',targetId:result.receipt.semanticTarget.semanticTargetId});queueBridgeCommand(state,{type:'refresh-presentation',targetId:result.receipt.semanticTarget.semanticTargetId});return json(res,200,result);
     }
     if(req.method==='POST'&&url.pathname==='/api/revert'){
-      const input=await body(req);const result=canRevertStructuredReceipt(ROOT,input.receiptId)?revertStructuredSourceChange(ROOT,input.receiptId):revertStudioChange(state,input.receiptId);
+      const input=await body(req),result=canRevertStructuredReceipt(ROOT,input.receiptId)?revertStructuredSourceChange(state,input.receiptId):revertStudioChange(state,input.receiptId);
       queueBridgeCommand(state,{type:'clear-all-previews'});queueBridgeCommand(state,{type:'refresh-presentation'});return json(res,200,result);
     }
     if(req.method==='POST'&&url.pathname==='/api/validation'){const input=await body(req);return json(res,200,runValidationAction(state,input.action,input.targetId));}
