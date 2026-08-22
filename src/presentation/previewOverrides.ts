@@ -3,12 +3,12 @@ import { resolveRepresentation, withRepresentationBinding } from './registry.js'
 import { assetId, type AssetId, type PresentationValue, type RepresentationDefinition, type RepresentationId, type ResolvedRepresentation, type SemanticPresentationTargetId } from './types.js';
 
 const parameterOverrides = new Map<SemanticPresentationTargetId, Readonly<Record<string, PresentationValue>>>();
-const assetSlotOverrides = new Map<SemanticPresentationTargetId, Readonly<Record<string, AssetId | null>>>();
+const assetSlotOverrides = new Map<SemanticPresentationTargetId, Readonly<Record<string, AssetId>>>();
 const bindingOverrides = new Map<SemanticPresentationTargetId, RepresentationId>();
 
 export interface PresentationPreviewSnapshot {
   parameters: Readonly<Record<string, Readonly<Record<string, PresentationValue>>>>;
-  assetSlots: Readonly<Record<string, Readonly<Record<string, string>>>>;
+  assetSlots: Readonly<Record<string, Readonly<Record<string, AssetId>>>>;
   bindings: Readonly<Record<string, RepresentationId>>;
 }
 
@@ -17,10 +17,7 @@ export function setPresentationPreviewParameters(target: SemanticPresentationTar
 }
 
 export function setPresentationPreviewAssetSlots(target: SemanticPresentationTargetId, patch: Readonly<Record<string, string>>): void {
-  assetSlotOverrides.set(target, Object.freeze({
-    ...(assetSlotOverrides.get(target) ?? {}),
-    ...Object.fromEntries(Object.entries(patch).map(([key, value]) => [key, value === '' ? null : assetId(value)]))
-  }));
+  assetSlotOverrides.set(target, Object.freeze({ ...(assetSlotOverrides.get(target) ?? {}), ...Object.fromEntries(Object.entries(patch).map(([key, value]) => [key, assetId(value)])) }));
 }
 
 export function setPresentationPreviewBinding(target: SemanticPresentationTargetId, representation: RepresentationId): void {
@@ -43,14 +40,14 @@ export function presentationPreviewParameters(target: SemanticPresentationTarget
   return parameterOverrides.get(target) ?? {};
 }
 
-export function presentationPreviewAssetSlots(target: SemanticPresentationTargetId): Readonly<Record<string, string>> {
-  return Object.fromEntries(Object.entries(assetSlotOverrides.get(target) ?? {}).map(([key, value]) => [key, value ?? '']));
+export function presentationPreviewAssetSlots(target: SemanticPresentationTargetId): Readonly<Record<string, AssetId>> {
+  return assetSlotOverrides.get(target) ?? {};
 }
 
 export function presentationPreviewSnapshot(): PresentationPreviewSnapshot {
   return {
     parameters: Object.fromEntries([...parameterOverrides].map(([target, values]) => [target, values])),
-    assetSlots: Object.fromEntries([...assetSlotOverrides].map(([target, values]) => [target, Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value ?? '']))])),
+    assetSlots: Object.fromEntries([...assetSlotOverrides].map(([target, values]) => [target, values])),
     bindings: Object.fromEntries(bindingOverrides)
   };
 }
@@ -66,18 +63,8 @@ export function resolvePreviewRepresentation(
   const parameterPatch = parameterOverrides.get(target);
   const assetPatch = assetSlotOverrides.get(target);
   if ((!parameterPatch || Object.keys(parameterPatch).length === 0) && (!assetPatch || Object.keys(assetPatch).length === 0)) return resolved;
-  const assetSlots = resolved.definition.assetSlots?.map((slot) => {
-    if (!assetPatch || !(slot.key in assetPatch)) return slot;
-    const override = assetPatch[slot.key];
-    if (override === null) {
-      const { assetId: _assetId, ...withoutAsset } = slot;
-      return withoutAsset;
-    }
-    return override ? { ...slot, assetId: override } : slot;
-  });
-  const assetIds = assetSlots
-    ? [...new Set(assetSlots.flatMap((slot) => slot.assetId ? [slot.assetId] : []))]
-    : resolved.definition.assetIds;
+  const assetSlots = resolved.definition.assetSlots?.map((slot) => assetPatch?.[slot.key] ? { ...slot, assetId: assetPatch[slot.key] } : slot);
+  const assetIds = assetSlots ? [...new Set(assetSlots.flatMap((slot) => slot.assetId ? [slot.assetId] : []))] : resolved.definition.assetIds;
   return {
     ...resolved,
     definition: {
