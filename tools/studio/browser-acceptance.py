@@ -229,8 +229,6 @@ def main() -> None:
         ["node", "tools/studio/server.mjs"],
         cwd=ROOT,
         env={**os.environ, "NOCLIP_STUDIO_TOKEN": TOKEN},
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
         text=True,
     )
     runtime = MockRuntime()
