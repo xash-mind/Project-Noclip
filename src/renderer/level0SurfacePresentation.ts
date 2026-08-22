@@ -1,6 +1,6 @@
 import * as pc from 'playcanvas';
 import { materialAssetId, materialColor, materialNumber, materialString } from '../presentation/materialRuntime.js';
-import type { CellDescriptor, LightState, PropSpec, WallSpec } from '../world/types.js';
+import { CELL_SIZE, type CellDescriptor, type LightState, type PropSpec, type WallSpec } from '../world/types.js';
 import { archStructuralRole } from './archDividerRuntimeCorrection.js';
 import { applyLevel0WallpaperPresentation } from './ordinaryWallpaperPresentation.js';
 import { derivedPresentationTexture } from './presentationImageTextures.js';
@@ -9,11 +9,10 @@ import { canvasTexture, makeMaterial, type CellVisual } from './support.js';
 import { paintLevel0ChevronWallpaper, shouldGen3WallCollide, wallpaperUvForWall } from './level0Wallpaper.js';
 
 interface RendererAccess { app: pc.Application; }
-interface SurfacePresentationCache { wallpaper: pc.Texture; carpet: pc.Texture; ceiling: pc.Texture; materials: Map<string, pc.StandardMaterial>; }
+interface SurfacePresentationCache { app: pc.Application; wallpaper: pc.Texture; carpet: pc.Texture; ceiling: pc.Texture; materials: Map<string, pc.StandardMaterial>; }
 const caches = new WeakMap<WorldRenderer, SurfacePresentationCache>();
 let installed = false;
 
-const WALLPAPER_TARGET = 'material.level-0-wallpaper';
 const ARCH_TARGET = 'material.arch-pale-wallpaper';
 const CARPET_TARGET = 'material.level-0-carpet';
 const CEILING_TARGET = 'material.level-0-ceiling';
@@ -27,7 +26,7 @@ function createWallpaperTexture(app: pc.Application): pc.Texture {
 }
 function cacheFor(renderer: WorldRenderer): SurfacePresentationCache {
   const existing = caches.get(renderer); if (existing) return existing; const app = (renderer as unknown as RendererAccess).app;
-  const created: SurfacePresentationCache = { wallpaper: createWallpaperTexture(app), carpet: canvasTexture(app, 'carpet', 0), ceiling: canvasTexture(app, 'ceiling', 0), materials: new Map() }; caches.set(renderer, created); return created;
+  const created: SurfacePresentationCache = { app, wallpaper: createWallpaperTexture(app), carpet: canvasTexture(app, 'carpet', 0), ceiling: canvasTexture(app, 'ceiling', 0), materials: new Map() }; caches.set(renderer, created); return created;
 }
 function material(cache: SurfacePresentationCache, key: string, factory: () => pc.StandardMaterial): pc.StandardMaterial { const existing = cache.materials.get(key); if (existing) return existing; const created = factory(); cache.materials.set(key, created); return created; }
 function setMaterial(entity: pc.Entity | undefined, value: pc.StandardMaterial): void { if (entity?.render) entity.render.material = value; }
@@ -47,33 +46,25 @@ function wallMaterial(cache: SurfacePresentationCache, descriptor: CellDescripto
   return material(cache, key, () => makeMaterial(tint, cache.wallpaper, uv.tiling, undefined, 1, uv.offset));
 }
 
-function imageTexture(cache: SurfacePresentationCache, target: string, slot: string, brightness: number, contrast: number, saturation: number): pc.Texture | undefined {
-  const id = materialAssetId(target, slot); if (!id) return undefined;
-  const app = [...caches.entries?.() ?? []]; void app;
-  return undefined;
-}
-
 function floorMaterial(cache: SurfacePresentationCache, descriptor: CellDescriptor): pc.StandardMaterial {
-  const app = (pc.Application as unknown as { getApplication(id?: string): pc.Application | undefined }).getApplication('game-canvas');
-  const sourceMode = materialString(CARPET_TARGET, 'sourceMode', 'procedural'); const pattern = materialNumber(CARPET_TARGET, 'patternSizeMeters', 3.36);
+  const sourceMode = materialString(CARPET_TARGET, 'sourceMode', 'procedural'); const pattern = materialNumber(CARPET_TARGET, 'patternSizeMeters', CELL_SIZE / 5);
   const brightness = materialNumber(CARPET_TARGET, 'brightness', 1), contrast = materialNumber(CARPET_TARGET, 'contrast', 1), saturation = materialNumber(CARPET_TARGET, 'saturation', 1);
   const region = descriptor.world.regionId; const color = region === 'arch-rooms' ? materialColor(CARPET_TARGET, 'archTint', [0.65,0.60,0.49]) : region === 'pillar-field' ? materialColor(CARPET_TARGET, 'pillarTint', [0.825,0.755,0.585]) : materialColor(CARPET_TARGET, 'ordinaryTint', [0.79,0.72,0.55]);
   const gloss = region === 'arch-rooms' ? materialNumber(CARPET_TARGET, 'archGloss', 0.11) : 0.07;
   const asset = sourceMode === 'nal-image' ? materialAssetId(CARPET_TARGET, 'texture') : undefined;
-  const texture = app && asset ? derivedPresentationTexture(app, asset, { brightness, contrast, saturation, rotationDegrees: 0, flipU: false, flipV: false }) : cache.carpet;
-  const tiling: [number, number] = [Math.max(0.02, 16.8 / pattern), Math.max(0.02, 16.8 / pattern)];
+  const texture = asset ? derivedPresentationTexture(cache.app, asset, { brightness, contrast, saturation, rotationDegrees: 0, flipU: false, flipV: false }) : cache.carpet;
+  const tiling: [number, number] = [Math.max(0.02, CELL_SIZE / pattern), Math.max(0.02, CELL_SIZE / pattern)];
   const key = `floor:${region}:${sourceMode}:${asset ?? 'procedural'}:${pattern}:${brightness}:${contrast}:${saturation}:${color.join(',')}:${gloss}:${Boolean(texture)}`;
   return material(cache, key, () => { const result = makeMaterial(color, texture ?? cache.carpet, tiling); result.gloss = gloss; result.update(); return result; });
 }
 
 function ceilingMaterial(cache: SurfacePresentationCache, descriptor: CellDescriptor): pc.StandardMaterial {
-  const app = (pc.Application as unknown as { getApplication(id?: string): pc.Application | undefined }).getApplication('game-canvas');
-  const sourceMode = materialString(CEILING_TARGET, 'sourceMode', 'procedural'); const pattern = materialNumber(CEILING_TARGET, 'patternSizeMeters', 4.2);
+  const sourceMode = materialString(CEILING_TARGET, 'sourceMode', 'procedural'); const pattern = materialNumber(CEILING_TARGET, 'patternSizeMeters', CELL_SIZE / 4);
   const brightness = materialNumber(CEILING_TARGET, 'brightness', 1), contrast = materialNumber(CEILING_TARGET, 'contrast', 1), saturation = materialNumber(CEILING_TARGET, 'saturation', 1);
   const arch = descriptor.world.regionId === 'arch-rooms'; const color = arch ? materialColor(CEILING_TARGET, 'archTint', [0.98,0.975,0.91]) : materialColor(CEILING_TARGET, 'ordinaryTint', [0.93,0.91,0.81]);
   const asset = sourceMode === 'nal-image' ? materialAssetId(CEILING_TARGET, 'texture') : undefined;
-  const texture = app && asset ? derivedPresentationTexture(app, asset, { brightness, contrast, saturation, rotationDegrees: 0, flipU: false, flipV: false }) : cache.ceiling;
-  const tiling: [number, number] = [Math.max(0.02, 16.8 / pattern), Math.max(0.02, 16.8 / pattern)];
+  const texture = asset ? derivedPresentationTexture(cache.app, asset, { brightness, contrast, saturation, rotationDegrees: 0, flipU: false, flipV: false }) : cache.ceiling;
+  const tiling: [number, number] = [Math.max(0.02, CELL_SIZE / pattern), Math.max(0.02, CELL_SIZE / pattern)];
   const key = `ceiling:${arch ? 'arch' : 'ordinary'}:${sourceMode}:${asset ?? 'procedural'}:${pattern}:${brightness}:${contrast}:${saturation}:${color.join(',')}:${Boolean(texture)}`;
   return material(cache, key, () => makeMaterial(color, texture ?? cache.ceiling, tiling));
 }
@@ -106,7 +97,6 @@ function applyGen3SurfacePresentation(renderer: WorldRenderer, visual: CellVisua
   for (const wall of descriptor.walls) setMaterial(entityByName(root, wall.id), wallMaterial(cache, descriptor, wall));
   for (const prop of descriptor.props) if (prop.kind === 'column' && prop.materialId === 'level-0-wallpaper') preparePillarPresentation(root, prop);
   for (const group of descriptor.lightGroups) { const pulse = group.state === 'off' ? 0 : 1; const value = fixtureMaterial(cache, descriptor, group.state, pulse); group.fixtures.forEach((_position, index) => setMaterial(entityByName(root, `${group.id}:fixture:${index}`), value)); }
-  // M-W1 is the single final wallpaper owner for both walls and every eligible Level 0 column.
   applyLevel0WallpaperPresentation(renderer, visual);
 }
 
