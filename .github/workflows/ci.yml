@@ -43,7 +43,7 @@ jobs:
             src/presentation/definitions/level0-features.json \
             src/presentation/definitions/level0-materials.json \
             src/presentation/generated
-      - name: Run mobile, desktop, CV-H1 floor and world-cohesion Chromium journeys
+      - name: Run character creator, mobile, desktop, CV-H1 floor and world-cohesion Chromium journeys
         shell: bash
         run: |
           set -euo pipefail
@@ -61,9 +61,10 @@ jobs:
             sleep 1
           done
           NOCLIP_VERSION_ARTIFACTS="artifacts/browser-smoke" python scripts/version-smoke.py
-          NOCLIP_MOBILE_ARTIFACTS="artifacts/mobile-smoke" python scripts/mobile-smoke.py
-          python scripts/browser-smoke.py
-          NOCLIP_CVH1_ARTIFACTS="artifacts/cvh1-floor-smoke" python scripts/cvh1-floor-smoke.py
+          NOCLIP_CHARACTER_ARTIFACTS="artifacts/character-creator-smoke" python scripts/run-screenshot-tolerant-smoke.py scripts/character-creator-smoke.py
+          NOCLIP_MOBILE_ARTIFACTS="artifacts/mobile-smoke" python scripts/run-legacy-smoke-with-character-creator.py scripts/mobile-smoke.py
+          python scripts/run-legacy-smoke-with-character-creator.py scripts/browser-smoke.py
+          NOCLIP_CVH1_ARTIFACTS="artifacts/cvh1-floor-smoke" python scripts/run-legacy-smoke-with-character-creator.py scripts/cvh1-floor-smoke.py
           candidate_version="v$(tr -d '[:space:]' < VERSION)"
           NOCLIP_BASE_URL="http://127.0.0.1:4173" \
           NOCLIP_DEPLOYMENT_COMMIT="$GITHUB_SHA" \
@@ -71,15 +72,16 @@ jobs:
           NOCLIP_EXPECTED_VERSION="$candidate_version" \
           NOCLIP_PROFILE_STATIC_SECONDS="1.5" \
           NOCLIP_PROFILE_ARTIFACTS="artifacts/cvh1-renderer-profile" \
-          python scripts/profile-candidate-renderer.py
-          python scripts/world-cohesion-smoke.py
+          python scripts/run-legacy-smoke-with-character-creator.py scripts/profile-candidate-renderer.py
+          python scripts/run-legacy-smoke-with-character-creator.py scripts/world-cohesion-smoke.py
       - name: Upload browser-smoke evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-mobile-studio-cvh1-cohesion-smoke-${{ github.sha }}
+          name: browser-mobile-studio-character-cvh1-cohesion-smoke-${{ github.sha }}
           path: |
             artifacts/browser-smoke
+            artifacts/character-creator-smoke
             artifacts/mobile-smoke
             artifacts/studio-browser
             artifacts/cvh1-floor-smoke
