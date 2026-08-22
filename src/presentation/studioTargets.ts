@@ -32,6 +32,6 @@ export const STUDIO_TARGETS: readonly StudioTargetMetadata[] = PROJECT_PRESENTAT
       category: binding.category,
       representationId: binding.representationId,
       ...(shortAddress ? { shortAddress } : {}),
-      structuredEditable: Boolean(definition?.editableParameters.length)
+      structuredEditable: Boolean(definition && (definition.editableParameters.length > 0 || definition.assetSlots?.some((slot) => slot.editable)))
     };
   });

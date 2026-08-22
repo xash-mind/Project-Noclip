@@ -1,5 +1,6 @@
 import './styles.css';
 import { ProjectNoclipGame } from './app/ProjectNoclipGame.js';
+import { installFinalLevel0MaterialPresentation } from './renderer/finalLevel0MaterialPresentation.js';
 import { installLevel0SurfacePresentation } from './renderer/level0SurfacePresentation.js';
 import { prepareOrdinaryWallpaperAssets } from './renderer/ordinaryWallpaperAssets.js';
 import { installOrdinaryCasingMaterialPresentation } from './renderer/ordinaryCasingMaterialPresentation.js';
@@ -12,21 +13,18 @@ import { mountDevelopmentVersionIndicator } from './ui/DevelopmentVersionIndicat
 import { installRegionDepthLab } from './ui/regionDepthLab.js';
 import { installRenderSettingsLab } from './ui/renderSettingsLab.js';
 
-// Level 0 surface presentation now owns the older base materials and the final
-// supplied A/B/C wallpaper finish in one Cell lifecycle. Casing follows that
-// finish, and static batching observes the completed presentation.
-// Dev.9.5 preview anchor: no runtime behavior is changed by this comment.
 installLevel0SurfacePresentation();
 installRenderSettingsRuntime();
 installPauFeaturePresentationPilot();
 installOrdinaryCasingMaterialPresentation();
 installStaticWorldBatching();
+// Region reconstruction happens inside StaticWorldBatching's installed lifecycle.
+// This outer pass is the final material owner for renderer-created Arch/CV-H1 geometry.
+installFinalLevel0MaterialPresentation();
 installOutletInteractionRuntime();
 installRendererRuntimeDiagnostics();
 mountDevelopmentVersionIndicator();
 
-// Do not even construct the interactive title/game callbacks until A/B/C bytes
-// resolve, hash-match and browser-decode. This makes preload a hard first-Cell gate.
 void prepareOrdinaryWallpaperAssets().then(async () => {
   const game = new ProjectNoclipGame();
   installRegionDepthLab(game);
