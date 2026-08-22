@@ -12,6 +12,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 _original_click = WebElement.click
 _original_get_attribute = WebElement.get_attribute
+_original_execute_script = WebDriver.execute_script
 _original_save_screenshot = WebDriver.save_screenshot
 
 
@@ -24,14 +25,7 @@ def _legacy_get_attribute(self: WebElement, name: str):
     return value
 
 
-def _creator_aware_click(self: WebElement) -> None:
-    action = _original_get_attribute(self, "data-action")
-    _original_click(self)
-    if action != "new":
-        return
-
-    driver = self.parent
-
+def _complete_character_creator(driver: WebDriver) -> None:
     def creator_ready(current):
         try:
             creator = current.find_element("css selector", '[data-ui="character-creator"]')
@@ -42,6 +36,28 @@ def _creator_aware_click(self: WebElement) -> None:
 
     begin = WebDriverWait(driver, 10).until(creator_ready)
     _original_click(begin)
+
+
+def _creator_aware_click(self: WebElement) -> None:
+    action = _original_get_attribute(self, "data-action")
+    _original_click(self)
+    if action == "new":
+        _complete_character_creator(self.parent)
+
+
+def _creator_aware_execute_script(self: WebDriver, script: str, *args):
+    action = None
+    if args and isinstance(args[0], WebElement):
+        try:
+            action = _original_get_attribute(args[0], "data-action")
+        except Exception:
+            action = None
+
+    result = _original_execute_script(self, script, *args)
+    normalized_script = "".join(script.split())
+    if action == "new" and "arguments[0].click()" in normalized_script:
+        _complete_character_creator(self)
+    return result
 
 
 def _tolerant_save_screenshot(self: WebDriver, filename: str) -> bool:
@@ -57,6 +73,7 @@ def _tolerant_save_screenshot(self: WebDriver, filename: str) -> bool:
 
 WebElement.get_attribute = _legacy_get_attribute
 WebElement.click = _creator_aware_click
+WebDriver.execute_script = _creator_aware_execute_script
 WebDriver.save_screenshot = _tolerant_save_screenshot
 
 if len(sys.argv) != 2:
