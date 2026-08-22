@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { materialColor, materialNumber } from '../presentation/materialRuntime.js';
 import { lightFlickerValue } from '../world/lighting.js';
 import { CELL_SIZE, type CellDescriptor, type LightGroupSpec } from '../world/types.js';
 import {
@@ -19,6 +20,7 @@ const FIXTURE_PANEL_WIDTH = 0.38;
 const FIXTURE_EMITTER_CLEARANCE = 0.03;
 const FIXTURE_SHADOW_BIAS = 0.4;
 const FIXTURE_SHADOW_NORMAL_OFFSET = 0.04;
+const PANEL_TARGET = 'material.fluorescent-panel';
 
 interface FixtureLightComponent {
   intensity: number;
@@ -176,11 +178,17 @@ function fixtureMaterial(
 ): pc.StandardMaterial {
   const arch = descriptor.world.regionId === 'arch-rooms';
   const level = Math.max(0, Math.min(1, Math.round(pulse * 16) / 16));
-  const key = `fixture-owned:${arch ? 'arch' : 'ordinary'}:${group.state}:${level.toFixed(4)}`;
+  const activeDiffuse = arch
+    ? materialColor(PANEL_TARGET, 'archDiffuse', [0.99, 0.985, 0.83])
+    : materialColor(PANEL_TARGET, 'ordinaryDiffuse', [0.98, 0.955, 0.76]);
+  const emissive = arch
+    ? materialColor(PANEL_TARGET, 'archEmissive', [1, 0.985, 0.78])
+    : materialColor(PANEL_TARGET, 'ordinaryEmissive', [1, 0.95, 0.68]);
+  const visualEmissiveScale = materialNumber(PANEL_TARGET, 'visualEmissiveScale', 1);
+  const key = `fixture-owned:${arch ? 'arch' : 'ordinary'}:${group.state}:${level.toFixed(4)}:${activeDiffuse.join(',')}:${emissive.join(',')}:${visualEmissiveScale.toFixed(4)}`;
   const existing = state.materials.get(key);
   if (existing) return existing;
 
-  const activeDiffuse: [number, number, number] = arch ? [0.99, 0.985, 0.83] : [0.98, 0.955, 0.76];
   const offDiffuse: [number, number, number] = [0.31, 0.31, 0.27];
   const diffuse: [number, number, number] = [
     offDiffuse[0] + (activeDiffuse[0] - offDiffuse[0]) * level,
@@ -193,8 +201,8 @@ function fixtureMaterial(
       diffuse,
       undefined,
       [1, 1],
-      arch ? [1, 0.985, 0.78] : [1, 0.95, 0.68],
-      (arch ? 2.18 : 2.28) * level
+      emissive,
+      (arch ? 2.18 : 2.28) * level * visualEmissiveScale
     );
   state.materials.set(key, created);
   return created;

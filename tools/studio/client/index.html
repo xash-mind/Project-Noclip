@@ -9,12 +9,13 @@
 <body>
   <header class="topbar">
     <div><span class="eyebrow">PROJECT NOCLIP / LOCAL DEVELOPMENT</span><h1>NOCLIP STUDIO</h1></div>
-    <div class="repo-state"><strong id="branch">branch —</strong><span id="dirty">loading repository…</span></div>
+    <div class="repo-state"><strong id="branch">branch —</strong><span id="dirty">loading repository…</span><span id="runtime-state">game runtime —</span></div>
   </header>
   <main class="layout">
     <aside class="sidebar panel">
-      <h2>Semantic targets</h2>
-      <input id="target-search" type="search" placeholder="A-A1, Bucket, M-F1…" />
+      <h2>Presentation targets</h2>
+      <p class="muted">Choose what you can see in the game. Semantic IDs stay available as diagnostics, not as navigation.</p>
+      <input id="target-search" type="search" placeholder="Wallpaper, Arch, Bucket…" />
       <div id="target-list" class="target-list"></div>
       <hr />
       <button data-tab="assets">Asset Library</button>
@@ -24,24 +25,46 @@
 
     <section class="workspace">
       <section class="panel" id="target-panel">
-        <div class="section-head"><div><span class="eyebrow" id="target-category"></span><h2 id="target-name">Select a target</h2><code id="target-id"></code></div><span id="editability" class="pill"></span></div>
+        <div class="section-head">
+          <div><span class="eyebrow" id="target-category"></span><h2 id="target-name">Select a target</h2><code id="target-id"></code></div>
+          <span id="editability" class="pill"></span>
+        </div>
         <div class="actions runtime-actions">
           <button id="locate">Locate</button><button id="isolate">Isolate</button><button id="showcase">Spawn showcase</button>
         </div>
-        <div id="preview-banner" class="preview-banner" hidden><strong>UNSAVED PREVIEW</strong><span>Runtime presentation differs from canonical PAU source.</span></div>
-        <div class="inspector-grid">
-          <article><h3>World / instance</h3><div id="world-inspector" class="kv"></div></article>
-          <article><h3>Presentation</h3><div id="presentation-inspector" class="kv"></div></article>
-          <article><h3>Source ownership</h3><div id="source-inspector" class="stack"></div></article>
-          <article><h3>Diagnostics</h3><div id="diagnostics" class="stack"></div></article>
+
+        <div class="human-context-grid">
+          <article><h3>Where does it appear?</h3><div id="where-used" class="plain-list"></div><p id="scope-note" class="scope-note" hidden></p></article>
+          <article><h3>Current source</h3><div id="current-source" class="source-summary"></div></article>
         </div>
+
+        <div class="state-strip" aria-label="Authoring state">
+          <article class="state-card"><span class="state-label">Saved Project Value</span><strong id="saved-state">Canonical source</strong><small>What a fresh restart reads from the project.</small></article>
+          <article class="state-card"><span class="state-label">Temporary Preview</span><strong id="preview-state">None</strong><small>Runtime-only. Never saved automatically.</small></article>
+          <article class="state-card"><span class="state-label">Unsaved Editor Change</span><strong id="editor-state">None</strong><small>Form changes waiting for Preview or Save.</small></article>
+        </div>
+        <div id="preview-active-banner" class="preview-banner" hidden><strong>TEMPORARY PREVIEW ACTIVE</strong><span>The game runtime differs from the saved project value for this target.</span></div>
+        <div id="editor-dirty-banner" class="editor-banner" hidden><strong>UNSAVED EDITOR CHANGE</strong><span>This form differs from the saved project. Nothing is persisted until Save to Project.</span></div>
+
+        <details class="diagnostic-details">
+          <summary>Technical diagnostics and source ownership</summary>
+          <div class="inspector-grid">
+            <article><h3>World / instance</h3><div id="world-inspector" class="kv"></div></article>
+            <article><h3>Presentation</h3><div id="presentation-inspector" class="kv"></div></article>
+            <article><h3>Source ownership</h3><div id="source-inspector" class="stack"></div></article>
+            <article><h3>Diagnostics</h3><div id="diagnostics" class="stack"></div></article>
+          </div>
+        </details>
       </section>
 
       <section class="panel" id="editor-panel">
-        <div class="section-head"><div><span class="eyebrow">PAU STRUCTURED AUTHORING</span><h2>Editable presentation</h2></div><span id="code-required" class="warning" hidden>CODE CHANGE REQUIRED</span></div>
-        <div id="fields" class="field-grid"></div>
-        <label>Representation Binding<select id="representation"></select></label>
-        <div class="actions"><button class="primary" id="preview">Apply Runtime Preview</button><button id="revert-preview">Revert Preview</button><button id="clear-previews">Clear All Previews</button><button class="save" id="save">Save to Project</button></div>
+        <div class="section-head"><div><span class="eyebrow">PRESENTATION AUTHORING</span><h2>What can I change?</h2></div><span id="code-required" class="warning" hidden>READ ONLY</span></div>
+        <div id="read-only-explanation" class="read-only-card" hidden></div>
+        <div id="asset-fields"></div>
+        <div id="basic-section"><h3>Basic</h3><div id="basic-fields" class="field-grid"></div></div>
+        <details id="advanced-section" class="advanced-section"><summary>Advanced controls</summary><div id="advanced-fields" class="field-grid"></div></details>
+        <div class="actions authoring-actions"><button class="primary" id="preview">Apply Temporary Preview</button><button id="revert-preview">Revert This Preview</button><button id="clear-previews">Clear All Previews</button><button class="save" id="save">Save to Project</button></div>
+        <p id="authoring-status" class="muted" role="status"></p>
       </section>
 
       <section class="panel">
@@ -54,12 +77,14 @@
       </section>
 
       <section class="panel" id="receipt-panel" hidden>
-        <span class="eyebrow">CHANGE SAVED</span><h2>ChangeReceipt</h2><pre id="receipt-human"></pre>
-        <div class="actions"><button id="copy-receipt">Copy Change Receipt</button><button id="copy-receipt-json">Copy Receipt JSON</button><button id="view-receipt-diff">View Diff</button><button class="danger" id="revert-change">Revert Studio Change</button></div>
+        <span class="eyebrow">CHANGE SAVED</span><h2>ChangeReceipt</h2>
+        <div id="receipt-summary" class="receipt-summary"></div><pre id="receipt-human"></pre>
+        <div class="actions"><button id="copy-receipt">Copy Change Receipt</button><button id="copy-receipt-json">Copy Receipt JSON</button><button id="view-receipt-diff">View Diff</button><button class="danger" id="revert-change">Targeted Revert</button></div>
       </section>
 
       <section class="panel tab-panel" id="assets-panel" hidden>
-        <div class="section-head"><div><span class="eyebrow">NAL</span><h2>Asset Library</h2></div><div class="tabs"><button data-asset-type="image">Images</button><button data-asset-type="audio">Audio</button><button data-asset-type="mesh">Meshes</button></div></div>
+        <div class="section-head"><div><span class="eyebrow">NAL</span><h2>Asset Library</h2><p class="muted">See what is used, where it is compatible, and navigate to an exact Asset slot. “Use for…” never changes a binding by itself.</p></div><div class="tabs"><button data-asset-type="image">Images</button><button data-asset-type="audio">Audio</button><button data-asset-type="mesh">Meshes</button></div></div>
+        <input id="asset-search" type="search" placeholder="Search Asset ID, profile, source…" />
         <div id="asset-list" class="asset-grid"></div>
         <h3>Import asset</h3>
         <div class="field-grid"><label>File<input id="asset-file" type="file" /></label><label>Asset ID<input id="asset-id" placeholder="level0.wallpaper.custom01" /></label><label>Profile<select id="asset-profile"></select></label></div>
