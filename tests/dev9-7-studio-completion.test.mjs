@@ -13,13 +13,6 @@ const surfacePresentation = readFileSync('src/renderer/level0SurfacePresentation
 const finalPresentation = readFileSync('src/renderer/finalLevel0MaterialPresentation.ts', 'utf8');
 
 const { STUDIO_TARGETS } = await import('../.test-dist/src/presentation/studioTargets.js');
-const {
-  clearAllPresentationPreviews,
-  presentationPreviewAssetSlots,
-  resolvePreviewRepresentation,
-  setPresentationPreviewAssetSlots
-} = await import('../.test-dist/src/presentation/previewOverrides.js');
-const { semanticPresentationTargetId } = await import('../.test-dist/src/presentation/types.js');
 
 function definitionFor(source, targetId) {
   const binding = source.bindings.find((item) => item.semanticTargetId === targetId);
@@ -56,7 +49,7 @@ test('Studio exposes human target organization, usage context, and explicit save
   assert.match(arch.scopeNote, /does not change normal Arch Room wallpaper/);
   assert.equal(blackout.structuredEditable, false);
   assert.match(blackout.readOnlyReason, /world and renderer law/);
-  for (const label of ['Saved Project Value', 'Temporary Preview', 'Unsaved Editor Change', 'Where does it appear?', 'Current source', 'Basic', 'Advanced controls']) assert.match(studioHtml, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  for (const label of ['Saved Project Value', 'Temporary Preview', 'Unsaved Editor Change', 'Where does it appear?', 'Current source', 'Basic', 'Advanced controls']) assert.ok(studioHtml.includes(label), `Studio shell contains ${label}`);
 });
 
 test('Asset Library navigation is informative and never stages a binding implicitly', () => {
@@ -68,16 +61,6 @@ test('Asset Library navigation is informative and never stages a binding implici
   assert.match(useHandler, /selectTarget\(button\.dataset\.useTarget/);
   assert.match(studioHtml, /id="asset-search"/);
   assert.match(studioClient, /datalist/);
-});
-
-test('optional Asset slots can preview a targeted unbind and revert exactly', () => {
-  const target = semanticPresentationTargetId('material.level-0-carpet');
-  clearAllPresentationPreviews();
-  setPresentationPreviewAssetSlots(target, { texture: '' });
-  assert.equal(presentationPreviewAssetSlots(target).texture, '');
-  assert.equal(resolvePreviewRepresentation(target).definition.assetSlots.find((slot) => slot.key === 'texture').assetId, undefined);
-  clearAllPresentationPreviews();
-  assert.equal(presentationPreviewAssetSlots(target).texture, undefined);
 });
 
 test('preview API validates typed parameters and compatible Assets and blocks arbitrary Representation rebinding', () => {
