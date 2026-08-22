@@ -34,7 +34,7 @@ Common controls appear under **Basic** and specialized UV/finish/treatment contr
 
 The Asset Library reports both current uses and compatible editable target/slot destinations. **Use for…** navigates to the exact target and Asset slot; it never stages or saves a replacement automatically.
 
-Preview Asset commands are validated by the Studio server against slot editability, Asset type, Profile, role, and runtime-ready state before they enter the game bridge. Optional Asset slots support a temporary unbind for procedural fallback testing.
+Preview Asset commands are validated by the Studio server against slot editability, Asset type, Profile, role, and runtime-ready state before they enter the game bridge. Runtime Asset previews remain concrete typed Asset-ID replacements. Optional unbinding is validated only through the canonical Save-to-Project path rather than weakening the runtime bridge Asset-ID contract.
 
 ## M-F1 wiring correction
 
@@ -54,6 +54,6 @@ This branch intentionally does not change the canonical values in `src/presentat
 
 ## Verification
 
-Focused Dev.9.7 tests cover typed-control coverage, saved/preview/editor state semantics, target organization/read-only explanations, Asset navigation and compatibility validation, optional Asset unbind/revert, loaded-cell runtime refresh plumbing, M-W1/M-A1 ownership separation, and M-F1 visual-vs-physical ownership.
+Focused Dev.9.7 tests cover typed-control coverage, saved/preview/editor state semantics, target organization/read-only explanations, Asset navigation and compatibility validation, loaded-cell runtime refresh plumbing, M-W1/M-A1 ownership separation, and M-F1 visual-vs-physical ownership.
 
-CI also executes a real headless Chromium Studio journey against the actual Studio UI. It uses a local bridge harness for deterministic preview acknowledgement, previews/reverts M-W1, M-A1, carpet, and an Asset replacement, inspects a read-only architecture target, then saves and hash-reverts a harmless Bucket presentation parameter. The journey asserts that the material source containing M-W1/M-A1 remains byte-identical.
+CI also executes a real headless Chromium Studio journey against the actual Studio UI. It uses a local bridge harness for deterministic preview acknowledgement, previews/reverts M-W1, M-A1, carpet, and an Asset replacement, inspects a read-only architecture target, then saves and hash-reverts a harmless Bucket presentation parameter. The journey asserts that the material source containing M-W1/M-A1 remains byte-identical and chooses its wallpaper replacement relative to the current canonical binding so concurrent user tuning is not normalized back to a fixed Asset.
