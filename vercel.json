@@ -4,6 +4,11 @@
   "outputDirectory": "dist",
   "cleanUrls": true,
   "ignoreCommand": "bash scripts/vercel-ignore.sh",
+  "git": {
+    "deploymentEnabled": {
+      "preview/dev9-6-integrated-candidate": false
+    }
+  },
   "headers": [
     {
       "source": "/assets/(.*)",
