@@ -21,6 +21,7 @@ const materialDefinitions = JSON.parse(await readFile(new URL('../src/presentati
 const presentationSource = await readFile(new URL('../src/renderer/ordinaryWallpaperPresentation.ts', import.meta.url), 'utf8');
 const surfaceSource = await readFile(new URL('../src/renderer/level0SurfacePresentation.ts', import.meta.url), 'utf8');
 const assetSource = await readFile(new URL('../src/renderer/ordinaryWallpaperAssets.ts', import.meta.url), 'utf8');
+const imagePipelineSource = await readFile(new URL('../src/renderer/presentationImageTextures.ts', import.meta.url), 'utf8');
 const casingSource = await readFile(new URL('../src/renderer/ordinaryCasingMaterialPresentation.ts', import.meta.url), 'utf8');
 const interactionSource = await readFile(new URL('../src/renderer/outletInteractionRuntime.ts', import.meta.url), 'utf8');
 const mainSource = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
@@ -161,11 +162,12 @@ test('real NAL bytes preload and one surface lifecycle owns final supplied wall 
   assert.match(presentationSource, /'arch-rooms'/);
   assert.match(presentationSource, /arch-pale/);
   assert.match(presentationSource, /suppliedTextureBindings/);
-  assert.match(assetSource, /fetch\(asset\.runtimePath/);
-  assert.match(assetSource, /crypto\.subtle\.digest/);
-  assert.match(assetSource, /content hash mismatch/);
-  assert.match(assetSource, /await image\.decode\(\)/);
+  assert.match(assetSource, /preparePresentationImageAsset\(id\)/);
   assert.match(assetSource, /fallbackUsed/);
+  assert.match(imagePipelineSource, /fetch\(asset\.runtimePath/);
+  assert.match(imagePipelineSource, /crypto\.subtle\.digest/);
+  assert.match(imagePipelineSource, /content hash mismatch/);
+  assert.match(imagePipelineSource, /await image\.decode\(\)/);
   assert.ok(
     mainSource.indexOf('prepareOrdinaryWallpaperAssets().then') < mainSource.indexOf('new ProjectNoclipGame()'),
     'interactive game construction must be gated behind verified wallpaper preload'
