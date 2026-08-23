@@ -300,6 +300,35 @@ public/assets/runtime/
 
 Studio Asset Library import still lives in `tools/studio/server-core.mjs`. Structured Material Asset binding lives in `tools/studio/structured-authoring.mjs` and is validated against type/Profile/role/runtime readiness.
 
+## Player Character / Avatar representation
+
+```text
+PlayerCharacterProfile identity + creator choices
+  -> src/player-character/profile.ts
+
+local profile persistence
+  -> src/player-character/profileStore.ts
+
+New Game profile gate
+  -> src/player-character/newGameFlow.ts
+
+renderer-independent avatar contract
+  -> src/player-character/avatar.ts
+       AvatarAppearance mapping
+       AvatarDefinition / CharacterProfileId actor ownership
+       semantic Asset-slot requirements
+       humanoid rig contract
+       animation-state vocabulary
+       first/third/cinematic/remote visibility rules
+
+future live actor
+  -> AvatarRuntime [NOT IMPLEMENTED]
+```
+
+`CharacterProfileId` is the future actor identity. It is not the Journey-local `characterId`, world seed, or Item Instance identity. `avatar.ts` owns representation requirements only and must stay free of PlayCanvas entities, WorldRenderer participation, camera, movement, collision and streaming behavior. See `docs/PLAYER_CHARACTER_IDENTITY.md` and `docs/PLAYER_AVATAR_REPRESENTATION.md`.
+
+Current NAL v1 can satisfy mesh/image Avatar slots. Humanoid animation clips require a future NAL animation-asset extension; do not hard-code filenames or import placeholder web assets to bypass that boundary.
+
 ## CV-H1
 
 ```text
