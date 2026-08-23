@@ -112,12 +112,43 @@ def current_snapshot(driver: webdriver.Chrome) -> dict[str, Any]:
     settings = driver.execute_script("return window.__projectNoclipRenderSettings?.get?.() ?? null;")
     render = driver.execute_script("return window.__projectNoclipRenderSettings?.diagnostics?.() ?? null;")
     runtime = driver.execute_script("return window.__noclipRendererRuntimeDiagnostics?.snapshot?.() ?? null;")
+    visibility = driver.execute_script("return window.__noclipVisibilityParticipationDiagnostics ?? null;")
+
+    text_loaded = metric_number(text, "loaded cells")
+    resident_cells = text_loaded
+    participating_cells = None
+    visibility_cells = None
+    legacy_distance_cells = None
+    if isinstance(render, dict):
+        retained = render.get("retainedCells")
+        active = render.get("activeCells")
+        if isinstance(retained, (int, float)):
+            resident_cells = int(retained)
+        if isinstance(active, (int, float)):
+            participating_cells = int(active)
+    if isinstance(visibility, dict):
+        visible = visibility.get("visibilityCells")
+        legacy = visibility.get("legacyDistanceCells")
+        final = visibility.get("finalParticipatingCells")
+        if isinstance(visible, list):
+            visibility_cells = len(visible)
+        if isinstance(legacy, list):
+            legacy_distance_cells = len(legacy)
+        if participating_cells is None and isinstance(final, list):
+            participating_cells = len(final)
+
     return {
         "metricsText": text,
-        "loadedCells": metric_number(text, "loaded cells"),
+        "RESIDENT_CELLS": resident_cells,
+        "RENDER_PARTICIPATING_CELLS": participating_cells,
+        "VISIBILITY_CELLS": visibility_cells,
+        "LEGACY_DISTANCE_CELLS": legacy_distance_cells,
+        # Historical alias kept only for old evidence readers; it means residency.
+        "loadedCells": resident_cells,
         "drawCalls": metric_number(text, "draw calls"),
         "settings": settings,
         "renderDiagnostics": render,
+        "visibilityDiagnostics": visibility,
         "runtimeDiagnostics": runtime,
     }
 
@@ -143,7 +174,18 @@ def locate(driver: webdriver.Chrome, region: str, depth: str) -> dict[str, Any]:
 
 
 def main() -> None:
-    report: dict[str, Any] = {"baseUrl": BASE_URL, "checks": [], "snapshots": {}, "regionLocate": []}
+    report: dict[str, Any] = {
+        "schemaVersion": 2,
+        "baseUrl": BASE_URL,
+        "metricSemantics": {
+            "RESIDENT_CELLS": "streaming/cache-resident Cells",
+            "RENDER_PARTICIPATING_CELLS": "resident Cells enabled for live Phase-1 renderer participation",
+            "VISIBILITY_CELLS": "topology Visibility Snapshot Cells before safety/hysteresis/prediction/fallback composition",
+        },
+        "checks": [],
+        "snapshots": {},
+        "regionLocate": [],
+    }
     driver = build_driver()
     driver.set_page_load_timeout(60)
     driver.set_script_timeout(60)
@@ -157,14 +199,14 @@ def main() -> None:
         wait_for(driver, lambda current: displayed(current, '[data-ui="hud"]'), timeout=40, message="Level 0 HUD")
         wait_for(
             driver,
-            lambda current: bool(current.execute_script("return window.__projectNoclipRenderSettings && window.__projectNoclipQa")),
+            lambda current: bool(current.execute_script("return window.__projectNoclipRenderSettings && window.__projectNoclipQa && window.__noclipVisibilityParticipationDiagnostics")),
             timeout=30,
-            message="renderer and QA diagnostics",
+            message="renderer, visibility and QA diagnostics",
         )
         configure_lab(driver)
 
         report["snapshots"]["ordinary"] = current_snapshot(driver)
-        report["checks"].append("Ordinary renderer diagnostics available")
+        report["checks"].append("Ordinary renderer and live-visibility diagnostics available")
         driver.save_screenshot(str(ARTIFACT_DIR / "ordinary.png"))
 
         for region, depth, key in (
@@ -177,10 +219,20 @@ def main() -> None:
 
         for key, snapshot in report["snapshots"].items():
             render = snapshot.get("renderDiagnostics")
+            visibility = snapshot.get("visibilityDiagnostics")
             assert isinstance(render, dict), f"{key}: renderer diagnostics unavailable"
-            assert snapshot.get("loadedCells") is not None, f"{key}: loaded Cell metric unavailable"
+            assert isinstance(visibility, dict), f"{key}: live visibility diagnostics unavailable"
+            assert snapshot.get("RESIDENT_CELLS") is not None, f"{key}: resident Cell metric unavailable"
+            assert snapshot.get("RENDER_PARTICIPATING_CELLS") is not None, f"{key}: render-participating Cell metric unavailable"
+            assert snapshot.get("VISIBILITY_CELLS") is not None, f"{key}: visibility Cell metric unavailable"
             assert snapshot.get("drawCalls") is not None, f"{key}: draw-call metric unavailable"
-        report["checks"].append("loaded Cells, draw calls, Region locate and renderer diagnostics captured independently")
+            final = visibility.get("finalParticipatingCells")
+            if isinstance(final, list):
+                assert snapshot["RENDER_PARTICIPATING_CELLS"] == len(final), (
+                    f"{key}: renderer active Cell count must match final visibility participation"
+                )
+        report["checks"].append("RESIDENT_CELLS and RENDER_PARTICIPATING_CELLS captured as distinct architectural metrics")
+        report["checks"].append("draw calls, Visibility Snapshot diagnostics and Region Locate captured independently")
 
         errors = browser_errors(driver)
         report["browserExceptions"] = errors
