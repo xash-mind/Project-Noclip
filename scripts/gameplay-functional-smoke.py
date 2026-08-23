@@ -32,7 +32,8 @@ def displayed(driver: webdriver.Chrome, selector: str) -> bool:
 
 def click(driver: webdriver.Chrome, selector: str) -> None:
     element = wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, selector), message=selector)
-    driver.execute_script("arguments[0].click();", element)
+    wait_for(driver, lambda _current: element.is_displayed() and element.is_enabled(), message=f"clickable {selector}")
+    element.click()
 
 
 def read_save(driver: webdriver.Chrome) -> dict[str, Any] | None:
@@ -107,9 +108,7 @@ def main() -> None:
 
         driver.refresh()
         wait_for(driver, lambda current: displayed(current, '[data-ui="title"]'), message="title after refresh")
-        continue_button = wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, '[data-action="continue"]'), message="Continue action")
-        wait_for(driver, lambda current: not current.find_element(By.CSS_SELECTOR, '[data-action="continue"]').get_attribute("disabled"), message="enabled Continue")
-        driver.execute_script("arguments[0].click();", continue_button)
+        click(driver, '[data-action="continue"]')
         wait_for(driver, lambda current: displayed(current, '[data-ui="hud"]'), timeout=35, message="continued Level 0 HUD")
         continued = wait_for(driver, lambda current: read_save(current), timeout=15, message="continued Journey save")
         assert continued.get("characterId") == character_id, (character_id, continued)
