@@ -205,6 +205,7 @@ export function level0FogForSettings(settings: RenderSettings, blackoutStrength:
 let currentSettings: RenderSettings = { ...DEFAULT_RENDER_SETTINGS };
 const listeners = new Set<(settings: RenderSettings) => void>();
 const rendererScopes = new WeakMap<object, RendererRenderScope>();
+const rendererParticipatingCells = new WeakMap<object, ReadonlySet<string>>();
 
 export function loadRenderSettings(storage: Pick<Storage, 'getItem'> | undefined = typeof localStorage === 'undefined' ? undefined : localStorage): RenderSettings {
   if (!storage) return { ...DEFAULT_RENDER_SETTINGS };
@@ -254,11 +255,31 @@ export function rendererRenderScope(renderer: object): RendererRenderScope | und
   return value ? { ...value } : undefined;
 }
 
+/**
+ * Phase-1 visibility is an additive renderer-participation filter only. The
+ * legacy distance scope remains authoritative for loading/retention and this
+ * set never controls Cell residency.
+ */
+export function setRendererParticipatingCells(renderer: object, cellIds: readonly string[] | ReadonlySet<string> | undefined): void {
+  if (!cellIds) {
+    rendererParticipatingCells.delete(renderer);
+    return;
+  }
+  rendererParticipatingCells.set(renderer, new Set(cellIds));
+}
+
+export function rendererParticipatingCellIds(renderer: object): readonly string[] | undefined {
+  const value = rendererParticipatingCells.get(renderer);
+  return value ? [...value].sort() : undefined;
+}
+
 export function cellIsInsideActiveRenderScope(renderer: object, descriptor: CellDescriptor): boolean {
   const scope = rendererScopes.get(renderer);
-  if (!scope) return true;
-  return Math.max(
+  const insideLegacyDistance = !scope || Math.max(
     Math.abs(descriptor.address.cellX - scope.centerCellX),
     Math.abs(descriptor.address.cellZ - scope.centerCellZ)
   ) <= scope.loadRadius;
+  if (!insideLegacyDistance) return false;
+  const participating = rendererParticipatingCells.get(renderer);
+  return !participating || participating.has(descriptor.id);
 }
