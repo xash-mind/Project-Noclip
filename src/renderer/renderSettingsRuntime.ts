@@ -264,7 +264,7 @@ export function renderSettingsDiagnostics(game: ProjectNoclipGame): {
   }) | undefined;
   let activeCells = 0;
   for (const visual of renderer?.loaded.values() ?? []) if (visual.root.enabled) activeCells += 1;
-  const drawCalls = (state.app as unknown as { stats?: { drawCalls?: { total?: number } } | undefined)?.stats?.drawCalls?.total;
+  const drawCalls = (state.app as unknown as { stats?: { drawCalls?: { total?: number } } } | undefined)?.stats?.drawCalls?.total;
   const fog = state.app ? modernScene(state.app).fog : undefined;
   return {
     activeCells,
