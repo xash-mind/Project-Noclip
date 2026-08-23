@@ -43,7 +43,7 @@ jobs:
             src/presentation/definitions/level0-features.json \
             src/presentation/definitions/level0-materials.json \
             src/presentation/generated
-      - name: Run character creator, mobile, desktop, CV-H1 floor and world-cohesion Chromium journeys
+      - name: Run character creator, inventory, mobile, desktop, CV-H1 floor and world-cohesion Chromium journeys
         shell: bash
         run: |
           set -euo pipefail
@@ -62,6 +62,7 @@ jobs:
           done
           NOCLIP_VERSION_ARTIFACTS="artifacts/browser-smoke" python scripts/version-smoke.py
           NOCLIP_CHARACTER_ARTIFACTS="artifacts/character-creator-smoke" python scripts/run-screenshot-tolerant-smoke.py scripts/character-creator-smoke.py
+          NOCLIP_INVENTORY_ARTIFACTS="artifacts/inventory-ui-smoke" python scripts/inventory-ui-smoke.py
           NOCLIP_MOBILE_ARTIFACTS="artifacts/mobile-smoke" python scripts/run-legacy-smoke-with-character-creator.py scripts/mobile-smoke.py
           python scripts/run-legacy-smoke-with-character-creator.py scripts/browser-smoke.py
           NOCLIP_CVH1_ARTIFACTS="artifacts/cvh1-floor-smoke" python scripts/run-legacy-smoke-with-character-creator.py scripts/cvh1-floor-smoke.py
@@ -78,10 +79,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-mobile-studio-character-cvh1-cohesion-smoke-${{ github.sha }}
+          name: browser-mobile-studio-character-inventory-cvh1-cohesion-smoke-${{ github.sha }}
           path: |
             artifacts/browser-smoke
             artifacts/character-creator-smoke
+            artifacts/inventory-ui-smoke
             artifacts/mobile-smoke
             artifacts/studio-browser
             artifacts/cvh1-floor-smoke
