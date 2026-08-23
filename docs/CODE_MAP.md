@@ -28,7 +28,8 @@ world request
   -> src/renderer/WorldRenderer.ts
   -> src/renderer/cellBuilder.ts
   -> Level 0 presentation adapters
-  -> PlayCanvas scene
+  -> src/renderer/visibility/runtime.ts (Generation 3 live render participation)
+  -> PlayCanvas scene + frustum culling
 ```
 
 PAU never participates in world generation. Presentation IDs and Asset IDs do not replace generated world/save identity.
@@ -327,11 +328,46 @@ C-B1 remains read-only in Studio. Dev.9.6 does not turn Blackout world law into 
 ```text
 movement/boundaries    -> src/app/ProjectNoclipGame.ts
 Render Distance        -> renderSettingsRuntime.ts + renderSettings.ts
-predictive work        -> streamingScheduler.ts
+predictive work        -> streamingScheduler.ts / streamingPolicy.ts
 Cell build/colliders   -> WorldRenderer.ts + cellBuilder.ts
 static participation   -> StaticWorldBatching.ts
 fixture resources      -> fixtureLighting.ts
 ```
+
+Streaming owns Cell residency and unloading. A resident Cell is not automatically a render-participating Cell.
+
+## Generation 3 live Visibility participation — Phase 1
+
+```text
+pure architectural topology
+  -> src/renderer/visibility/topologyAdapter.ts
+pure snapshot propagation
+  -> src/renderer/visibility/snapshot.ts
+  -> src/renderer/visibility/types.ts
+participation composition
+  -> src/renderer/visibility/participation.ts
+       CAMERA_VISIBLE
+       SAFETY_CORE
+       HYSTERESIS_RETAINED
+       PREDICTIVE
+       DISTANCE_FALLBACK
+       NON_PARTICIPATING
+live runtime adapter
+  -> src/renderer/visibility/runtime.ts
+activation
+  -> src/main.ts
+       installRenderSettingsRuntime()
+       installStaticWorldBatching()
+       installVisibilityParticipationRuntime(ProjectNoclipGame.prototype)
+```
+
+Phase 1 consumes the existing Generation 3 Visibility Snapshot and existing streaming predictor to decide which already-resident Cell roots participate in rendering. It does not own Cell destruction, cache eviction, generation identity, save identity, or a second prediction system.
+
+The legacy distance envelope remains a conservative residency/safety boundary. The one-Cell safety core, 500 ms hysteresis and fail-open distance fallback prevent false-negative visible geometry from becoming authoritative. Region Locate/large displacement invalidates prior participation immediately.
+
+PlayCanvas frustum culling remains enabled and owns lower-level camera-facing culling. Topology visibility is all-direction architectural participation; it does not replace mesh frustum culling.
+
+Visibility-specific diagnostics are published as `window.__noclipVisibilityParticipationDiagnostics`. Verification must report `RESIDENT_CELLS`, `VISIBILITY_CELLS` and `RENDER_PARTICIPATING_CELLS` separately.
 
 These systems remain outside Studio visual material authoring.
 
@@ -343,4 +379,4 @@ src/world/types.ts
 src/app/ProjectNoclipGame.ts
 ```
 
-Presentation/Asset edits must not change save identity, generated IDs, seed results or geography.
+Presentation/Asset edits and render participation must not change save identity, generated IDs, seed results or geography.
