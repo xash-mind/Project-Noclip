@@ -100,30 +100,40 @@ def main() -> None:
         raise SystemExit(report["error"])
 
     original_save_screenshot = WebDriver.save_screenshot
-    if args.screenshot_policy == "functional-tolerant":
-        def tolerant_save_screenshot(self: WebDriver, filename: str) -> bool:
-            try:
-                return bool(original_save_screenshot(self, filename))
-            except TimeoutException as error:
-                warning = {
-                    "classification": HEADLESS_RENDERER_LIMITATION,
-                    "file": filename,
-                    "error": error.msg,
-                }
-                report["screenshotLimitations"].append(warning)
+
+    def classified_save_screenshot(self: WebDriver, filename: str) -> bool:
+        try:
+            return bool(original_save_screenshot(self, filename))
+        except TimeoutException as error:
+            warning = {
+                "classification": HEADLESS_RENDERER_LIMITATION,
+                "file": filename,
+                "error": error.msg,
+            }
+            report["screenshotLimitations"].append(warning)
+            if args.screenshot_policy == "functional-tolerant":
                 print(
                     f"{HEADLESS_RENDERER_LIMITATION}: screenshot {filename} timed out; "
                     "already-passed functional assertions remain valid"
                 )
                 return False
+            print(
+                f"{HEADLESS_RENDERER_LIMITATION}: screenshot {filename} timed out; "
+                "visual pixels are the acceptance target, so this task remains blocking"
+            )
+            raise
 
-        WebDriver.save_screenshot = tolerant_save_screenshot
+    WebDriver.save_screenshot = classified_save_screenshot
 
     try:
         sys.argv = [str(target), *args.script_args]
         runpy.run_path(str(target), run_name="__main__")
     except BaseException as error:
-        classification = classify_exception(error)
+        classification = (
+            HEADLESS_RENDERER_LIMITATION
+            if isinstance(error, TimeoutException) and report["screenshotLimitations"]
+            else classify_exception(error)
+        )
         report.update(
             status="FAILED",
             classification=classification,
