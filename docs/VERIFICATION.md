@@ -102,7 +102,7 @@ Modern browser work is not one Selenium chain:
 6. renderer profile;
 7. runtime performance scenarios.
 
-A Chrome/SwiftShader failure in one job cannot erase reports uploaded by another job. The old `run-legacy-smoke-with-character-creator.py` remains in source only for historical/manual reproduction; modern workflows do not use its fake legacy title-copy behavior or its screenshot-tolerance patch.
+A Chrome/SwiftShader failure in one job cannot erase reports uploaded by another job. The obsolete `run-legacy-smoke-with-character-creator.py` and `run-screenshot-tolerant-smoke.py` wrappers were removed; their historical definitions remain in Git history. Modern workflows use the classified runner, and only `run-character-aware-smoke.py` remains as a narrow entry compatibility shim.
 
 `run-character-aware-smoke.py` contains only the compatibility action required to enter through the current Character Creator when older visual evidence scripts still start from the New Game button. It does not alter text assertions and does not modify screenshot behavior.
 
