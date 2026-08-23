@@ -3,79 +3,62 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const {
+  BLACKOUT_AMBIENT_FLOOR,
+  DEEP_BLACKOUT_FOG,
   LEVEL0_AMBIENT,
-  LEVEL0_FOG_COLOR,
-  resolveBlackoutRenderState
-} = await import('../.test-dist/src/app/blackoutRendering.js');
+  level0AmbientForBlackout,
+  level0FogForSettings,
+  renderDistanceProfile,
+  settingsForPreset
+} = await import('../.test-dist/src/renderer/renderSettings.js');
 const { locateNearestBlackout, sampleGen3Environment } = await import('../.test-dist/src/world/gen3.js');
 const { DEFAULT_TUNING } = await import('../.test-dist/src/world/types.js');
 
 const NATURAL_CORE_SEED = 'dev9-black-2';
-const ordinaryRuntimeAmbient = {
-  r: LEVEL0_AMBIENT.r + 0.009,
-  g: LEVEL0_AMBIENT.g + 0.0085,
-  b: LEVEL0_AMBIENT.b + 0.005
-};
 
-function assertRgbExact(actual, expected, label) {
-  assert.equal(actual.r, expected.r, `${label}.r`);
-  assert.equal(actual.g, expected.g, `${label}.g`);
-  assert.equal(actual.b, expected.b, `${label}.b`);
+function channels(color) {
+  return ['r', 'g', 'b'].map((channel) => color[channel]);
 }
 
-function assertRgbZero(actual, label) {
-  assertRgbExact(actual, { r: 0, g: 0, b: 0 }, label);
-}
-
-test('ordinary Level 0 render endpoints remain unchanged', () => {
-  const state = resolveBlackoutRenderState(0, 0);
-  assertRgbExact(state.fog, LEVEL0_FOG_COLOR, 'ordinary fog');
-  assertRgbExact(state.clear, LEVEL0_FOG_COLOR, 'ordinary clear');
-  assertRgbExact(state.ambient, ordinaryRuntimeAmbient, 'ordinary ambient');
-  assert.equal(state.guideLightEnabled, false);
-  assert.equal(state.guideLightIntensity, 0);
-});
-
-test('partial Blackout remains a smooth nonzero interpolation', () => {
-  const ordinary = resolveBlackoutRenderState(0, 0);
-  const partial = resolveBlackoutRenderState(0.68, 0.45);
-  for (const channel of ['r', 'g', 'b']) {
-    assert.ok(partial.fog[channel] > 0 && partial.fog[channel] < ordinary.fog[channel], `partial fog ${channel}`);
-    assert.ok(partial.ambient[channel] > 0 && partial.ambient[channel] < ordinary.ambient[channel], `partial ambient ${channel}`);
+test('deep Blackout keeps the accepted tiny uniform ambient survival floor', () => {
+  const ordinary = level0AmbientForBlackout(0);
+  const core = level0AmbientForBlackout(1);
+  assert.deepEqual(ordinary, LEVEL0_AMBIENT);
+  assert.deepEqual(core, BLACKOUT_AMBIENT_FLOOR);
+  assert.deepEqual(core, { r: 0.09, g: 0.084, b: 0.048 });
+  for (const [index, channel] of ['r', 'g', 'b'].entries()) {
+    assert.ok(channels(core)[index] > 0, `core ${channel} must retain the tiny unaided-navigation floor`);
+    assert.ok(channels(core)[index] < channels(ordinary)[index], `core ${channel} must remain materially darker than Ordinary`);
   }
-  assert.deepEqual(partial.clear, partial.fog);
-  assert.equal(partial.guideLightEnabled, true);
-  assert.equal(partial.guideLightIntensity, 0.45 * 0.24);
 });
 
-test('full Blackout fog and camera clear reach exact absolute black', () => {
-  const core = resolveBlackoutRenderState(1, 0);
-  assertRgbZero(core.fog, 'core fog');
-  assertRgbZero(core.clear, 'core clear');
+test('partial Blackout interpolates smoothly between Ordinary and the deep ambient floor', () => {
+  const ordinary = level0AmbientForBlackout(0);
+  const partial = level0AmbientForBlackout(0.68);
+  const core = level0AmbientForBlackout(1);
+  for (const channel of ['r', 'g', 'b']) {
+    assert.ok(partial[channel] > core[channel], `partial ${channel} stays above the deep floor`);
+    assert.ok(partial[channel] < ordinary[channel], `partial ${channel} stays below Ordinary`);
+  }
 });
 
-test('full Blackout has no residual environmental render floor', () => {
-  const core = resolveBlackoutRenderState(1, 0);
-  assertRgbZero(core.ambient, 'core ambient');
-  assert.equal(core.guideLightIntensity, 0);
-  assert.equal(core.guideLightEnabled, false);
-
-  // Eye adaptation is intentionally preserved. Even the accepted maximum scene
-  // exposure cannot lift exact-zero environmental terms into navigable grey.
-  const maxAcceptedEyeExposure = 1.8;
-  assert.equal((core.ambient.r + core.ambient.g + core.ambient.b) * maxAcceptedEyeExposure, 0);
-  assert.equal((core.fog.r + core.fog.g + core.fog.b) * maxAcceptedEyeExposure, 0);
+test('deep Blackout atmosphere is independent of Render Distance while its black fog hides each renderer frontier', () => {
+  const ambient = level0AmbientForBlackout(1);
+  const fogEnds = [];
+  for (const preset of ['low', 'medium', 'high', 'ultra']) {
+    const settings = settingsForPreset(preset);
+    const profile = renderDistanceProfile(settings);
+    const fog = level0FogForSettings(settings, 1);
+    assert.deepEqual(level0AmbientForBlackout(1), ambient, `${preset} must use the same deep ambient floor`);
+    assert.deepEqual(fog.color, DEEP_BLACKOUT_FOG, `${preset} deep fog must resolve to black`);
+    assert.ok(fog.start < fog.end, `${preset} fog must have a valid interval`);
+    assert.ok(fog.end < profile.approximateRenderDistanceMeters, `${preset} fog must conceal the Cell/render boundary`);
+    fogEnds.push(fog.end);
+  }
+  assert.deepEqual([...fogEnds].sort((a, b) => a - b), fogEnds, 'only the hidden fog frontier moves with Render Distance');
 });
 
-test('exiting Blackout restores the exact ordinary render state', () => {
-  const before = resolveBlackoutRenderState(0, 0);
-  const core = resolveBlackoutRenderState(1, 0);
-  const after = resolveBlackoutRenderState(0, 0);
-  assert.notDeepEqual(core, before);
-  assert.deepEqual(after, before);
-});
-
-test('the deterministic natural Blackout locator can reach an exact absolute-black core', () => {
+test('the deterministic natural Blackout locator reaches a true deep core without a synthetic visual escape light', async () => {
   const tuning = { ...DEFAULT_TUNING, gateBypass: true, conditionOverride: undefined };
   const occurrence = locateNearestBlackout({
     seed: NATURAL_CORE_SEED,
@@ -86,7 +69,7 @@ test('the deterministic natural Blackout locator can reach an exact absolute-bla
     tuning
   });
   assert.ok(occurrence, 'expected a natural Blackout occurrence');
-  assert.equal(occurrence.strength, 1, 'natural locator must land at a true core for the browser-evidence seed');
+  assert.equal(occurrence.strength, 1, 'browser-evidence seed must land at a true natural core');
 
   const environment = sampleGen3Environment(
     NATURAL_CORE_SEED,
@@ -98,15 +81,26 @@ test('the deterministic natural Blackout locator can reach an exact absolute-bla
   );
   assert.equal(environment.blackoutStrength, 1);
   assert.equal(environment.blackoutEscapeCue, 0);
+  assert.deepEqual(level0AmbientForBlackout(environment.blackoutStrength), BLACKOUT_AMBIENT_FLOOR);
 
-  const state = resolveBlackoutRenderState(environment.blackoutStrength, environment.blackoutEscapeCue);
-  assertRgbZero(state.fog, 'natural core fog');
-  assertRgbZero(state.clear, 'natural core clear');
-  assertRgbZero(state.ambient, 'natural core ambient');
-  assert.equal(state.guideLightEnabled, false);
+  const runtimeSource = await readFile(new URL('../src/renderer/renderSettingsRuntime.ts', import.meta.url), 'utf8');
+  assert.match(runtimeSource, /level0AmbientForBlackout\(state\.blackoutStrength\)/);
+  assert.doesNotMatch(runtimeSource, /blackout-external-glimmer/);
+  assert.doesNotMatch(runtimeSource, /blackoutGuideLight/);
+  assert.doesNotMatch(runtimeSource, /blackoutExitDirection/);
+  assert.match(runtimeSource, /state\.ambience\.setEnvironment\(blackoutStrength, blackoutEscapeCue\)/, 'audio may still use the continuous boundary cue');
 });
 
-test('flashlight remains an allowed player-owned light independent of Blackout environmental state', async () => {
+test('legitimate M-F1 lighting remains fixture-owned, shadowed and physically bounded', async () => {
+  const fixtureSource = await readFile(new URL('../src/renderer/fixtureLighting.ts', import.meta.url), 'utf8');
+  assert.match(fixtureSource, /const FIXTURE_LIGHT_RANGE = 12\.0/);
+  assert.match(fixtureSource, /type: 'omni'/);
+  assert.match(fixtureSource, /castShadows: true/);
+  assert.match(fixtureSource, /cellIsInsideActiveRenderScope\(renderer, runtime\.descriptor\)/);
+  assert.match(fixtureSource, /shadowCountPolicy: 'one-to-one-with-active-lights'/);
+});
+
+test('flashlight remains an independent player-owned light in Blackout', async () => {
   const source = await readFile(new URL('../src/app/ProjectNoclipGame.ts', import.meta.url), 'utf8');
   assert.match(source, /new pc\.Entity\('flashlight'\)/);
   assert.match(source, /type: 'spot'.*range: 22, intensity: 2\.4/s);
