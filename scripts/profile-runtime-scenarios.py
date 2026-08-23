@@ -121,6 +121,11 @@ def metric_number(text: str, label: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def qa_snapshot(driver: webdriver.Chrome) -> dict[str, Any] | None:
+    value = driver.execute_script("return window.__projectNoclipQa?.snapshot?.() ?? null;")
+    return value if isinstance(value, dict) else None
+
+
 def metrics(driver: webdriver.Chrome) -> dict[str, Any]:
     text = str(driver.execute_script("return document.querySelector('[data-ui=metrics]')?.textContent || '';"))
     diagnostics = driver.execute_script("return window.__projectNoclipRenderSettings?.diagnostics?.() ?? null;")
@@ -162,6 +167,29 @@ def set_value(driver: webdriver.Chrome, selector: str, value: str) -> None:
     )
 
 
+def configure_lab(driver: webdriver.Chrome) -> None:
+    result = driver.execute_script(
+        """
+        const set=(selector,value)=>{
+          const element=document.querySelector(selector);
+          if(!element)return false;
+          if(element.type==='checkbox')element.checked=value;else element.value=value;
+          element.dispatchEvent(new Event('change',{bubbles:true}));
+          return true;
+        };
+        return {
+          bypass:set('[data-lab="bypass"]',true),
+          radius:set('[data-lab="radius"]','1'),
+          condition:set('[data-lab="condition"]','clear'),
+          carver:set('[data-lab="carver"]','none'),
+          structure:set('[data-lab="structure"]','none')
+        };
+        """
+    )
+    if not all(result.values()):
+        raise AssertionError(f"World Lab controls missing: {result}")
+
+
 def click(driver: webdriver.Chrome, selector: str) -> None:
     element = wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, selector), message=selector)
     wait_for(driver, lambda _current: element.is_displayed() and element.is_enabled(), message=f"clickable {selector}")
@@ -169,11 +197,16 @@ def click(driver: webdriver.Chrome, selector: str) -> None:
 
 
 def key_event(driver: webdriver.Chrome, down: bool, key: str, code: str) -> None:
-    event = "keydown" if down else "keyup"
-    driver.execute_script(
-        f"window.dispatchEvent(new KeyboardEvent('{event}',{{key:arguments[0],code:arguments[1],bubbles:true}}));",
-        key,
-        code,
+    key_code = {"KeyW": 87, "ShiftLeft": 16}.get(code, 0)
+    driver.execute_cdp_cmd(
+        "Input.dispatchKeyEvent",
+        {
+            "type": "keyDown" if down else "keyUp",
+            "key": key,
+            "code": code,
+            "windowsVirtualKeyCode": key_code,
+            "nativeVirtualKeyCode": key_code,
+        },
     )
 
 
@@ -225,6 +258,7 @@ def startup(driver: webdriver.Chrome) -> None:
         timeout=30,
         message="QA/render diagnostics",
     )
+    configure_lab(driver)
     ensure_playing(driver)
     time.sleep(0.8)
 
@@ -238,6 +272,7 @@ def scenario(
     turning: bool = False,
 ) -> dict[str, Any]:
     duration = seconds if seconds is not None else SAMPLE_SECONDS
+    before = qa_snapshot(driver)
     if running:
         key_event(driver, True, "Shift", "ShiftLeft")
         key_event(driver, True, "w", "KeyW")
@@ -248,11 +283,21 @@ def scenario(
             key_event(driver, False, "w", "KeyW")
             key_event(driver, False, "Shift", "ShiftLeft")
     time.sleep(0.25)
+    after = qa_snapshot(driver)
+    movement_distance = None
+    yaw_delta = None
+    if before and after:
+        movement_distance = round(math.hypot(float(after["x"]) - float(before["x"]), float(after["z"]) - float(before["z"])), 3)
+        yaw_delta = round(abs(float(after.get("yaw", 0)) - float(before.get("yaw", 0))), 3)
     errors = browser_errors(driver)
     return {
         "scenario": name,
         **frames,
         **metrics(driver),
+        "movementDistanceMeters": movement_distance,
+        "yawDeltaDegrees": yaw_delta,
+        "startSnapshot": before,
+        "endSnapshot": after,
         "browserExceptions": errors,
     }
 
