@@ -19,7 +19,7 @@ installRenderSettingsRuntime();
 installPauFeaturePresentationPilot();
 installOrdinaryCasingMaterialPresentation();
 installStaticWorldBatching();
-installVisibilityParticipationRuntime();
+installVisibilityParticipationRuntime(ProjectNoclipGame.prototype);
 // Region reconstruction happens inside StaticWorldBatching's installed lifecycle.
 // This outer pass is the final material owner for renderer-created Arch/CV-H1 geometry.
 installFinalLevel0MaterialPresentation();
