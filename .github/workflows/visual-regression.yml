@@ -108,6 +108,13 @@ jobs:
                   --artifact-dir "$base/verification" \
                   --screenshot-policy blocking \
                   scripts/run-character-aware-smoke.py scripts/flashlight-smoke.py
+              NOCLIP_BLACKOUT_UNIFORMITY_ARTIFACTS="$base/uniformity-evidence" \
+                python scripts/verification-browser-runner.py \
+                  --task visual-blackout-uniformity \
+                  --category VISUAL_REGRESSION \
+                  --artifact-dir "$base/uniformity-verification" \
+                  --screenshot-policy blocking \
+                  scripts/run-character-aware-smoke.py scripts/blackout-uniformity-smoke.py
               ;;
             *)
               echo "Unknown visual task: $NOCLIP_VISUAL_TASK" >&2
