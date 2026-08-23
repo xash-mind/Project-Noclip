@@ -7,7 +7,8 @@
   "git": {
     "deploymentEnabled": {
       "agent/dev9-7-verification-consolidation": false,
-      "preview/dev9-7-visibility-verification": false
+      "preview/dev9-7-visibility-verification": false,
+      "agent/dev9-7-blackout-lighting-uniformity": false
     }
   },
   "headers": [
