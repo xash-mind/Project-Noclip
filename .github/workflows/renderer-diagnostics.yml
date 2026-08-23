@@ -28,7 +28,7 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm run build
       - run: python -m pip install --disable-pip-version-check selenium==4.46.0
-      - name: Capture current renderer profile
+      - name: Capture current renderer diagnostics
         shell: bash
         run: |
           set -euo pipefail
@@ -41,19 +41,15 @@ jobs:
             if [ "$attempt" -eq 30 ]; then echo "Preview server did not become ready" >&2; exit 1; fi
             sleep 1
           done
-          candidate_version="v$(tr -d '[:space:]' < VERSION)"
           NOCLIP_BASE_URL="http://127.0.0.1:4173" \
-          NOCLIP_DEPLOYMENT_COMMIT="$NOCLIP_BRANCH_HEAD_SHA" \
-          NOCLIP_DEPLOYMENT_ID="exact-head-renderer-diagnostic" \
-          NOCLIP_EXPECTED_VERSION="$candidate_version" \
-          NOCLIP_PROFILE_STATIC_SECONDS="1.5" \
-          NOCLIP_PROFILE_ARTIFACTS="artifacts/renderer-diagnostics/profile" \
+          NOCLIP_RENDERER_DIAGNOSTICS_ARTIFACTS="artifacts/renderer-diagnostics/current" \
             python scripts/verification-browser-runner.py \
               --task renderer-profile \
               --category RENDERER_PERFORMANCE_DIAGNOSTICS \
               --artifact-dir artifacts/renderer-diagnostics/profile-verification \
               --screenshot-policy functional-tolerant \
-              scripts/run-character-aware-smoke.py scripts/profile-candidate-renderer.py
+              scripts/renderer-diagnostics-smoke.py
+          test -s artifacts/renderer-diagnostics/current/renderer-diagnostics.json
       - if: always()
         uses: actions/upload-artifact@v4
         with:
