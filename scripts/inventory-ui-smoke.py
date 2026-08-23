@@ -9,7 +9,6 @@ from typing import Any, Callable
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 
 BASE_URL = os.environ.get("NOCLIP_BASE_URL", "http://127.0.0.1:4173")
@@ -167,7 +166,7 @@ def open_inventory(driver: webdriver.Chrome, mobile: bool) -> None:
     else:
         # Desktop gameplay normally owns pointer lock. Exercise the real keyboard
         # contract instead of synthesizing a pointer click through pointer lock.
-        driver.find_element(By.TAG_NAME, "body").send_keys(Keys.I)
+        driver.find_element(By.TAG_NAME, "body").send_keys("i")
     wait_for(driver, lambda current: displayed(current, '[data-ui="inventory-overlay"]'), message=f"{'mobile' if mobile else 'desktop'} inventory overlay")
 
 
