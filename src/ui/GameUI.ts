@@ -2,6 +2,7 @@ import './mobile-controls.css';
 import './world-lab.css';
 import { ITEM_DEFINITIONS } from '../items/definitions.js';
 import type { ItemInstance } from '../items/types.js';
+import { CharacterCreator } from '../player-character/CharacterCreator.js';
 import { clearObjectCatalogShowcase, filterObjectCatalog, OBJECT_CATALOG, OBJECT_CATALOG_CATEGORIES, spawnObjectCatalogEntries } from '../renderer/objectCatalog.js';
 import type { TimelineSnapshot } from '../simulation/timeline.js';
 import { WORLD_VOCABULARY_CATEGORIES, worldCatalogByCategory } from '../world/catalog.js';
@@ -49,6 +50,7 @@ export class GameUI {
   private title!: HTMLElement;
   private continueButton!: HTMLButtonElement;
   private seedInput!: HTMLInputElement;
+  private characterCreator!: CharacterCreator;
   private hud!: HTMLElement;
   private watch!: HTMLElement;
   private interaction!: HTMLElement;
@@ -87,7 +89,7 @@ export class GameUI {
           <p class="subtitle">An empty place with consistent rules. Objects are scarce. Routes are not.</p>
           <div class="menu-grid">
             <label>World seed<input data-ui="seed" maxlength="48" value="threshold-001" /></label>
-            <button class="primary" data-action="new">Begin new local journey</button>
+            <button class="primary" data-action="new">New Game</button>
             <button data-action="continue">Continue saved journey</button>
             <small class="desktop-help">WASD move · Shift sprint · E interact · F use · G drop · M marker · &#96; World Lab</small>
             <small class="touch-help">Landscape touch: Move · hold Sprint · drag Look · Marker · Interact / Use · Lab</small>
@@ -209,13 +211,21 @@ export class GameUI {
     this.objectCategory = this.required<HTMLSelectElement>('[data-lab="object-category"]');
     this.objectSelect = this.required<HTMLSelectElement>('[data-lab="object-select"]');
     this.catalogStatus = this.required('[data-ui="catalog-status"]');
+    this.characterCreator = new CharacterCreator(this.root, {
+      onBack: () => { this.title.hidden = false; },
+      onBeginJourney: (seed) => this.handlers.onNewGame(seed)
+    });
 
     for (const category of OBJECT_CATALOG_CATEGORIES) {
       const option = document.createElement('option'); option.value = category.id; option.textContent = category.label; this.objectCategory.appendChild(option);
     }
     this.refreshCatalogOptions();
 
-    this.required('[data-action="new"]').addEventListener('click', () => this.handlers.onNewGame(this.seedInput.value.trim() || 'threshold-001'));
+    this.required('[data-action="new"]').addEventListener('click', () => {
+      const seed = this.seedInput.value.trim() || 'threshold-001';
+      this.title.hidden = true;
+      this.characterCreator.open(seed);
+    });
     this.continueButton.addEventListener('click', () => this.handlers.onContinue());
     this.required('[data-action="resume"]').addEventListener('click', () => this.handlers.onResume());
     this.required('[data-action="reset"]').addEventListener('click', () => this.handlers.onReset());
@@ -391,7 +401,7 @@ export class GameUI {
   prefersTouchControls(): boolean { return this.touchCapable; }
   isTouchLandscape(): boolean { return this.touchCapable && window.innerWidth > window.innerHeight; }
   setContinueAvailable(available: boolean): void { this.continueButton.disabled = !available; }
-  showGame(): void { this.title.hidden = true; this.hud.hidden = false; }
+  showGame(): void { this.characterCreator.hide(); this.title.hidden = true; this.hud.hidden = false; }
   setPaused(paused: boolean): void { this.pause.classList.toggle('visible', paused); }
   toggleLab(): boolean {
     const open = !this.lab.classList.contains('visible');

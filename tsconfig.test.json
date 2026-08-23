@@ -15,6 +15,9 @@
     "src/inventory/**/*.ts",
     "src/input/**/*.ts",
     "src/persistence/types.ts",
+    "src/player-character/profile.ts",
+    "src/player-character/profileStore.ts",
+    "src/player-character/newGameFlow.ts",
     "src/simulation/**/*.ts",
     "src/physics/**/*.ts",
     "src/presentation/**/*.ts",
@@ -26,6 +29,7 @@
     "src/renderer/ordinaryWallpaperRules.ts",
     "src/renderer/renderSettings.ts",
     "src/renderer/streamingPolicy.ts",
-    "src/renderer/wallJunctionGeometry.ts"
+    "src/renderer/wallJunctionGeometry.ts",
+    "src/renderer/visibility/**/*.ts"
   ]
 }

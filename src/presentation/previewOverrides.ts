@@ -17,10 +17,7 @@ export function setPresentationPreviewParameters(target: SemanticPresentationTar
 }
 
 export function setPresentationPreviewAssetSlots(target: SemanticPresentationTargetId, patch: Readonly<Record<string, string>>): void {
-  assetSlotOverrides.set(target, Object.freeze({
-    ...(assetSlotOverrides.get(target) ?? {}),
-    ...Object.fromEntries(Object.entries(patch).map(([key, value]) => [key, assetId(value)]))
-  }));
+  assetSlotOverrides.set(target, Object.freeze({ ...(assetSlotOverrides.get(target) ?? {}), ...Object.fromEntries(Object.entries(patch).map(([key, value]) => [key, assetId(value)])) }));
 }
 
 export function setPresentationPreviewBinding(target: SemanticPresentationTargetId, representation: RepresentationId): void {
@@ -66,13 +63,8 @@ export function resolvePreviewRepresentation(
   const parameterPatch = parameterOverrides.get(target);
   const assetPatch = assetSlotOverrides.get(target);
   if ((!parameterPatch || Object.keys(parameterPatch).length === 0) && (!assetPatch || Object.keys(assetPatch).length === 0)) return resolved;
-  const assetSlots = resolved.definition.assetSlots?.map((slot) => {
-    const override = assetPatch?.[slot.key];
-    return override ? { ...slot, assetId: override } : slot;
-  });
-  const assetIds = assetSlots
-    ? [...new Set(assetSlots.flatMap((slot) => slot.assetId ? [slot.assetId] : []))]
-    : resolved.definition.assetIds;
+  const assetSlots = resolved.definition.assetSlots?.map((slot) => assetPatch?.[slot.key] ? { ...slot, assetId: assetPatch[slot.key] } : slot);
+  const assetIds = assetSlots ? [...new Set(assetSlots.flatMap((slot) => slot.assetId ? [slot.assetId] : []))] : resolved.definition.assetIds;
   return {
     ...resolved,
     definition: {

@@ -8,7 +8,6 @@ const {
   ORDINARY_CASING_TERMINATION_SETBACK_FRACTION,
   ORDINARY_OUTLET_WALL_CHANCE,
   ORDINARY_WALLPAPER_B_PATCH_CHANCE,
-  ORDINARY_WALLPAPER_IMAGE_TILE_METERS,
   ORDINARY_WALLPAPER_SPLIT_C_CHANCE,
   ordinaryCasingEnabled,
   ordinaryCasingSpan,
@@ -18,9 +17,11 @@ const {
 } = rules;
 
 const sourceDefinitions = JSON.parse(await readFile(new URL('../assets/definitions/library.json', import.meta.url), 'utf8'));
+const materialDefinitions = JSON.parse(await readFile(new URL('../src/presentation/definitions/level0-materials.json', import.meta.url), 'utf8'));
 const presentationSource = await readFile(new URL('../src/renderer/ordinaryWallpaperPresentation.ts', import.meta.url), 'utf8');
 const surfaceSource = await readFile(new URL('../src/renderer/level0SurfacePresentation.ts', import.meta.url), 'utf8');
 const assetSource = await readFile(new URL('../src/renderer/ordinaryWallpaperAssets.ts', import.meta.url), 'utf8');
+const imagePipelineSource = await readFile(new URL('../src/renderer/presentationImageTextures.ts', import.meta.url), 'utf8');
 const casingSource = await readFile(new URL('../src/renderer/ordinaryCasingMaterialPresentation.ts', import.meta.url), 'utf8');
 const interactionSource = await readFile(new URL('../src/renderer/outletInteractionRuntime.ts', import.meta.url), 'utf8');
 const mainSource = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
@@ -56,8 +57,12 @@ test('wallpaper, casing and outlet decisions are deterministic from stable world
   }
 });
 
-test('B is clustered, C is split-only, casing is common and outlets are materially rarer', () => {
-  assert.equal(ORDINARY_WALLPAPER_IMAGE_TILE_METERS, 1.3);
+test('B is clustered, C is split-only, M-W1 owns pattern scale, casing is common and outlets are materially rarer', () => {
+  const wallpaperBinding = materialDefinitions.bindings.find((binding) => binding.semanticTargetId === 'material.level-0-wallpaper');
+  const wallpaperDefinition = materialDefinitions.representations.find((definition) => definition.id === wallpaperBinding?.representationId);
+  assert.equal(typeof wallpaperDefinition?.parameters?.patternSizeMeters, 'number');
+  assert.ok(wallpaperDefinition.parameters.patternSizeMeters > 0);
+  assert.match(presentationSource, /materialNumber\(TARGET, 'patternSizeMeters', 1\.3\)/);
   assert.equal(ORDINARY_WALLPAPER_B_PATCH_CHANCE, 0.08);
   assert.equal(ORDINARY_WALLPAPER_SPLIT_C_CHANCE, 0.015);
   assert.equal(ORDINARY_CASING_RUN_CHANCE, 0.35);
@@ -148,17 +153,21 @@ test('three uploaded-source wallpaper derivatives are registered through NAL', (
 test('real NAL bytes preload and one surface lifecycle owns final supplied wall finishes', () => {
   assert.equal(version, '0.3.0-dev.9.5');
   assert.doesNotMatch(presentationSource, /paintLevel0ChevronWallpaper|fallbackCanvas/);
-  assert.match(presentationSource, /ordinaryWallpaperImage\(family\)/);
-  assert.match(presentationSource, /diagnostic magenta fallback/);
+  assert.match(presentationSource, /function wallpaperAsset\(family/);
+  assert.match(presentationSource, /materialAssetId\(TARGET, SLOT_BY_FAMILY\[family\]\)/);
+  assert.match(presentationSource, /derivedPresentationTexture\(cache\.app, assetId, transform\)/);
+  assert.match(presentationSource, /function diagnosticCanvas\(family/);
+  assert.match(presentationSource, /#ff00ff/);
   assert.match(presentationSource, /'pillar-field'/);
   assert.match(presentationSource, /'arch-rooms'/);
   assert.match(presentationSource, /arch-pale/);
   assert.match(presentationSource, /suppliedTextureBindings/);
-  assert.match(assetSource, /fetch\(asset\.runtimePath/);
-  assert.match(assetSource, /crypto\.subtle\.digest/);
-  assert.match(assetSource, /content hash mismatch/);
-  assert.match(assetSource, /await image\.decode\(\)/);
+  assert.match(assetSource, /preparePresentationImageAsset\(id\)/);
   assert.match(assetSource, /fallbackUsed/);
+  assert.match(imagePipelineSource, /fetch\(asset\.runtimePath/);
+  assert.match(imagePipelineSource, /crypto\.subtle\.digest/);
+  assert.match(imagePipelineSource, /content hash mismatch/);
+  assert.match(imagePipelineSource, /await image\.decode\(\)/);
   assert.ok(
     mainSource.indexOf('prepareOrdinaryWallpaperAssets().then') < mainSource.indexOf('new ProjectNoclipGame()'),
     'interactive game construction must be gated behind verified wallpaper preload'
