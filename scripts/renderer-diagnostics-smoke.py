@@ -71,6 +71,29 @@ def set_value(driver: webdriver.Chrome, selector: str, value: str) -> None:
     )
 
 
+def configure_lab(driver: webdriver.Chrome) -> None:
+    result = driver.execute_script(
+        """
+        const set=(selector,value)=>{
+          const element=document.querySelector(selector);
+          if(!element)return false;
+          if(element.type==='checkbox')element.checked=value;else element.value=value;
+          element.dispatchEvent(new Event('change',{bubbles:true}));
+          return true;
+        };
+        return {
+          bypass:set('[data-lab="bypass"]',true),
+          radius:set('[data-lab="radius"]','1'),
+          condition:set('[data-lab="condition"]','clear'),
+          carver:set('[data-lab="carver"]','none'),
+          structure:set('[data-lab="structure"]','none')
+        };
+        """
+    )
+    if not all(result.values()):
+        raise AssertionError(f"World Lab controls missing: {result}")
+
+
 def browser_errors(driver: webdriver.Chrome) -> list[dict[str, Any]]:
     ignored = ("favicon.ico", "AudioContext was not allowed to start")
     return [
@@ -138,6 +161,7 @@ def main() -> None:
             timeout=30,
             message="renderer and QA diagnostics",
         )
+        configure_lab(driver)
 
         report["snapshots"]["ordinary"] = current_snapshot(driver)
         report["checks"].append("Ordinary renderer diagnostics available")
