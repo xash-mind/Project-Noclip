@@ -1,0 +1,114 @@
+name: Project Noclip Renderer and Performance Diagnostics
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  renderer-profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      NOCLIP_BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      NOCLIP_PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - run: python -m pip install --disable-pip-version-check selenium==4.46.0
+      - name: Capture current renderer profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$NOCLIP_BRANCH_HEAD_SHA"
+          npm run preview > /tmp/noclip-renderer-profile.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; cat /tmp/noclip-renderer-profile.log || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/ >/dev/null; then break; fi
+            if [ "$attempt" -eq 30 ]; then echo "Preview server did not become ready" >&2; exit 1; fi
+            sleep 1
+          done
+          candidate_version="v$(tr -d '[:space:]' < VERSION)"
+          NOCLIP_BASE_URL="http://127.0.0.1:4173" \
+          NOCLIP_DEPLOYMENT_COMMIT="$NOCLIP_BRANCH_HEAD_SHA" \
+          NOCLIP_DEPLOYMENT_ID="exact-head-renderer-diagnostic" \
+          NOCLIP_EXPECTED_VERSION="$candidate_version" \
+          NOCLIP_PROFILE_STATIC_SECONDS="1.5" \
+          NOCLIP_PROFILE_ARTIFACTS="artifacts/renderer-diagnostics/profile" \
+            python scripts/verification-browser-runner.py \
+              --task renderer-profile \
+              --category RENDERER_PERFORMANCE_DIAGNOSTICS \
+              --artifact-dir artifacts/renderer-diagnostics/profile-verification \
+              --screenshot-policy functional-tolerant \
+              scripts/run-character-aware-smoke.py scripts/profile-candidate-renderer.py
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: renderer-profile-${{ github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/renderer-diagnostics
+          if-no-files-found: warn
+          retention-days: 30
+
+  runtime-scenarios:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    env:
+      NOCLIP_BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      NOCLIP_PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - run: python -m pip install --disable-pip-version-check selenium==4.46.0
+      - name: Capture comparable runtime scenario evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$NOCLIP_BRANCH_HEAD_SHA"
+          npm run preview > /tmp/noclip-runtime-scenarios.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; cat /tmp/noclip-runtime-scenarios.log || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/ >/dev/null; then break; fi
+            if [ "$attempt" -eq 30 ]; then echo "Preview server did not become ready" >&2; exit 1; fi
+            sleep 1
+          done
+          NOCLIP_BASE_URL="http://127.0.0.1:4173" \
+          NOCLIP_RUNTIME_SAMPLE_SECONDS="2.0" \
+          NOCLIP_RUNTIME_EVIDENCE_ARTIFACTS="artifacts/runtime-diagnostics" \
+            python scripts/verification-browser-runner.py \
+              --task runtime-scenarios \
+              --category RENDERER_PERFORMANCE_DIAGNOSTICS \
+              --artifact-dir artifacts/runtime-diagnostics/verification \
+              --screenshot-policy functional-tolerant \
+              scripts/profile-runtime-scenarios.py
+          test -s artifacts/runtime-diagnostics/runtime-performance-evidence.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-performance-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/runtime-diagnostics
+          if-no-files-found: warn
+          retention-days: 30
