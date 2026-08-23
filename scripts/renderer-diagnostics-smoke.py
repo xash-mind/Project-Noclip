@@ -54,7 +54,8 @@ def build_driver() -> webdriver.Chrome:
 
 def click(driver: webdriver.Chrome, selector: str) -> None:
     element = wait_for(driver, lambda current: current.find_element(By.CSS_SELECTOR, selector), message=selector)
-    driver.execute_script("arguments[0].click();", element)
+    wait_for(driver, lambda _current: element.is_displayed() and element.is_enabled(), message=f"clickable {selector}")
+    element.click()
 
 
 def set_value(driver: webdriver.Chrome, selector: str, value: str) -> None:
