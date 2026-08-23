@@ -9,6 +9,7 @@ from typing import Any, Callable
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 
 BASE_URL = os.environ.get("NOCLIP_BASE_URL", "http://127.0.0.1:4173")
@@ -160,6 +161,16 @@ def grid_item(instance_id: str) -> str:
     return f'[data-ui="inventory-grid"] [data-item-instance-id="{instance_id}"]'
 
 
+def open_inventory(driver: webdriver.Chrome, mobile: bool) -> None:
+    if mobile:
+        click(driver, '[data-action="touch-inventory"]')
+    else:
+        # Desktop gameplay normally owns pointer lock. Exercise the real keyboard
+        # contract instead of synthesizing a pointer click through pointer lock.
+        driver.find_element(By.TAG_NAME, "body").send_keys(Keys.I)
+    wait_for(driver, lambda current: displayed(current, '[data-ui="inventory-overlay"]'), message=f"{'mobile' if mobile else 'desktop'} inventory overlay")
+
+
 def inventory_journey(mobile: bool, report: dict[str, Any]) -> None:
     driver = build_driver(mobile)
     driver.set_script_timeout(25)
@@ -169,8 +180,7 @@ def inventory_journey(mobile: bool, report: dict[str, Any]) -> None:
         load_known_inventory(driver)
         opener = '[data-action="touch-inventory"]' if mobile else '[data-action="open-inventory"]'
         assert_floor(driver, opener)
-        click(driver, opener)
-        wait_for(driver, lambda current: displayed(current, '[data-ui="inventory-overlay"]'), message=f"{label} inventory overlay")
+        open_inventory(driver, mobile)
         assert_floor(driver, '[data-action="close-inventory"]')
         assert_floor(driver, grid_item(NOTE_A))
         assert_floor(driver, grid_item(NOTE_B))
@@ -203,8 +213,7 @@ def inventory_journey(mobile: bool, report: dict[str, Any]) -> None:
         wait_for(driver, lambda current: not current.find_element(By.CSS_SELECTOR, '[data-action="continue"]').get_attribute("disabled"), message="Continue after reload")
         click(driver, '[data-action="continue"]')
         wait_for(driver, lambda current: not current.find_element(By.CSS_SELECTOR, '[data-ui="hud"]').get_attribute("hidden"), timeout=40, message="continued Level 0")
-        click(driver, opener)
-        wait_for(driver, lambda current: displayed(current, '[data-ui="inventory-overlay"]'), message="restored inventory")
+        open_inventory(driver, mobile)
         restored_keys = driver.execute_script("return [...document.querySelectorAll('[data-ui=inventory-grid] [data-item-instance-id]')].map(el=>el.dataset.itemInstanceId);")
         assert restored_keys[:2] == [NOTE_B, NOTE_A]
         selected = driver.find_element(By.CSS_SELECTOR, '[data-ui="inventory-grid"] .inventory-grid-slot.selected').get_attribute("data-item-instance-id")
