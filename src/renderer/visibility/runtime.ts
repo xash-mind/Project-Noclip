@@ -1,4 +1,3 @@
-import { ProjectNoclipGame } from '../../app/ProjectNoclipGame.js';
 import type { SaveData } from '../../persistence/types.js';
 import { calculateExposureDay, calculateWorldDay } from '../../simulation/timeline.js';
 import { CELL_SIZE, type WorldTuning } from '../../world/types.js';
@@ -34,9 +33,10 @@ interface GameVisibilityAccess {
   currentCellX: number;
   currentCellZ: number;
 }
+type VisibilityGame = object;
 interface RuntimePrototype {
-  update(this: ProjectNoclipGame, dt: number): void;
-  updateStreaming(this: ProjectNoclipGame, force?: boolean, radiusOverride?: number): void;
+  update(this: VisibilityGame, dt: number): void;
+  updateStreaming(this: VisibilityGame, force?: boolean, radiusOverride?: number): void;
 }
 
 export interface VisibilitySuspiciousExclusion {
@@ -102,11 +102,11 @@ interface RuntimeState {
   diagnostics: VisibilityParticipationDiagnostics;
 }
 
-const runtimeStates = new WeakMap<ProjectNoclipGame, RuntimeState>();
+const runtimeStates = new WeakMap<VisibilityGame, RuntimeState>();
 let installed = false;
 
 function now(): number { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
-function access(game: ProjectNoclipGame): GameVisibilityAccess { return game as unknown as GameVisibilityAccess; }
+function access(game: VisibilityGame): GameVisibilityAccess { return game as unknown as GameVisibilityAccess; }
 function emptyCategories(): VisibilityParticipationDecision['categories'] {
   return { both: [], legacyOnly: [], visibilityOnly: [], safetyCore: [], hysteresisRetained: [], predictive: [], distanceFallback: [], nonParticipating: [] };
 }
@@ -126,7 +126,7 @@ function createDiagnostics(): VisibilityParticipationDiagnostics {
     batchDirtyCalls: 0, batchRebuildRequests: 0, batchReconcilePasses: 0
   };
 }
-function stateFor(game: ProjectNoclipGame): RuntimeState {
+function stateFor(game: VisibilityGame): RuntimeState {
   const existing = runtimeStates.get(game);
   if (existing) return existing;
   const created: RuntimeState = {
@@ -228,14 +228,14 @@ function updatePrior(state: RuntimeState, decision: VisibilityParticipationDecis
   state.prior = next;
 }
 
-function publish(game: ProjectNoclipGame): void {
+function publish(game: VisibilityGame): void {
   if (typeof window === 'undefined') return;
   const diagnostics = stateFor(game).diagnostics;
   (window as unknown as { __noclipVisibilityParticipationDiagnostics?: VisibilityParticipationDiagnostics })
     .__noclipVisibilityParticipationDiagnostics = structuredClone(diagnostics);
 }
 
-function clearVisibilityAuthority(game: ProjectNoclipGame, renderer: WorldRenderer): void {
+function clearVisibilityAuthority(game: VisibilityGame, renderer: WorldRenderer): void {
   const state = stateFor(game);
   setRendererParticipatingCells(renderer, undefined);
   state.prior.clear();
@@ -245,7 +245,7 @@ function clearVisibilityAuthority(game: ProjectNoclipGame, renderer: WorldRender
   state.lastLoadRadius = undefined;
 }
 
-function applyVisibilityParticipation(game: ProjectNoclipGame, force = false): void {
+function applyVisibilityParticipation(game: VisibilityGame, force = false): void {
   const gameState = access(game);
   if (!gameState.save || !gameState.renderer || !gameState.camera) return;
   const renderer = gameState.renderer;
@@ -402,16 +402,16 @@ function applyVisibilityParticipation(game: ProjectNoclipGame, force = false): v
   publish(game);
 }
 
-export function visibilityParticipationDiagnostics(game: ProjectNoclipGame): VisibilityParticipationDiagnostics {
+export function visibilityParticipationDiagnostics(game: VisibilityGame): VisibilityParticipationDiagnostics {
   return structuredClone(stateFor(game).diagnostics);
 }
 
-export function installVisibilityParticipationRuntime(): void {
+export function installVisibilityParticipationRuntime(prototypeInput: object): void {
   if (installed) return;
   installed = true;
-  const prototype = ProjectNoclipGame.prototype as unknown as RuntimePrototype;
+  const prototype = prototypeInput as RuntimePrototype;
   const originalUpdateStreaming = prototype.updateStreaming;
-  prototype.updateStreaming = function visibilityStreamingUpdate(this: ProjectNoclipGame, force = false, radiusOverride?: number): void {
+  prototype.updateStreaming = function visibilityStreamingUpdate(this: VisibilityGame, force = false, radiusOverride?: number): void {
     originalUpdateStreaming.call(this, force, radiusOverride);
     // Streaming owns residency. Visibility immediately recomputes participation
     // after any envelope reconcile, including locate/teleport operations.
@@ -419,7 +419,7 @@ export function installVisibilityParticipationRuntime(): void {
   };
 
   const originalUpdate = prototype.update;
-  prototype.update = function visibilityRuntimeUpdate(this: ProjectNoclipGame, dt: number): void {
+  prototype.update = function visibilityRuntimeUpdate(this: VisibilityGame, dt: number): void {
     // The streaming scheduler remains inside this call and therefore updates its
     // existing movement prediction before visibility reads the latest prediction.
     originalUpdate.call(this, dt);
