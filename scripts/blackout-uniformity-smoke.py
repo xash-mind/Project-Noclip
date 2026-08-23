@@ -259,9 +259,6 @@ def main() -> None:
                     f"means={no_fixture_means}, spread={observed_spread:.3f}, allowed={allowed_spread:.3f}"
                 )
 
-        # Stationary 360-degree evidence. Synthetic mousemove reaches the same
-        # private look path as native pointer-lock movement; no world position or
-        # generation state is changed.
         set_render_distance(driver, "high")
         ensure_pointer_lock(driver)
         rotation_evidence: list[dict[str, Any]] = []
@@ -294,9 +291,11 @@ def main() -> None:
                     f"means={no_fixture_rotation_means}, spread={rotation_spread:.3f}, allowed={allowed_rotation_spread:.3f}"
                 )
 
-        # Leave the Condition through existing QA tooling and prove an actual M-F1
-        # fixture can still own a real shadowed light. This does not force a light
-        # into Blackout or create a synthetic escape source.
+        # Leave the Condition through existing QA tooling and prove a generated
+        # M-F1 fixture still drives the authoritative active/shadowed renderer
+        # counters. The old sourceOwned QA bit is intentionally not used here:
+        # it reads a retired fixtureLightSourceIds bridge rather than current
+        # fixtureLighting runtime ownership.
         fixture = driver.execute_script("return window.__projectNoclipQa?.placeAtFixtureState?.('on') ?? null;")
         if not isinstance(fixture, dict):
             raise AssertionError(f"Unable to locate a legitimate on M-F1 fixture: {fixture}")
@@ -307,17 +306,17 @@ def main() -> None:
             timeout=8,
             message="real fixture state snapshot",
         )
-        wait_for(
+        if fixture_snapshot.get("state") != "on" or float(fixture_snapshot.get("pulse", 0)) <= 0.001:
+            raise AssertionError(f"Located fixture is not an actively emitting generated M-F1 source: {fixture_snapshot}")
+        fixture_diagnostics = wait_for(
             driver,
-            lambda current: bool((current.execute_script("return window.__projectNoclipQa?.fixtureStateSnapshot?.(arguments[0]) ?? null;", group_id) or {}).get("sourceOwned")),
+            lambda current: (
+                value if int((value := render_diagnostics(current)).get("activeOmnis", 0)) >= 1 else False
+            ),
             timeout=8,
-            message="fixture-owned real light",
+            message="fixture-owned active Omni diagnostics",
         )
-        fixture_snapshot = driver.execute_script("return window.__projectNoclipQa?.fixtureStateSnapshot?.(arguments[0]) ?? null;", group_id)
-        fixture_diagnostics = render_diagnostics(driver)
         assert_mf1_invariant(fixture_diagnostics, "real fixture near view")
-        if int(fixture_diagnostics.get("activeOmnis", 0)) < 1:
-            raise AssertionError(f"Legitimate fixture did not retain a real active Omni: {fixture_diagnostics}")
         fixture_near_luminance = luminance_profile(driver)
         capture_canvas(driver, "real-fixture-near.png")
 
