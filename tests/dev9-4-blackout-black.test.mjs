@@ -42,6 +42,20 @@ test('partial Blackout interpolates smoothly between Ordinary and the deep ambie
   }
 });
 
+test('leaving Blackout restores the exact ordinary active atmosphere', () => {
+  const settings = settingsForPreset('high');
+  const beforeAmbient = level0AmbientForBlackout(0);
+  const beforeFog = level0FogForSettings(settings, 0);
+  const coreAmbient = level0AmbientForBlackout(1);
+  const coreFog = level0FogForSettings(settings, 1);
+  const afterAmbient = level0AmbientForBlackout(0);
+  const afterFog = level0FogForSettings(settings, 0);
+  assert.notDeepEqual(coreAmbient, beforeAmbient);
+  assert.notDeepEqual(coreFog, beforeFog);
+  assert.deepEqual(afterAmbient, beforeAmbient);
+  assert.deepEqual(afterFog, beforeFog);
+});
+
 test('deep Blackout atmosphere is independent of Render Distance while its black fog hides each renderer frontier', () => {
   const ambient = level0AmbientForBlackout(1);
   const fogEnds = [];
