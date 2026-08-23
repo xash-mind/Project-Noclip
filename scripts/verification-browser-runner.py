@@ -10,15 +10,14 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.remote.webdriver import WebDriver
 
-
-FAILURE_PRODUCT = "PRODUCT_FAILURE"
-FAILURE_HARNESS = "TEST_HARNESS_FAILURE"
-FAILURE_HEADLESS = "HEADLESS_RENDERER_LIMITATION"
-FAILURE_LEGACY = "LEGACY_EXPECTATION_FAILURE"
-FAILURE_PERFORMANCE = "PERFORMANCE_REGRESSION"
+from verification_contract import (
+    HEADLESS_RENDERER_LIMITATION,
+    TEST_HARNESS_FAILURE,
+    classify_failure,
+)
 
 
 def git_head() -> str:
@@ -35,15 +34,7 @@ def version() -> str:
 
 
 def classify_exception(error: BaseException) -> str:
-    if isinstance(error, (AssertionError, TimeoutException)):
-        return FAILURE_PRODUCT
-    if isinstance(error, WebDriverException):
-        return FAILURE_HARNESS
-    if isinstance(error, (ImportError, ModuleNotFoundError, SyntaxError, NameError, AttributeError, TypeError)):
-        return FAILURE_HARNESS
-    if isinstance(error, SystemExit):
-        return FAILURE_HARNESS
-    return FAILURE_HARNESS
+    return classify_failure(type(error).__name__, phase="browser")
 
 
 def write_report(path: Path, report: dict[str, Any]) -> None:
@@ -88,7 +79,7 @@ def main() -> None:
     if actual_head != expected_head:
         report.update(
             status="FAILED",
-            classification=FAILURE_HARNESS,
+            classification=TEST_HARNESS_FAILURE,
             error=f"Exact-head mismatch: checked out {actual_head}, expected branch head {expected_head}",
         )
         write_report(artifact_dir, report)
@@ -104,7 +95,7 @@ def main() -> None:
             write_report(artifact_dir, report)
             print(report["reason"])
             return
-        report.update(status="FAILED", classification=FAILURE_HARNESS, error=f"Missing verification script: {target}")
+        report.update(status="FAILED", classification=TEST_HARNESS_FAILURE, error=f"Missing verification script: {target}")
         write_report(artifact_dir, report)
         raise SystemExit(report["error"])
 
@@ -115,13 +106,13 @@ def main() -> None:
                 return bool(original_save_screenshot(self, filename))
             except TimeoutException as error:
                 warning = {
-                    "classification": FAILURE_HEADLESS,
+                    "classification": HEADLESS_RENDERER_LIMITATION,
                     "file": filename,
                     "error": error.msg,
                 }
                 report["screenshotLimitations"].append(warning)
                 print(
-                    f"{FAILURE_HEADLESS}: screenshot {filename} timed out; "
+                    f"{HEADLESS_RENDERER_LIMITATION}: screenshot {filename} timed out; "
                     "already-passed functional assertions remain valid"
                 )
                 return False
@@ -147,7 +138,7 @@ def main() -> None:
 
     report["status"] = "PASSED"
     if report["screenshotLimitations"]:
-        report["classification"] = FAILURE_HEADLESS
+        report["classification"] = HEADLESS_RENDERER_LIMITATION
     write_report(artifact_dir, report)
     print(f"{args.task}: {report['status']}")
     if report["classification"]:
