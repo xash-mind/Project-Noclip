@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -157,6 +156,10 @@ def assert_floor(driver: webdriver.Chrome, selector: str) -> None:
     assert width >= 44 and height >= 44, f"{selector} measured {width}x{height}, expected >=44x44"
 
 
+def grid_item(instance_id: str) -> str:
+    return f'[data-ui="inventory-grid"] [data-item-instance-id="{instance_id}"]'
+
+
 def inventory_journey(mobile: bool, report: dict[str, Any]) -> None:
     driver = build_driver(mobile)
     driver.set_script_timeout(25)
@@ -169,14 +172,14 @@ def inventory_journey(mobile: bool, report: dict[str, Any]) -> None:
         click(driver, opener)
         wait_for(driver, lambda current: displayed(current, '[data-ui="inventory-overlay"]'), message=f"{label} inventory overlay")
         assert_floor(driver, '[data-action="close-inventory"]')
-        assert_floor(driver, f'[data-item-instance-id="{NOTE_A}"]')
-        assert_floor(driver, f'[data-item-instance-id="{NOTE_B}"]')
+        assert_floor(driver, grid_item(NOTE_A))
+        assert_floor(driver, grid_item(NOTE_B))
         keys = driver.execute_script("return [...document.querySelectorAll('[data-ui=inventory-grid] [data-item-instance-id]')].map(el=>el.dataset.uiKey);")
         assert NOTE_A in keys and NOTE_B in keys and NOTE_A != NOTE_B
-        assert driver.find_element(By.CSS_SELECTOR, f'[data-item-instance-id="{NOTE_B}"] .inventory-quantity').get_attribute("textContent") == "×3"
+        assert driver.find_element(By.CSS_SELECTOR, f'{grid_item(NOTE_B)} .inventory-quantity').get_attribute("textContent") == "×3"
         checks.append("distinct same-Definition Item Instances render with instance-keyed slots and stack quantity")
 
-        click(driver, f'[data-item-instance-id="{NOTE_B}"]')
+        click(driver, grid_item(NOTE_B))
         wait_for(driver, lambda current: NOTE_B in current.find_element(By.CSS_SELECTOR, '[data-ui="inventory-detail"]').get_attribute("textContent"), message="selected instance detail")
         assert_floor(driver, '[data-action="inventory-move-earlier"]')
         assert_floor(driver, '[data-action="inventory-move-later"]')
