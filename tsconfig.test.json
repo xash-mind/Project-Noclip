@@ -24,6 +24,7 @@
     "src/playcanvas-compat.d.ts",
     "src/renderer/objectCatalog.ts",
     "src/renderer/fixtureVisualOwnership.ts",
+    "src/renderer/finalLevel0MaterialPresentation.ts",
     "src/renderer/level0Wallpaper.ts",
     "src/renderer/level0RegionPresentation.ts",
     "src/renderer/ordinaryWallpaperRules.ts",

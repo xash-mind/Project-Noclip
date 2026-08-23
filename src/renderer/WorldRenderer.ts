@@ -21,7 +21,6 @@ export interface Cvh1FloorSurfaceProfile {
   strategy: 'single-indexed-planar-mesh';
   topY: number;
   carpetRepeatMeters: number;
-  materialTiling: readonly [number, number];
   renderEntitiesPerHoleCell: 1;
   internalSideFaces: false;
   handoffGeometry: false;
@@ -36,7 +35,6 @@ interface Cvh1HoleBounds {
 
 const CVH1_FLOOR_TOP_Y = 0;
 const CVH1_CARPET_REPEAT_METERS = CELL_SIZE / 5;
-const CVH1_ORDINARY_FLOOR_TINT: [number, number, number] = [0.79, 0.72, 0.55];
 
 function cvh1HoleBounds(hole: FloorPatchSpec): Cvh1HoleBounds {
   const half = CELL_SIZE / 2;
@@ -78,9 +76,9 @@ export function cvh1FloorSurfaceMesh(holes: readonly FloorPatchSpec[]): Cvh1Floo
     const index = positions.length / 3;
     positions.push(x, CVH1_FLOOR_TOP_Y, z);
     normals.push(0, 1, 0);
-    // A Cell is exactly five carpet repeats wide. Local UVs therefore meet the
-    // ordinary full-floor [5,5] phase exactly at both Cell borders without a
-    // per-piece material clone or large world-coordinate precision growth.
+    // The mesh owns only a stable five-repeat UV basis. The canonical M-C1
+    // material owner scales that basis to the Region floor's real pattern size
+    // and world phase, so CV-H1 never owns carpet treatment or frequency.
     uvs.push((x + half) / CVH1_CARPET_REPEAT_METERS, (z + half) / CVH1_CARPET_REPEAT_METERS);
     vertices.set(key, index);
     return index;
@@ -115,7 +113,6 @@ export function cvh1FloorSurfaceProfile(): Cvh1FloorSurfaceProfile {
     strategy: 'single-indexed-planar-mesh',
     topY: CVH1_FLOOR_TOP_Y,
     carpetRepeatMeters: CVH1_CARPET_REPEAT_METERS,
-    materialTiling: [1, 1],
     renderEntitiesPerHoleCell: 1,
     internalSideFaces: false,
     handoffGeometry: false
@@ -285,15 +282,20 @@ export class WorldRenderer {
       `${hole.id}:void`, `${hole.id}:north-rim`, `${hole.id}:south-rim`, `${hole.id}:west-rim`, `${hole.id}:east-rim`
     ])]);
     const rootNode = visual.root as pc.Entity & { children?: pc.Entity[] };
-    for (const child of [...(rootNode.children ?? [])]) {
+    const children = [...(rootNode.children ?? [])];
+    const gen3 = descriptor.world.generationVersion === 'gen3-v1';
+    const inheritedFloorMaterial = gen3
+      ? children.find((child) => (child as pc.Entity & { name?: string }).name === 'floor')?.render?.material
+      : undefined;
+    if (gen3 && !inheritedFloorMaterial) throw new Error(`CV-H1 Cell ${descriptor.id} is missing its Region-owned base floor material`);
+    for (const child of children) {
       const name = (child as pc.Entity & { name?: string }).name;
       if (name && (removableNames.has(name) || name.startsWith('floor-piece:') || name === 'cvh1-floor-surface')) child.destroy();
     }
 
     const legacyProfile = ZONE_PROFILES[descriptor.address.zoneId];
-    const gen3 = descriptor.world.generationVersion === 'gen3-v1';
     const floorMat = gen3
-      ? this.getMaterial('floor:cvh1-coherent', CVH1_ORDINARY_FLOOR_TINT, 'carpet', 0, [1, 1])
+      ? inheritedFloorMaterial as pc.StandardMaterial
       : this.getMaterial(`floor:${legacyProfile.id}:cvh1-coherent`, legacyProfile.floorTint, 'carpet', descriptor.variant % 3, [1, 1]);
     this.addCvh1FloorSurface(visual.root, holes, floorMat);
     for (const hole of holes) this.addRecessedHole(visual.root, hole, legacyProfile.floorTint);
