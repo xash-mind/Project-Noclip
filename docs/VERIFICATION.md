@@ -33,6 +33,8 @@ Independent jobs exist for:
 
 The Inventory UI job is deliberately present before the Inventory UI integration lands. When `scripts/inventory-ui-smoke.py` is absent it reports `SKIPPED_NOT_PRESENT`; it does not invent product behavior or fail an unrelated candidate. The Inventory UI worker can add that script without coupling its acceptance to Character Creator or Studio.
 
+Studio browser acceptance builds the canonical NAL registry before launching Studio. Compatible replacement Assets are source-controlled canonical fixtures; the acceptance lane must not mistake an unbuilt generated registry for missing product capability.
+
 ### C. Visual regression
 
 Authoritative workflow: `.github/workflows/visual-regression.yml`.
@@ -40,6 +42,8 @@ Authoritative workflow: `.github/workflows/visual-regression.yml`.
 The visual matrix independently runs current world/fidelity, wallpaper/material, CV-H1, and Blackout/flashlight-facing evidence. Matrix `fail-fast` is disabled so one visual failure cannot suppress the other visual artifacts.
 
 Visual screenshots are blocking. A screenshot timeout in this workflow is still classified `HEADLESS_RENDERER_LIMITATION` when that is the cause, but the visual job remains failed because the required pixel evidence was not obtained.
+
+Flashlight visual acceptance must select the canonical Flashlight Item instance before issuing the use action. Merely proving that a Flashlight exists somewhere in the starter inventory is not proof that the current selected Item is the Flashlight.
 
 ### D. Renderer / performance diagnostics
 
@@ -52,15 +56,23 @@ Two independent jobs collect:
 
 These jobs observe current runtime behavior only. They must not tune movement, camera/input, collision, Cell streaming/construction, StaticWorldBatching, visibility update frequency, M-F1/shadows, or renderer submission.
 
+After live Visibility participation, diagnostics must keep these concepts distinct:
+
+- `RESIDENT_CELLS`: Cells retained by streaming/cache ownership;
+- `VISIBILITY_CELLS`: Cells reached by the topology Visibility Snapshot;
+- `RENDER_PARTICIPATING_CELLS`: resident Cells enabled after visibility + safety core + hysteresis + existing prediction + fail-open fallback.
+
+A historical assertion about resident Cells must continue to inspect residency. It must not be silently retargeted to renderer participation or replaced by a new magic number.
+
 ## Failure classification
 
 Shared constants and classification rules live in `scripts/verification_contract.py`. Browser tasks write a machine-readable `verification-result.json` through `scripts/verification-browser-runner.py`.
 
 - `PRODUCT_FAILURE`: gameplay/state assertion, deterministic mismatch, missing required geometry, renderer/browser product error, failed touch-target assertion, or another product acceptance assertion.
-- `TEST_HARNESS_FAILURE`: Python/import/type error, malformed harness invocation, driver/orchestration failure, missing required test script, or artifact/harness defect.
+- `TEST_HARNESS_FAILURE`: Python/import/type error, malformed harness invocation, driver/orchestration failure, missing required test script, acceptance-fixture/setup defect, or artifact/harness defect.
 - `HEADLESS_RENDERER_LIMITATION`: a screenshot API timeout under the headless renderer. In functional/diagnostic tasks it can coexist with a functional pass; in visual regression it remains blocking because pixels are the target.
 - `LEGACY_EXPECTATION_FAILURE`: an explicitly historical expectation that no longer describes the modern candidate, such as a hard-coded old VERSION assumption.
-- `PERFORMANCE_REGRESSION`: reserved for an explicit comparable performance threshold/baseline failure. The Dev.9.7 consolidation records evidence but does not invent new optimization thresholds.
+- `PERFORMANCE_REGRESSION`: reserved for an explicit comparable performance threshold/baseline failure. The Dev.9.7 integration records evidence but does not invent new optimization thresholds.
 
 Classification never converts a real failing product assertion into a pass.
 
@@ -86,7 +98,7 @@ Studio browser acceptance currently requires the disposable branch label `agent/
 
 ## VERSION law
 
-Modern verification derives candidate VERSION from the repository `VERSION` file. The modern workflow set contains no hard-coded `0.3.0-dev.9.5` expectation.
+Modern verification derives candidate VERSION from the repository `VERSION` file. Generic verification and live-visibility architecture tests do not hard-code a historical release VERSION.
 
 Historical Dev.8 / Dev.9.5 workflow files that encoded branch-era assumptions are removed from the current workflow directory because their useful coverage is consolidated here and their exact historical definitions remain available in Git history.
 
@@ -108,13 +120,14 @@ A Chrome/SwiftShader failure in one job cannot erase reports uploaded by another
 
 ## Performance evidence contract
 
-`scripts/profile-runtime-scenarios.py` writes `runtime-performance-evidence.json` with schema version 1.
+`scripts/profile-runtime-scenarios.py` writes `runtime-performance-evidence.json` with schema version 2.
 
 Top-level evidence includes:
 
 - exact commit SHA;
 - repository VERSION;
 - base URL/environment;
+- metric semantics;
 - per-scenario evidence;
 - Region-locate timing;
 - runtime/browser exceptions.
@@ -125,13 +138,21 @@ Where observable, every scenario records:
 - p95 frame time;
 - p99 frame time;
 - maximum / major hitch evidence;
-- loaded Cells;
-- participating Cells;
+- `RESIDENT_CELLS`;
+- `VISIBILITY_CELLS`;
+- `RENDER_PARTICIPATING_CELLS`;
+- legacy-distance envelope Cell count;
+- Visibility topology/snapshot/participation-decision timing;
+- fallback/invalidation diagnostics;
 - draw calls;
 - active Omnis;
 - shadowed Omnis;
+- M-F1 active/shadow invariant;
+- localized StaticWorldBatching counters;
 - renderer runtime diagnostic counters;
 - browser exceptions.
+
+`loadedCells` and `participatingCells` remain only as compatibility aliases for old evidence readers. New analysis must use the explicit architectural labels.
 
 The repeatable scenario IDs are:
 
@@ -180,4 +201,6 @@ Headless Chromium uses SwiftShader, so absolute CI FPS is diagnostic evidence, n
 
 ## Product/runtime ownership
 
-This consolidation changes verification orchestration, reports, browser-entry helpers, and diagnostics only. It does not change Level 0 aesthetics, Character Creator product behavior, Inventory product behavior, world generation, movement/camera/collision, renderer participation semantics, visibility behavior, Cell streaming, M-F1/shadow behavior, or VERSION.
+Verification Consolidation owns workflow architecture, reports, browser-entry helpers, fixture/setup correctness and diagnostics. It does not tune product runtime behavior.
+
+Live Visibility Phase 1 is a separate runtime owner under `src/renderer/visibility/**`: streaming still owns Cell residency, while visibility composes topology output with the safety core, hysteresis, existing prediction and fail-open fallback to decide final renderer participation. PlayCanvas keeps lower-level frustum culling authority. The consolidated verification layer observes that boundary; it does not redefine it.
