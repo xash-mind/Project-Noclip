@@ -107,5 +107,5 @@ test('Phase-1 activation is installed after streaming and localized batching wit
   const main = readFileSync('src/main.ts', 'utf8');
   const version = readFileSync('VERSION', 'utf8').trim();
   assert.match(main, /installRenderSettingsRuntime\(\);[\s\S]*installStaticWorldBatching\(\);[\s\S]*installVisibilityParticipationRuntime\(\);/);
-  assert.equal(version, '0.3.0-dev.9.6');
+  assert.equal(version, '0.3.0-dev.9.5');
 });
