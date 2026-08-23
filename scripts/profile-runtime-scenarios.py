@@ -126,25 +126,96 @@ def qa_snapshot(driver: webdriver.Chrome) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
+def numeric(value: Any) -> int | float | None:
+    return value if isinstance(value, (int, float)) else None
+
+
 def metrics(driver: webdriver.Chrome) -> dict[str, Any]:
     text = str(driver.execute_script("return document.querySelector('[data-ui=metrics]')?.textContent || '';"))
     diagnostics = driver.execute_script("return window.__projectNoclipRenderSettings?.diagnostics?.() ?? null;")
     runtime = driver.execute_script("return window.__noclipRendererRuntimeDiagnostics?.snapshot?.() ?? null;")
-    result: dict[str, Any] = {
-        "loadedCells": metric_number(text, "loaded cells"),
-        "drawCalls": metric_number(text, "draw calls"),
-        "participatingCells": None,
-        "activeOmnis": None,
-        "shadowedOmnis": None,
-    }
+    visibility = driver.execute_script("return window.__noclipVisibilityParticipationDiagnostics ?? null;")
+
+    text_loaded = metric_number(text, "loaded cells")
+    text_draw_calls = metric_number(text, "draw calls")
+    resident_cells = text_loaded
+    participating_cells = None
+    active_omnis = None
+    shadowed_omnis = None
+    draw_calls = text_draw_calls
+
     if isinstance(diagnostics, dict):
-        active_cells = diagnostics.get("activeCells")
-        if isinstance(active_cells, (int, float)):
-            result["participatingCells"] = int(active_cells)
-        for source, target in (("activeOmnis", "activeOmnis"), ("shadowedOmnis", "shadowedOmnis")):
-            value = diagnostics.get(source)
-            if isinstance(value, (int, float)):
-                result[target] = int(value)
+        retained = numeric(diagnostics.get("retainedCells"))
+        active = numeric(diagnostics.get("activeCells"))
+        render_draw_calls = numeric(diagnostics.get("drawCalls"))
+        if retained is not None:
+            resident_cells = int(retained)
+        if active is not None:
+            participating_cells = int(active)
+        if render_draw_calls is not None:
+            draw_calls = int(render_draw_calls)
+        for source, target in (("activeOmnis", "active"), ("shadowedOmnis", "shadowed")):
+            value = numeric(diagnostics.get(source))
+            if value is not None:
+                if target == "active":
+                    active_omnis = int(value)
+                else:
+                    shadowed_omnis = int(value)
+
+    visibility_cells = None
+    legacy_distance_cells = None
+    visibility_diagnostics: dict[str, Any] | None = None
+    if isinstance(visibility, dict):
+        visible = visibility.get("visibilityCells")
+        legacy = visibility.get("legacyDistanceCells")
+        final = visibility.get("finalParticipatingCells")
+        if isinstance(visible, list):
+            visibility_cells = len(visible)
+        if isinstance(legacy, list):
+            legacy_distance_cells = len(legacy)
+        if isinstance(final, list) and participating_cells is None:
+            participating_cells = len(final)
+        visibility_diagnostics = {
+            "updates": visibility.get("updates"),
+            "skippedUpdates": visibility.get("skippedUpdates"),
+            "invalidations": visibility.get("invalidations"),
+            "updateRateHz": visibility.get("updateRateHz"),
+            "topologyBuildMs": visibility.get("lastTopologyBuildMs"),
+            "snapshotMs": visibility.get("lastSnapshotMs"),
+            "participationDecisionMs": visibility.get("lastParticipationDecisionMs"),
+            "legacyDistanceCells": legacy_distance_cells,
+            "visibilityCells": visibility_cells,
+            "renderParticipatingCells": len(final) if isinstance(final, list) else None,
+            "missingRequiredCells": visibility.get("missingRequiredCells"),
+            "fallbackActive": visibility.get("fallbackActive"),
+            "observerCell": visibility.get("observerCell"),
+            "observerSpace": visibility.get("observerSpace"),
+            "snapshotTermination": visibility.get("snapshotTermination"),
+            "activeMf1ByParticipationState": visibility.get("activeMf1ByParticipationState"),
+            "activeMf1Total": visibility.get("activeMf1Total"),
+            "shadowedMf1Total": visibility.get("shadowedMf1Total"),
+            "activeShadowInvariant": visibility.get("activeShadowInvariant"),
+            "batchDirtyCalls": visibility.get("batchDirtyCalls"),
+            "batchRebuildRequests": visibility.get("batchRebuildRequests"),
+            "batchReconcilePasses": visibility.get("batchReconcilePasses"),
+        }
+
+    result: dict[str, Any] = {
+        # Architectural labels: residency/cache ownership is deliberately not
+        # equivalent to final render participation after live visibility.
+        "RESIDENT_CELLS": resident_cells,
+        "RENDER_PARTICIPATING_CELLS": participating_cells,
+        "VISIBILITY_CELLS": visibility_cells,
+        "LEGACY_DISTANCE_CELLS": legacy_distance_cells,
+        "drawCalls": draw_calls,
+        "activeOmnis": active_omnis,
+        "shadowedOmnis": shadowed_omnis,
+        # Compatibility aliases retained for historical evidence consumers.
+        "loadedCells": resident_cells,
+        "participatingCells": participating_cells,
+    }
+    if visibility_diagnostics is not None:
+        result["visibilityDiagnostics"] = visibility_diagnostics
     if isinstance(runtime, dict):
         result["runtimeDiagnostics"] = {
             key: runtime.get(key)
@@ -254,9 +325,9 @@ def startup(driver: webdriver.Chrome) -> None:
     wait_for(driver, lambda current: displayed(current, '[data-ui="hud"]'), timeout=40, message="Level 0 HUD")
     wait_for(
         driver,
-        lambda current: bool(current.execute_script("return window.__projectNoclipQa && window.__projectNoclipRenderSettings")),
+        lambda current: bool(current.execute_script("return window.__projectNoclipQa && window.__projectNoclipRenderSettings && window.__noclipVisibilityParticipationDiagnostics")),
         timeout=30,
-        message="QA/render diagnostics",
+        message="QA/render/visibility diagnostics",
     )
     configure_lab(driver)
     ensure_playing(driver)
@@ -304,11 +375,16 @@ def scenario(
 
 def main() -> None:
     evidence: dict[str, Any] = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "commitSha": BRANCH_HEAD_SHA,
         "version": VERSION,
         "baseUrl": BASE_URL,
         "environment": {"renderer": "headless Chromium / SwiftShader"},
+        "metricSemantics": {
+            "RESIDENT_CELLS": "streaming/cache-resident Cells retained by the renderer",
+            "RENDER_PARTICIPATING_CELLS": "resident Cells currently enabled for Phase-1 renderer participation",
+            "VISIBILITY_CELLS": "Cells reached by the topology Visibility Snapshot before safety/hysteresis/prediction/fallback composition",
+        },
         "scenarios": [],
         "regionLocate": [],
     }
