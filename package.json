@@ -18,7 +18,8 @@
     "typecheck": "node scripts/build-presentation-definitions.mjs && tsc -p tsconfig.json --noEmit",
     "test": "node scripts/build-presentation-definitions.mjs && node tools/studio/check.mjs && node scripts/test.mjs",
     "check": "npm run typecheck && npm test && npm run benchmark && npm run build",
-    "benchmark": "node scripts/benchmark.mjs",
+    "benchmark": "node scripts/benchmark.mjs && node scripts/visibility-participation-benchmark.mjs",
+    "benchmark:visibility": "node scripts/benchmark.mjs >/dev/null && node scripts/visibility-participation-benchmark.mjs",
     "fields:lab": "node scripts/field-lab.mjs"
   },
   "dependencies": { "playcanvas": "2.21.3" },
