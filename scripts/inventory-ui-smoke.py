@@ -203,7 +203,12 @@ def inventory_journey(mobile: bool, report: dict[str, Any]) -> None:
 
         viewport = driver.execute_script("return {innerWidth:window.innerWidth, scrollWidth:document.documentElement.scrollWidth};")
         assert viewport["scrollWidth"] <= viewport["innerWidth"], f"horizontal overflow: {viewport}"
-        driver.save_screenshot(str(ARTIFACT_DIR / f"{label}-inventory.png"))
+        try:
+            driver.save_screenshot(str(ARTIFACT_DIR / f"{label}-inventory.png"))
+        except TimeoutException as error:
+            warning = f"{label} Inventory screenshot timed out after functional assertions: {error.msg}"
+            report["screenshotWarnings"].append(warning)
+            print(f"WARNING: {warning}")
         click(driver, '[data-action="close-inventory"]')
         wait_for(driver, lambda current: not displayed(current, '[data-ui="inventory-overlay"]'), message="inventory close")
         checks.append("Inventory closes without horizontal overflow and all intended controls meet the 44px floor")
@@ -223,7 +228,7 @@ def inventory_journey(mobile: bool, report: dict[str, Any]) -> None:
 
 
 def main() -> None:
-    report: dict[str, Any] = {"desktop": [], "mobile": []}
+    report: dict[str, Any] = {"desktop": [], "mobile": [], "screenshotWarnings": []}
     inventory_journey(False, report)
     inventory_journey(True, report)
     (ARTIFACT_DIR / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
