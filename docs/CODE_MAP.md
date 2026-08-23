@@ -335,6 +335,22 @@ fixture resources      -> fixtureLighting.ts
 
 These systems remain outside Studio visual material authoring.
 
+## Item / Inventory presentation
+
+```text
+Item Definition metadata -> src/items/definitions.ts
+Item Instance identity    -> src/items/types.ts + src/items/factory.ts
+Inventory domain ops      -> src/inventory/inventory.ts
+Presentation projection   -> src/ui/inventoryPresentation.ts
+Inventory dialog/actions  -> src/ui/InventorySurface.ts + src/ui/inventory.css
+HUD integration           -> src/ui/GameUI.ts
+Save/runtime adapter      -> src/app/ProjectNoclipGame.ts
+Persistence               -> src/persistence/*
+Contract notes            -> docs/INVENTORY_UI.md
+```
+
+UI keys and selection use `ItemInstance.instanceId`; Definition presentation data never replaces persistent object identity. Reorder dispatches the canonical `moveInstance()` operation rather than implementing container logic in UI code.
+
 ## Saves / stable identity
 
 ```text
