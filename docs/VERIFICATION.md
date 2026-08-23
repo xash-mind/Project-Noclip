@@ -39,7 +39,7 @@ Authoritative workflow: `.github/workflows/visual-regression.yml`.
 
 The visual matrix independently runs current world/fidelity, wallpaper/material, CV-H1, and Blackout/flashlight-facing evidence. Matrix `fail-fast` is disabled so one visual failure cannot suppress the other visual artifacts.
 
-Visual screenshots are blocking. A screenshot failure in this workflow is part of the acceptance target and is not downgraded to a headless warning.
+Visual screenshots are blocking. A screenshot timeout in this workflow is still classified `HEADLESS_RENDERER_LIMITATION` when that is the cause, but the visual job remains failed because the required pixel evidence was not obtained.
 
 ### D. Renderer / performance diagnostics
 
@@ -58,7 +58,7 @@ Shared constants and classification rules live in `scripts/verification_contract
 
 - `PRODUCT_FAILURE`: gameplay/state assertion, deterministic mismatch, missing required geometry, renderer/browser product error, failed touch-target assertion, or another product acceptance assertion.
 - `TEST_HARNESS_FAILURE`: Python/import/type error, malformed harness invocation, driver/orchestration failure, missing required test script, or artifact/harness defect.
-- `HEADLESS_RENDERER_LIMITATION`: a screenshot API timeout in a functional/diagnostic task after functional assertions can still be evaluated.
+- `HEADLESS_RENDERER_LIMITATION`: a screenshot API timeout under the headless renderer. In functional/diagnostic tasks it can coexist with a functional pass; in visual regression it remains blocking because pixels are the target.
 - `LEGACY_EXPECTATION_FAILURE`: an explicitly historical expectation that no longer describes the modern candidate, such as a hard-coded old VERSION assumption.
 - `PERFORMANCE_REGRESSION`: reserved for an explicit comparable performance threshold/baseline failure. The Dev.9.7 consolidation records evidence but does not invent new optimization thresholds.
 
@@ -68,8 +68,8 @@ Classification never converts a real failing product assertion into a pass.
 
 `verification-browser-runner.py` has two explicit policies:
 
-- `blocking`: no screenshot exception is swallowed; used by visual regression;
-- `functional-tolerant`: only Selenium screenshot `TimeoutException` is recorded as `HEADLESS_RENDERER_LIMITATION`; functional assertions remain authoritative. Other task exceptions remain blocking.
+- `blocking`: screenshot `TimeoutException` is classified `HEADLESS_RENDERER_LIMITATION` and re-raised; used by visual regression so missing pixel evidence still fails that visual task;
+- `functional-tolerant`: screenshot `TimeoutException` is recorded as `HEADLESS_RENDERER_LIMITATION` and the functional task continues; all non-screenshot task exceptions remain blocking.
 
 This permits a Character Creator journey to pass its New Game -> Creator -> Begin Journey -> Continue assertions while separately recording a SwiftShader screenshot timeout.
 
