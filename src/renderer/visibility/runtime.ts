@@ -1,7 +1,7 @@
-import type { ProjectNoclipGame } from '../../app/ProjectNoclipGame.js';
+import { ProjectNoclipGame } from '../../app/ProjectNoclipGame.js';
 import type { SaveData } from '../../persistence/types.js';
 import { calculateExposureDay, calculateWorldDay } from '../../simulation/timeline.js';
-import { CELL_SIZE, type CellDescriptor, type WorldTuning } from '../../world/types.js';
+import { CELL_SIZE, type WorldTuning } from '../../world/types.js';
 import {
   getRenderSettings,
   rendererRenderScope,
@@ -360,7 +360,8 @@ function applyVisibilityParticipation(game: ProjectNoclipGame, force = false): v
 
   if (runtime.firstUpdateAtMs === 0) runtime.firstUpdateAtMs = timestamp;
   runtime.diagnostics.updates += 1;
-  runtime.diagnostics.updateRateHz = runtime.diagnostics.updates / Math.max(0.001, (timestamp - runtime.firstUpdateAtMs) / 1000);
+  const activeDurationSeconds = (timestamp - runtime.firstUpdateAtMs) / 1000;
+  runtime.diagnostics.updateRateHz = activeDurationSeconds > 0 ? runtime.diagnostics.updates / activeDurationSeconds : 0;
   runtime.diagnostics.topologyBuildMs += topologyMs;
   runtime.diagnostics.lastTopologyBuildMs = topologyMs;
   runtime.diagnostics.maxTopologyBuildMs = Math.max(runtime.diagnostics.maxTopologyBuildMs, topologyMs);
