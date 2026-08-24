@@ -457,11 +457,12 @@ export function installStreamingScheduler(prototype: RuntimePrototype): void {
     scheduler.frameActive = true;
     scheduler.frameHeavyOperations = 0;
     scheduler.frameHeavyMs = 0;
-    // Boundary safety gets first admission. A required current-Cell load may
-    // exceed the ordinary budget if necessary, while queued work stays bounded.
+    // Boundary safety gets first admission inside originalUpdate. Once movement
+    // resolves, refresh prediction before admitting queued heavy work so a stop,
+    // reversal, teleport, or locate cannot execute one stale predictive job.
     originalUpdate.call(this, dt);
-    processOneJob(this);
     warmAhead(this, dt);
+    processOneJob(this);
     scheduler.frameActive = false;
     scheduler.diagnostics.lastHeavyOperations = scheduler.frameHeavyOperations;
     scheduler.diagnostics.maxHeavyOperations = Math.max(scheduler.diagnostics.maxHeavyOperations, scheduler.frameHeavyOperations);
