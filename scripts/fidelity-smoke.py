@@ -17,7 +17,7 @@ BASE_URL = os.environ.get("NOCLIP_BASE_URL", "http://127.0.0.1:4173")
 ARTIFACT_DIR = Path(os.environ.get("NOCLIP_FIDELITY_ARTIFACTS", "artifacts/fidelity"))
 ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 ARCH_ROUTE_CROSSING_PROGRESS = 0.71
-FLICKER_THRESHOLD = 0.5
+FLICKER_MEANINGFUL_DELTA = 0.015
 
 
 def wait_for(driver: webdriver.Chrome, predicate: Callable[[webdriver.Chrome], Any], timeout: float = 30, message: str = "condition") -> Any:
@@ -189,21 +189,36 @@ def fixture_snapshot(driver: webdriver.Chrome, group_id: str) -> dict[str, Any]:
     return value
 
 
-def wait_for_flicker_phase(driver: webdriver.Chrome, group_id: str, lit: bool, timeout: float = 24.0) -> dict[str, Any]:
+def wait_for_flicker_modulation(
+    driver: webdriver.Chrome,
+    group_id: str,
+    baseline_pulse: float,
+    timeout: float = 24.0,
+) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
-    pulses: set[float] = set()
+    pulses: set[float] = {round(baseline_pulse, 6)}
     while time.monotonic() < deadline:
         ensure_gameplay_active(driver)
         value = fixture_snapshot(driver, group_id)
+        if value.get("state") != "flicker":
+            raise AssertionError(f"Fixture left flicker state while sampling {group_id}: {value}")
+        if value.get("reducedFlicker"):
+            raise AssertionError(f"Reduced-flicker mode unexpectedly enabled while sampling {group_id}: {value}")
         pulse = float(value.get("pulse", -1))
+        if not 0 <= pulse <= 1:
+            raise AssertionError(f"Flicker pulse escaped canonical bounds for {group_id}: {value}")
         pulses.add(round(pulse, 6))
-        if (pulse >= FLICKER_THRESHOLD) == lit:
-            time.sleep(0.08)
-            settled = fixture_snapshot(driver, group_id)
-            settled["observedPulseCount"] = len(pulses)
-            return settled
+        delta = abs(pulse - baseline_pulse)
+        if len(pulses) >= 2 and delta >= FLICKER_MEANINGFUL_DELTA:
+            value["baselinePulse"] = baseline_pulse
+            value["pulseDelta"] = delta
+            value["distinctPulses"] = sorted(pulses)
+            return value
         time.sleep(0.04)
-    raise AssertionError(f"Timed out waiting for flicker {'lit' if lit else 'dark'} phase for {group_id}; distinctPulses={sorted(pulses)}")
+    raise AssertionError(
+        f"Timed out waiting for observable flicker modulation for {group_id}; "
+        f"baselinePulse={baseline_pulse:.6f}; distinctPulses={sorted(pulses)}"
+    )
 
 
 def fixture_state_evidence(driver: webdriver.Chrome, state: str) -> dict[str, Any]:
@@ -224,16 +239,20 @@ def fixture_state_evidence(driver: webdriver.Chrome, state: str) -> dict[str, An
         raise AssertionError(f"Retired player-relative source ownership reappeared for {state}: {state_snapshot}")
 
     if state == "flicker":
-        lit_snapshot = wait_for_flicker_phase(driver, evidence["groupId"], True)
-        capture_canvas(driver, ARTIFACT_DIR / "fixture-flicker-lit.png")
-        dark_snapshot = wait_for_flicker_phase(driver, evidence["groupId"], False)
-        capture_canvas(driver, ARTIFACT_DIR / "fixture-flicker-dark.png")
+        if state_snapshot.get("reducedFlicker"):
+            raise AssertionError(f"Reduced-flicker mode unexpectedly enabled for fidelity capture: {state_snapshot}")
+        baseline_pulse = float(state_snapshot.get("pulse", -1))
+        if not 0 <= baseline_pulse <= 1:
+            raise AssertionError(f"Flicker baseline pulse escaped canonical bounds: {state_snapshot}")
+        capture_canvas(driver, ARTIFACT_DIR / "fixture-flicker-baseline.png")
+        modulated_snapshot = wait_for_flicker_modulation(driver, evidence["groupId"], baseline_pulse)
+        capture_canvas(driver, ARTIFACT_DIR / "fixture-flicker-modulated.png")
         return {
-            "files": ["fixture-flicker-lit.png", "fixture-flicker-dark.png"],
+            "files": ["fixture-flicker-baseline.png", "fixture-flicker-modulated.png"],
             "placement": evidence,
             "runtime": snapshot,
-            "lit": lit_snapshot,
-            "dark": dark_snapshot,
+            "baseline": state_snapshot,
+            "modulated": modulated_snapshot,
         }
 
     pulse = float(state_snapshot.get("pulse", -1))
