@@ -14,6 +14,7 @@ import { mountDevelopmentVersionIndicator } from './ui/DevelopmentVersionIndicat
 import { installRegionDepthLab } from './ui/regionDepthLab.js';
 import { installRenderSettingsLab } from './ui/renderSettingsLab.js';
 
+// Dev.9.7 closeout: retain this no-op marker so the final Git preview is tied to the accepted head.
 installLevel0SurfacePresentation();
 installRenderSettingsRuntime();
 installPauFeaturePresentationPilot();
