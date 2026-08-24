@@ -5,6 +5,8 @@ import { SpatialAabbIndex, SpatialPointIndex } from './runtimeSpatialIndex.js';
 import type { InteractionVisual, WorldItemVisual, WorldWall } from './support.js';
 import { WorldRenderer } from './WorldRenderer.js';
 
+const COLLISION_QUERY_NEIGHBOR_MARGIN = CELL_SIZE;
+
 interface RuntimeIndexState {
   collision: SpatialAabbIndex<WorldWall>;
   interactions: SpatialPointIndex<InteractionVisual>;
@@ -136,6 +138,12 @@ export function runtimePerformanceDiagnosticsSnapshot(renderer: WorldRenderer): 
   return { ...diagnostics };
 }
 
+export function resetRuntimePerformanceDiagnostics(renderer: WorldRenderer): void {
+  const state = stateFor(renderer);
+  state.diagnostics = emptyDiagnostics();
+  refreshCounts(state);
+}
+
 export function installRuntimePerformance(): void {
   if (installed) return;
   installed = true;
@@ -162,12 +170,14 @@ export function installRuntimePerformance(): void {
 
   const originalAddDroppedItem = WorldRenderer.prototype.addDroppedItem;
   WorldRenderer.prototype.addDroppedItem = function performanceIndexedDrop(this: WorldRenderer, drop: DroppedItemState): void {
-    originalAddDroppedItem.call(this, drop);
     const cellX = Math.floor((drop.x + CELL_SIZE / 2) / CELL_SIZE);
     const cellZ = Math.floor((drop.z + CELL_SIZE / 2) / CELL_SIZE);
     const visual = this.loaded.get(`${cellX}:${cellZ}`);
+    const previousInteractionCount = visual?.interactions.length ?? 0;
+    originalAddDroppedItem.call(this, drop);
+    const added = visual?.interactions[previousInteractionCount];
     const state = stateFor(this);
-    if (visual) for (const interaction of visual.interactions) addInteraction(state, interaction);
+    if (added) addInteraction(state, added);
     refreshCounts(state);
   };
 
@@ -181,13 +191,15 @@ export function installRuntimePerformance(): void {
   ): [number, number] {
     const state = stateFor(this);
     const started = now();
-    // Query the full swept player envelope. Every collider that could influence
-    // either sweep axis or depenetration intersects this rectangle.
+    // Query the swept player envelope plus one neighboring Cell. The extra
+    // local ring preserves chained corner/depenetration candidates without
+    // returning to the global all-loaded-wall scan.
+    const margin = radius + COLLISION_QUERY_NEIGHBOR_MARGIN;
     const candidates = state.collision.query(
-      Math.min(currentX, nextX) - radius - 0.001,
-      Math.min(currentZ, nextZ) - radius - 0.001,
-      Math.max(currentX, nextX) + radius + 0.001,
-      Math.max(currentZ, nextZ) + radius + 0.001
+      Math.min(currentX, nextX) - margin,
+      Math.min(currentZ, nextZ) - margin,
+      Math.max(currentX, nextX) + margin,
+      Math.max(currentZ, nextZ) + margin
     );
     const result = resolveCircleAgainstAabbs(currentX, currentZ, nextX, nextZ, candidates, radius);
     const elapsed = now() - started;
