@@ -14,6 +14,12 @@ export function streamingRetentionDisposition(distance: number, loadRadius: numb
 }
 
 export interface WarmCoordinate { x: number; z: number; priority: number; }
+let latestPrediction: readonly WarmCoordinate[] = [];
+
+export function latestPredictiveWarmCoordinates(): readonly WarmCoordinate[] {
+  return latestPrediction.map((coordinate) => ({ ...coordinate }));
+}
+
 export function predictiveWarmCoordinates(
   centerX: number,
   centerZ: number,
@@ -21,7 +27,10 @@ export function predictiveWarmCoordinates(
   directionX: number,
   directionZ: number
 ): WarmCoordinate[] {
-  if (Math.hypot(directionX, directionZ) < 0.08) return [];
+  if (Math.hypot(directionX, directionZ) < 0.08) {
+    latestPrediction = [];
+    return [];
+  }
   const retentionRadius = loadRadius + STREAMING_SCHEDULER_PROFILE.predictiveExtraRings;
   const length = Math.hypot(directionX, directionZ) || 1;
   const nx = directionX / length;
@@ -43,7 +52,9 @@ export function predictiveWarmCoordinates(
   if (Math.abs(nx) >= 0.2 && Math.abs(nz) >= 0.2) {
     add(centerX + Math.sign(nx) * retentionRadius, centerZ + Math.sign(nz) * retentionRadius, 9);
   }
-  return [...result.values()].sort((left, right) => left.priority - right.priority || left.x - right.x || left.z - right.z);
+  const coordinates = [...result.values()].sort((left, right) => left.priority - right.priority || left.x - right.x || left.z - right.z);
+  latestPrediction = coordinates.map((coordinate) => ({ ...coordinate }));
+  return coordinates;
 }
 
 export function streamingFrameCanRunHeavyWork(heavyOperations: number, heavyMs: number): boolean {

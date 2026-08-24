@@ -151,7 +151,7 @@ test('three uploaded-source wallpaper derivatives are registered through NAL', (
 });
 
 test('real NAL bytes preload and one surface lifecycle owns final supplied wall finishes', () => {
-  assert.equal(version, '0.3.0-dev.9.5');
+  assert.equal(version, '0.3.0-dev.9.7');
   assert.doesNotMatch(presentationSource, /paintLevel0ChevronWallpaper|fallbackCanvas/);
   assert.match(presentationSource, /function wallpaperAsset\(family/);
   assert.match(presentationSource, /materialAssetId\(TARGET, SLOT_BY_FAMILY\[family\]\)/);

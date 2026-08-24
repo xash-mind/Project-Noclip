@@ -50,7 +50,6 @@ interface GameRuntimeAccess {
   app?: pc.Application;
   camera?: pc.Entity;
   cameraFrame?: CameraFrame;
-  blackoutGuideLight?: pc.Entity;
   flashlight?: pc.Entity;
   renderer?: WorldRenderer;
   save?: SaveData;
@@ -190,13 +189,9 @@ function setupEngine(this: ProjectNoclipGame): void {
     state.cameraFrame = cameraFrame;
   }
 
-  const blackoutGuideLight = new pc.Entity('blackout-external-glimmer');
-  blackoutGuideLight.addComponent('light', {
-    type: 'omni', color: new pc.Color(0.88, 0.84, 0.56), range: 22, intensity: 0, castShadows: false
-  });
-  blackoutGuideLight.enabled = false;
-  app.root.addChild(blackoutGuideLight);
-
+  // Deep-Blackout unaided navigation is owned by the uniform ambient floor.
+  // Do not add a player-relative or exit-direction guide light here: legitimate
+  // extra illumination must come from fixture-owned lights or player/world items.
   const flashlight = new pc.Entity('flashlight');
   flashlight.addComponent('light', {
     type: 'spot', color: new pc.Color(0.93, 0.91, 0.72), range: 22, intensity: 2.4,
@@ -210,7 +205,6 @@ function setupEngine(this: ProjectNoclipGame): void {
   state.app = app;
   state.camera = camera;
   state.cameraFrame = cameraFrame;
-  state.blackoutGuideLight = blackoutGuideLight;
   state.flashlight = flashlight;
   applyRenderQuality(this, settings);
   app.on('update', (dt) => state.update(Math.min(dt, 0.05)));
@@ -238,16 +232,6 @@ function refreshLightField(this: ProjectNoclipGame): void {
   state.blackoutStrength = blackoutStrength;
   state.ambience.setEnvironment(blackoutStrength, blackoutEscapeCue);
   applyLevel0Atmosphere(this, getRenderSettings());
-
-  if (state.blackoutGuideLight?.light && sampled && blackoutStrength > 0.52) {
-    state.blackoutGuideLight.enabled = true;
-    state.blackoutGuideLight.setPosition(
-      position.x + sampled.blackoutExitDirection.x * 18,
-      2.35,
-      position.z + sampled.blackoutExitDirection.z * 18
-    );
-    state.blackoutGuideLight.light.intensity = 0.025 + blackoutEscapeCue * 0.24;
-  } else if (state.blackoutGuideLight) state.blackoutGuideLight.enabled = false;
 }
 
 export function applyRenderSettingsToGame(game: ProjectNoclipGame, settings = getRenderSettings()): void {

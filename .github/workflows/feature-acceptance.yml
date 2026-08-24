@@ -1,0 +1,238 @@
+name: Project Noclip Feature Acceptance
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gameplay-functional:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      NOCLIP_BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      NOCLIP_PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - run: python -m pip install --disable-pip-version-check selenium==4.46.0
+      - name: Run gameplay functional journey
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$NOCLIP_BRANCH_HEAD_SHA"
+          npm run preview > /tmp/noclip-gameplay.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; cat /tmp/noclip-gameplay.log || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/ >/dev/null; then break; fi
+            if [ "$attempt" -eq 30 ]; then echo "Preview server did not become ready" >&2; exit 1; fi
+            sleep 1
+          done
+          NOCLIP_VERSION_ARTIFACTS="artifacts/feature-gameplay/version" \
+            python scripts/verification-browser-runner.py \
+              --task gameplay-visible-version \
+              --category FEATURE_ACCEPTANCE \
+              --artifact-dir artifacts/feature-gameplay/version-verification \
+              --screenshot-policy functional-tolerant \
+              scripts/version-smoke.py
+          NOCLIP_GAMEPLAY_ARTIFACTS="artifacts/feature-gameplay/journey" \
+            python scripts/verification-browser-runner.py \
+              --task gameplay-functional \
+              --category FEATURE_ACCEPTANCE \
+              --artifact-dir artifacts/feature-gameplay/verification \
+              --screenshot-policy functional-tolerant \
+              scripts/gameplay-functional-smoke.py
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-gameplay-${{ github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/feature-gameplay
+          if-no-files-found: warn
+          retention-days: 14
+
+  character-creator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    env:
+      NOCLIP_BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      NOCLIP_PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - run: python -m pip install --disable-pip-version-check selenium==4.46.0
+      - name: Run Character Creator acceptance independently
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$NOCLIP_BRANCH_HEAD_SHA"
+          npm run preview > /tmp/noclip-character.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; cat /tmp/noclip-character.log || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/ >/dev/null; then break; fi
+            if [ "$attempt" -eq 30 ]; then echo "Preview server did not become ready" >&2; exit 1; fi
+            sleep 1
+          done
+          NOCLIP_CHARACTER_ARTIFACTS="artifacts/feature-character/journey" \
+            python scripts/verification-browser-runner.py \
+              --task character-creator \
+              --category FEATURE_ACCEPTANCE \
+              --artifact-dir artifacts/feature-character/verification \
+              --screenshot-policy functional-tolerant \
+              scripts/character-creator-smoke.py
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-character-${{ github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/feature-character
+          if-no-files-found: warn
+          retention-days: 14
+
+  inventory-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      NOCLIP_BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      NOCLIP_PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - name: Detect Inventory UI acceptance surface
+        id: inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$NOCLIP_BRANCH_HEAD_SHA"
+          if [ -f scripts/inventory-ui-smoke.py ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            mkdir -p artifacts/feature-inventory/verification
+            python - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path('artifacts/feature-inventory/verification/verification-result.json').write_text(json.dumps({
+              'task': 'inventory-ui',
+              'category': 'FEATURE_ACCEPTANCE',
+              'status': 'SKIPPED_NOT_PRESENT',
+              'classification': None,
+              'branchHeadSha': os.environ['NOCLIP_BRANCH_HEAD_SHA'],
+              'prMergeSha': os.environ.get('NOCLIP_PR_MERGE_SHA') or None,
+              'reason': 'Inventory UI acceptance script is not present on this candidate; the independent job is reserved for the Inventory UI worker.',
+          }, indent=2) + '\n', encoding='utf-8')
+          PY
+          fi
+      - if: steps.inventory.outputs.present == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - if: steps.inventory.outputs.present == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - if: steps.inventory.outputs.present == 'true'
+        run: npm install --no-audit --no-fund
+      - if: steps.inventory.outputs.present == 'true'
+        run: npm run build
+      - if: steps.inventory.outputs.present == 'true'
+        run: python -m pip install --disable-pip-version-check selenium==4.46.0
+      - if: steps.inventory.outputs.present == 'true'
+        name: Run Inventory UI acceptance independently
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview > /tmp/noclip-inventory.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; cat /tmp/noclip-inventory.log || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/ >/dev/null; then break; fi
+            if [ "$attempt" -eq 30 ]; then echo "Preview server did not become ready" >&2; exit 1; fi
+            sleep 1
+          done
+          NOCLIP_INVENTORY_ARTIFACTS="artifacts/feature-inventory/journey" \
+            python scripts/verification-browser-runner.py \
+              --task inventory-ui \
+              --category FEATURE_ACCEPTANCE \
+              --artifact-dir artifacts/feature-inventory/verification \
+              --screenshot-policy functional-tolerant \
+              scripts/inventory-ui-smoke.py
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-inventory-${{ github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/feature-inventory
+          if-no-files-found: warn
+          retention-days: 14
+
+  studio-authoring:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      NOCLIP_BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      NOCLIP_PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: npm install --no-audit --no-fund
+      - run: npm run assets:build
+      - run: npm run studio:check
+      - run: python -m pip install --disable-pip-version-check selenium==4.46.0
+      - name: Run Studio authoring acceptance independently
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$NOCLIP_BRANCH_HEAD_SHA"
+          echo "Studio acceptance uses a disposable branch label required by its Save-to-Project safety guard; commit SHA remains exact."
+          git switch -C agent/dev9-7-studio-completion "$NOCLIP_BRANCH_HEAD_SHA"
+          test "$(git rev-parse HEAD)" = "$NOCLIP_BRANCH_HEAD_SHA"
+          git restore --source=HEAD --worktree -- src/presentation/generatedLevel0FeatureDefinitions.ts
+          python scripts/verification-browser-runner.py \
+            --task studio-authoring \
+            --category FEATURE_ACCEPTANCE \
+            --artifact-dir artifacts/studio-browser/verification \
+            --screenshot-policy functional-tolerant \
+            tools/studio/browser-acceptance.py
+          git diff --exit-code -- \
+            src/presentation/definitions/level0-features.json \
+            src/presentation/definitions/level0-materials.json \
+            src/presentation/generated
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-studio-${{ github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/studio-browser
+          if-no-files-found: warn
+          retention-days: 14
