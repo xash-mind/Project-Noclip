@@ -1,12 +1,11 @@
 import './styles.css';
 import { ProjectNoclipGame } from './app/ProjectNoclipGame.js';
-import { installFinalLevel0MaterialPresentation } from './renderer/finalLevel0MaterialPresentation.js';
-import { installLevel0SurfacePresentation } from './renderer/level0SurfacePresentation.js';
+import { installFixtureLighting } from './renderer/fixtureLighting.js';
 import { prepareOrdinaryWallpaperAssets } from './renderer/ordinaryWallpaperAssets.js';
-import { installOrdinaryCasingMaterialPresentation } from './renderer/ordinaryCasingMaterialPresentation.js';
 import { installOutletInteractionRuntime } from './renderer/outletInteractionRuntime.js';
 import { installRenderSettingsRuntime } from './renderer/renderSettingsRuntime.js';
 import { installPauFeaturePresentationPilot } from './renderer/pauFeaturePresentationPilot.js';
+import { installRendererCellLifecycle } from './renderer/rendererCellLifecycle.js';
 import { installStaticWorldBatching } from './renderer/StaticWorldBatching.js';
 import { installRendererRuntimeDiagnostics } from './renderer/rendererRuntimeDiagnostics.js';
 import { installRuntimePerformance } from './renderer/runtimePerformance.js';
@@ -15,17 +14,14 @@ import { mountDevelopmentVersionIndicator } from './ui/DevelopmentVersionIndicat
 import { installRegionDepthLab } from './ui/regionDepthLab.js';
 import { installRenderSettingsLab } from './ui/renderSettingsLab.js';
 
-// Dev.9.7 closeout: retain this no-op marker so the final Git preview is tied to the accepted head.
-installLevel0SurfacePresentation();
 installRenderSettingsRuntime();
 installPauFeaturePresentationPilot();
-installOrdinaryCasingMaterialPresentation();
+installFixtureLighting();
 installStaticWorldBatching();
 installRuntimePerformance();
+// Wave 1: one explicit owner now defines streamed Cell load/unload ordering.
+installRendererCellLifecycle();
 installVisibilityParticipationRuntime(ProjectNoclipGame.prototype);
-// Region reconstruction happens inside StaticWorldBatching's installed lifecycle.
-// This outer pass is the final material owner for renderer-created Arch/CV-H1 geometry.
-installFinalLevel0MaterialPresentation();
 installOutletInteractionRuntime();
 installRendererRuntimeDiagnostics();
 mountDevelopmentVersionIndicator();
