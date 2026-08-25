@@ -1,11 +1,9 @@
 import type { DroppedItemState } from '../persistence/types.js';
 import { resolveCircleAgainstAabbs } from '../physics/collision.js';
 import { CELL_SIZE, type CellDescriptor } from '../world/types.js';
-import { SpatialAabbIndex, SpatialPointIndex } from './runtimeSpatialIndex.js';
+import { movementCollisionQueryBounds, SpatialAabbIndex, SpatialPointIndex } from './runtimeSpatialIndex.js';
 import type { InteractionVisual, WorldItemVisual, WorldWall } from './support.js';
 import { WorldRenderer } from './WorldRenderer.js';
-
-const COLLISION_QUERY_NEIGHBOR_MARGIN = CELL_SIZE;
 
 interface RuntimeIndexState {
   collision: SpatialAabbIndex<WorldWall>;
@@ -191,16 +189,8 @@ export function installRuntimePerformance(): void {
   ): [number, number] {
     const state = stateFor(this);
     const started = now();
-    // Query the swept player envelope plus one neighboring Cell. The extra
-    // local ring preserves chained corner/depenetration candidates without
-    // returning to the global all-loaded-wall scan.
-    const margin = radius + COLLISION_QUERY_NEIGHBOR_MARGIN;
-    const candidates = state.collision.query(
-      Math.min(currentX, nextX) - margin,
-      Math.min(currentZ, nextZ) - margin,
-      Math.max(currentX, nextX) + margin,
-      Math.max(currentZ, nextZ) + margin
-    );
+    const bounds = movementCollisionQueryBounds(currentX, currentZ, nextX, nextZ, radius);
+    const candidates = state.collision.query(bounds.minX, bounds.minZ, bounds.maxX, bounds.maxZ);
     const result = resolveCircleAgainstAabbs(currentX, currentZ, nextX, nextZ, candidates, radius);
     const elapsed = now() - started;
     const diagnostics = state.diagnostics;
