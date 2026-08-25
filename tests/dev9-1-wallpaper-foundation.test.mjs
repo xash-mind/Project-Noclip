@@ -24,6 +24,7 @@ const assetSource = await readFile(new URL('../src/renderer/ordinaryWallpaperAss
 const imagePipelineSource = await readFile(new URL('../src/renderer/presentationImageTextures.ts', import.meta.url), 'utf8');
 const casingSource = await readFile(new URL('../src/renderer/ordinaryCasingMaterialPresentation.ts', import.meta.url), 'utf8');
 const interactionSource = await readFile(new URL('../src/renderer/outletInteractionRuntime.ts', import.meta.url), 'utf8');
+const lifecycleSource = await readFile(new URL('../src/renderer/rendererCellLifecycle.ts', import.meta.url), 'utf8');
 const mainSource = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
 
 function wall(id, cx = 0, cz = 0, orientation = 'z', sx = 6, sz = 6) {
@@ -176,14 +177,13 @@ test('real NAL bytes preload and one surface lifecycle owns final supplied wall 
   assert.match(presentationSource, /export function applyLevel0WallpaperPresentation/);
   assert.doesNotMatch(presentationSource, /installOrdinaryWallpaperPresentation|patchedOrdinaryWallpaperLoad/);
   assert.doesNotMatch(mainSource, /installOrdinaryWallpaperPresentation/);
-  assert.ok(
-    mainSource.indexOf('installLevel0SurfacePresentation();') < mainSource.indexOf('installOrdinaryCasingMaterialPresentation();'),
-    'casing must follow the single Level 0 surface/wallpaper lifecycle'
-  );
-  assert.ok(
-    mainSource.indexOf('installOrdinaryCasingMaterialPresentation();') < mainSource.indexOf('installStaticWorldBatching();'),
-    'static batching must observe the completed wallpaper/casing Cell presentation'
-  );
+  const surfaceStep = lifecycleSource.indexOf('applyLevel0SurfacePresentation(this, visual)');
+  const casingStep = lifecycleSource.indexOf('applyOrdinaryCasingMaterialPresentation(this, descriptor)');
+  const batchingStep = lifecycleSource.indexOf('markStaticWorldBatchingDirty()');
+  assert.ok(surfaceStep >= 0 && casingStep > surfaceStep, 'casing must follow the single Level 0 surface/wallpaper lifecycle');
+  assert.ok(batchingStep > casingStep, 'static batching must observe completed wallpaper/casing Cell presentation');
+  assert.match(mainSource, /installRendererCellLifecycle\(\)/);
+  assert.doesNotMatch(mainSource, /installLevel0SurfacePresentation|installOrdinaryCasingMaterialPresentation/);
 });
 
 test('wallpaper finish keeps unsplit geometry and delegates the entire A-A1 divider to the pale Arch owner', () => {
