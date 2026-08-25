@@ -16,6 +16,7 @@
     "src/input/**/*.ts",
     "src/persistence/types.ts",
     "src/player-character/profile.ts",
+    "src/player-character/avatar.ts",
     "src/player-character/profileStore.ts",
     "src/player-character/newGameFlow.ts",
     "src/simulation/**/*.ts",
