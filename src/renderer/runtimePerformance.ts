@@ -113,7 +113,7 @@ function removeInteraction(state: RuntimeIndexState, id: string): void {
   state.dynamicItems.delete(id);
 }
 
-function indexCell(renderer: WorldRenderer, descriptor: CellDescriptor): void {
+export function registerRuntimeCellState(renderer: WorldRenderer, descriptor: CellDescriptor): void {
   const visual = renderer.loaded.get(descriptor.id);
   if (!visual) return;
   const state = stateFor(renderer);
@@ -122,7 +122,7 @@ function indexCell(renderer: WorldRenderer, descriptor: CellDescriptor): void {
   refreshCounts(state);
 }
 
-function unindexCell(renderer: WorldRenderer, cellId: string): void {
+export function unregisterRuntimeCellState(renderer: WorldRenderer, cellId: string): void {
   const visual = renderer.loaded.get(cellId);
   if (!visual) return;
   const state = stateFor(renderer);
@@ -145,19 +145,6 @@ export function resetRuntimePerformanceDiagnostics(renderer: WorldRenderer): voi
 export function installRuntimePerformance(): void {
   if (installed) return;
   installed = true;
-
-  const originalLoadCell = WorldRenderer.prototype.loadCell;
-  WorldRenderer.prototype.loadCell = function performanceIndexedLoad(this: WorldRenderer, descriptor: CellDescriptor): void {
-    const alreadyLoaded = this.loaded.has(descriptor.id);
-    originalLoadCell.call(this, descriptor);
-    if (!alreadyLoaded) indexCell(this, descriptor);
-  };
-
-  const originalUnloadCell = WorldRenderer.prototype.unloadCell;
-  WorldRenderer.prototype.unloadCell = function performanceIndexedUnload(this: WorldRenderer, cellId: string): void {
-    unindexCell(this, cellId);
-    originalUnloadCell.call(this, cellId);
-  };
 
   const originalRemoveInteraction = WorldRenderer.prototype.removeInteraction;
   WorldRenderer.prototype.removeInteraction = function performanceIndexedInteractionRemoval(this: WorldRenderer, id: string): void {
