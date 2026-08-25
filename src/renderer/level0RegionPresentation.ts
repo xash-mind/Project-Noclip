@@ -124,8 +124,8 @@ function addBox(
   return entity;
 }
 
-export function carpetProfileForCell(regionId: RegionId, hasHole: boolean): CarpetProfile {
-  if (hasHole || regionId === 'ordinary-level-0') return { key: 'ordinary', tint: [0.79, 0.72, 0.55] };
+export function carpetProfileForCell(regionId: RegionId): CarpetProfile {
+  if (regionId === 'ordinary-level-0') return { key: 'ordinary', tint: [0.79, 0.72, 0.55] };
   if (regionId === 'pillar-field') return { key: 'pillar', tint: [0.825, 0.755, 0.585] };
   return { key: 'arch', tint: [0.65, 0.60, 0.49], gloss: 0.11 };
 }
@@ -161,8 +161,7 @@ function carpetClone(
 function applyCarpetPresentation(visual: CellVisual): void {
   const descriptor = visual.descriptor;
   if (descriptor.world.generationVersion !== 'gen3-v1') return;
-  const hasHole = descriptor.floorPatches.some((patch) => patch.kind === 'hole');
-  const profile = carpetProfileForCell(descriptor.world.regionId, hasHole);
+  const profile = carpetProfileForCell(descriptor.world.regionId);
   const fullFloor = entityByName(visual.root, 'floor');
   if (fullFloor?.render) {
     fullFloor.render.material = carpetClone(fullFloor.render.material as pc.StandardMaterial, profile, profile.key);

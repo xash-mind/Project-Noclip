@@ -2,7 +2,7 @@ import * as pc from 'playcanvas';
 import { materialAssetId, materialColor, materialNumber, materialString } from '../presentation/materialRuntime.js';
 import { CELL_SIZE, type CellDescriptor } from '../world/types.js';
 import { derivedPresentationTexture } from './presentationImageTextures.js';
-import { WorldRenderer } from './WorldRenderer.js';
+import { cvh1FloorSurfaceProfile, WorldRenderer } from './WorldRenderer.js';
 import { makeMaterial, type CellVisual } from './support.js';
 
 interface RendererAccess { app: pc.Application; }
@@ -13,6 +13,24 @@ let installed = false;
 const ARCH_TARGET = 'material.arch-pale-wallpaper';
 const CARPET_TARGET = 'material.level-0-carpet';
 const HOLE_TARGET = 'carver.floor-hole-cluster';
+
+export interface CanonicalLevel0CarpetPresentation {
+  region: CellDescriptor['world']['regionId'];
+  conditionSignature: string;
+  sourceMode: string;
+  color: [number, number, number];
+  gloss: number;
+  patternSizeMeters: number;
+  assetId?: string;
+  brightness: number;
+  contrast: number;
+  saturation: number;
+}
+
+export interface Level0CarpetUvTransform {
+  tiling: [number, number];
+  offset: [number, number];
+}
 
 function childrenOf(entity: pc.Entity): pc.Entity[] { return [...(entity as pc.Entity & { children: readonly pc.Entity[] }).children]; }
 function cacheFor(renderer: WorldRenderer): FinalMaterialCache {
@@ -28,6 +46,7 @@ function setEntityMaterial(entity: pc.Entity, value: pc.StandardMaterial): void 
   const render = entity.render as unknown as RenderWithMeshInstances;
   for (const instance of render.meshInstances ?? []) instance.material = value;
 }
+function wrap01(value: number): number { return ((value % 1) + 1) % 1; }
 
 function archMaterial(cache: FinalMaterialCache, role: 'pier'|'upper'|'panel'): pc.StandardMaterial {
   const field = role === 'pier' ? 'pierColor' : role === 'panel' ? 'panelColor' : 'upperColor';
@@ -42,24 +61,114 @@ function archRole(name: string): 'pier'|'upper'|'panel'|undefined {
   return 'upper';
 }
 
+/** Final M-C1 truth shared by ordinary floor geometry and CV-H1-cut floor geometry. */
+export function resolveCanonicalLevel0CarpetPresentation(descriptor: CellDescriptor): CanonicalLevel0CarpetPresentation {
+  const region = descriptor.world.regionId;
+  const sourceMode = materialString(CARPET_TARGET, 'sourceMode', 'procedural');
+  const color = region === 'arch-rooms'
+    ? materialColor(CARPET_TARGET, 'archTint', [0.65,0.60,0.49])
+    : region === 'pillar-field'
+      ? materialColor(CARPET_TARGET, 'pillarTint', [0.825,0.755,0.585])
+      : materialColor(CARPET_TARGET, 'ordinaryTint', [0.79,0.72,0.55]);
+  const gloss = region === 'arch-rooms' ? materialNumber(CARPET_TARGET, 'archGloss', 0.11) : 0.07;
+  const patternSizeMeters = Math.max(0.05, materialNumber(CARPET_TARGET, 'patternSizeMeters', CELL_SIZE / 5));
+  const assetId = sourceMode === 'nal-image' ? materialAssetId(CARPET_TARGET, 'texture') : undefined;
+  return {
+    region,
+    conditionSignature: descriptor.world.conditionIds.join('+'),
+    sourceMode,
+    color,
+    gloss,
+    patternSizeMeters,
+    assetId,
+    brightness: materialNumber(CARPET_TARGET, 'brightness', 1),
+    contrast: materialNumber(CARPET_TARGET, 'contrast', 1),
+    saturation: materialNumber(CARPET_TARGET, 'saturation', 1)
+  };
+}
+
+/**
+ * World-phase transform for the two full-Cell floor geometry bases.
+ * A normal box owns one 0..1 UV span; the CV-H1 mesh already bakes one UV
+ * repeat per cvh1FloorSurfaceProfile().carpetRepeatMeters, so only its material
+ * multiplier differs. Both resolve to exactly the same world-space frequency
+ * and phase for the canonical M-C1 pattern size.
+ */
+export function canonicalLevel0CarpetUv(
+  descriptor: CellDescriptor,
+  patternSizeMeters: number,
+  surface: 'full-floor' | 'cvh1-indexed'
+): Level0CarpetUvTransform {
+  const pattern = Math.max(0.05, patternSizeMeters);
+  const minWorldX = descriptor.address.cellX * CELL_SIZE - CELL_SIZE / 2;
+  const minWorldZ = descriptor.address.cellZ * CELL_SIZE - CELL_SIZE / 2;
+  const multiplier = surface === 'cvh1-indexed'
+    ? cvh1FloorSurfaceProfile().carpetRepeatMeters / pattern
+    : CELL_SIZE / pattern;
+  return {
+    tiling: [multiplier, multiplier],
+    offset: [wrap01(minWorldX / pattern), wrap01(minWorldZ / pattern)]
+  };
+}
+
+function rectCarpetUv(
+  descriptor: CellDescriptor,
+  patternSizeMeters: number,
+  positionX: number,
+  positionZ: number,
+  sizeX: number,
+  sizeZ: number
+): Level0CarpetUvTransform {
+  const pattern = Math.max(0.05, patternSizeMeters);
+  const minWorldX = descriptor.address.cellX * CELL_SIZE + positionX - sizeX / 2;
+  const minWorldZ = descriptor.address.cellZ * CELL_SIZE + positionZ - sizeZ / 2;
+  return {
+    tiling: [sizeX / pattern, sizeZ / pattern],
+    offset: [wrap01(minWorldX / pattern), wrap01(minWorldZ / pattern)]
+  };
+}
+
 function carpetMaterial(cache: FinalMaterialCache, visual: CellVisual, entity: pc.Entity): pc.StandardMaterial | undefined {
   if (!entity.render) return undefined;
   const source = entity.render.material as pc.StandardMaterial | undefined; if (!source) return undefined;
-  const descriptor = visual.descriptor, region = descriptor.world.regionId;
-  const sourceMode = materialString(CARPET_TARGET, 'sourceMode', 'procedural');
-  const color = region === 'arch-rooms' ? materialColor(CARPET_TARGET, 'archTint', [0.65,0.60,0.49]) : region === 'pillar-field' ? materialColor(CARPET_TARGET, 'pillarTint', [0.825,0.755,0.585]) : materialColor(CARPET_TARGET, 'ordinaryTint', [0.79,0.72,0.55]);
-  const gloss = region === 'arch-rooms' ? materialNumber(CARPET_TARGET, 'archGloss', 0.11) : source.gloss;
-  const pattern = Math.max(0.05, materialNumber(CARPET_TARGET, 'patternSizeMeters', CELL_SIZE / 5));
-  const scale = entity.getLocalScale(), position = entity.getLocalPosition();
-  const sx = entity.name === 'floor' ? CELL_SIZE : Math.max(0.01, scale.x), sz = entity.name === 'floor' ? CELL_SIZE : Math.max(0.01, scale.z);
-  const minWorldX = descriptor.address.cellX * CELL_SIZE + position.x - sx / 2, minWorldZ = descriptor.address.cellZ * CELL_SIZE + position.z - sz / 2;
-  const tiling: [number,number] = [sx / pattern, sz / pattern];
-  const offset: [number,number] = [((minWorldX / pattern) % 1 + 1) % 1, ((minWorldZ / pattern) % 1 + 1) % 1];
-  const asset = sourceMode === 'nal-image' ? materialAssetId(CARPET_TARGET, 'texture') : undefined;
-  const brightness = materialNumber(CARPET_TARGET, 'brightness', 1), contrast = materialNumber(CARPET_TARGET, 'contrast', 1), saturation = materialNumber(CARPET_TARGET, 'saturation', 1);
-  const texture = asset ? derivedPresentationTexture(cache.app, asset, { brightness, contrast, saturation, rotationDegrees: 0, flipU: false, flipV: false }) : source.diffuseMap;
-  const key = `carpet:${region}:${sourceMode}:${asset ?? 'procedural'}:${color.join(',')}:${gloss}:${pattern}:${brightness}:${contrast}:${saturation}:${tiling.map((v)=>v.toFixed(4)).join(',')}:${offset.map((v)=>v.toFixed(4)).join(',')}`;
-  return cachedMaterial(cache, key, () => { const value = source.clone(); value.diffuse = new pc.Color(color[0],color[1],color[2]); value.gloss = gloss; if (texture) value.diffuseMap = texture; value.diffuseMapTiling = new pc.Vec2(tiling[0],tiling[1]); (value as unknown as { diffuseMapOffset: pc.Vec2 }).diffuseMapOffset = new pc.Vec2(offset[0],offset[1]); value.update(); return value; });
+  const descriptor = visual.descriptor;
+  const presentation = resolveCanonicalLevel0CarpetPresentation(descriptor);
+  const isCvh1 = entity.name === 'cvh1-floor-surface';
+  const position = entity.getLocalPosition();
+  const scale = entity.getLocalScale();
+  const uv = isCvh1
+    ? canonicalLevel0CarpetUv(descriptor, presentation.patternSizeMeters, 'cvh1-indexed')
+    : entity.name === 'floor'
+      ? canonicalLevel0CarpetUv(descriptor, presentation.patternSizeMeters, 'full-floor')
+      : rectCarpetUv(
+        descriptor,
+        presentation.patternSizeMeters,
+        position.x,
+        position.z,
+        Math.max(0.01, scale.x),
+        Math.max(0.01, scale.z)
+      );
+  const texture = presentation.assetId
+    ? derivedPresentationTexture(cache.app, presentation.assetId, {
+      brightness: presentation.brightness,
+      contrast: presentation.contrast,
+      saturation: presentation.saturation,
+      rotationDegrees: 0,
+      flipU: false,
+      flipV: false
+    })
+    : source.diffuseMap;
+  const key = `carpet:${presentation.region}:${presentation.conditionSignature}:${presentation.sourceMode}:${presentation.assetId ?? 'procedural'}:${presentation.color.join(',')}:${presentation.gloss}:${presentation.patternSizeMeters}:${presentation.brightness}:${presentation.contrast}:${presentation.saturation}:${uv.tiling.map((v)=>v.toFixed(4)).join(',')}:${uv.offset.map((v)=>v.toFixed(4)).join(',')}`;
+  return cachedMaterial(cache, key, () => {
+    const value = source.clone();
+    value.diffuse = new pc.Color(presentation.color[0], presentation.color[1], presentation.color[2]);
+    value.gloss = presentation.gloss;
+    if (texture) value.diffuseMap = texture;
+    value.diffuseMapTiling = new pc.Vec2(uv.tiling[0], uv.tiling[1]);
+    (value as unknown as { diffuseMapOffset: pc.Vec2 }).diffuseMapOffset = new pc.Vec2(uv.offset[0], uv.offset[1]);
+    value.update();
+    return value;
+  });
 }
 
 function holeMaterial(cache: FinalMaterialCache, key: 'upper'|'middle'|'deep'|'void'): pc.StandardMaterial {
@@ -74,7 +183,9 @@ function applyFinalMaterials(renderer: WorldRenderer, visual: CellVisual): void 
   const cache = cacheFor(renderer);
   for (const entity of childrenOf(visual.root)) {
     const role = archRole(entity.name); if (role) { setEntityMaterial(entity, archMaterial(cache, role)); continue; }
-    if ((entity.name === 'floor' || entity.name.startsWith('floor-piece:')) && entity.render) { const value = carpetMaterial(cache, visual, entity); if (value) setEntityMaterial(entity, value); continue; }
+    if ((entity.name === 'floor' || entity.name.startsWith('floor-piece:') || entity.name === 'cvh1-floor-surface') && entity.render) {
+      const value = carpetMaterial(cache, visual, entity); if (value) setEntityMaterial(entity, value); continue;
+    }
     if (!entity.render) continue;
     if (entity.name.includes(':depth-band:upper:')) setEntityMaterial(entity, holeMaterial(cache, 'upper'));
     else if (entity.name.includes(':depth-band:middle:')) setEntityMaterial(entity, holeMaterial(cache, 'middle'));
