@@ -229,14 +229,12 @@ test('Arch curves remain render-only, small and centered rather than broad bay c
   assert.ok(maxSemanticWalls <= 64, `Arch semantic wall budget reached ${maxSemanticWalls} across ${checkedCells} sampled cells`);
 });
 
-test('Region carpet presentation stays within Level 0 grammar and holes use Ordinary carpet', () => {
-  const ordinary = carpetProfileForCell('ordinary-level-0', false);
-  const holes = carpetProfileForCell('ordinary-level-0', true);
-  const pillar = carpetProfileForCell('pillar-field', false);
-  const pillarHole = carpetProfileForCell('pillar-field', true);
-  const arch = carpetProfileForCell('arch-rooms', false);
-  assert.deepEqual(holes.tint, ordinary.tint);
-  assert.deepEqual(pillarHole.tint, ordinary.tint);
+test('Region carpet presentation stays within Level 0 grammar and never changes ownership because a Hole exists', () => {
+  const ordinary = carpetProfileForCell('ordinary-level-0');
+  const pillar = carpetProfileForCell('pillar-field');
+  const arch = carpetProfileForCell('arch-rooms');
+  assert.notDeepEqual(pillar.tint, ordinary.tint, 'Pillar carpet collapsed to Ordinary carpet');
+  assert.notDeepEqual(arch.tint, ordinary.tint, 'Arch carpet collapsed to Ordinary carpet');
   assert.ok(tintEnergy(pillar) > tintEnergy(ordinary), 'Pillar carpet is not lighter than ordinary Level 0');
   assert.ok(tintEnergy(arch) < tintEnergy(ordinary), 'Arch carpet is not darker than ordinary Level 0');
   assert.ok(tintEnergy(pillar) - tintEnergy(ordinary) < 0.15, 'Pillar carpet diverged too far from Level 0 grammar');

@@ -9,6 +9,7 @@ import { installRenderSettingsRuntime } from './renderer/renderSettingsRuntime.j
 import { installPauFeaturePresentationPilot } from './renderer/pauFeaturePresentationPilot.js';
 import { installStaticWorldBatching } from './renderer/StaticWorldBatching.js';
 import { installRendererRuntimeDiagnostics } from './renderer/rendererRuntimeDiagnostics.js';
+import { installRuntimePerformance } from './renderer/runtimePerformance.js';
 import { installVisibilityParticipationRuntime } from './renderer/visibility/runtime.js';
 import { mountDevelopmentVersionIndicator } from './ui/DevelopmentVersionIndicator.js';
 import { installRegionDepthLab } from './ui/regionDepthLab.js';
@@ -20,6 +21,7 @@ installRenderSettingsRuntime();
 installPauFeaturePresentationPilot();
 installOrdinaryCasingMaterialPresentation();
 installStaticWorldBatching();
+installRuntimePerformance();
 installVisibilityParticipationRuntime(ProjectNoclipGame.prototype);
 // Region reconstruction happens inside StaticWorldBatching's installed lifecycle.
 // This outer pass is the final material owner for renderer-created Arch/CV-H1 geometry.

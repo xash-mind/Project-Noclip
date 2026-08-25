@@ -3,6 +3,10 @@ import { ProjectNoclipGame } from '../app/ProjectNoclipGame.js';
 import type { WorldRenderer } from './WorldRenderer.js';
 import { fixtureLightingDiagnosticsSnapshot } from './fixtureLighting.js';
 import { archPresentationDiagnosticsSnapshot } from './level0RegionPresentation.js';
+import {
+  resetRuntimePerformanceDiagnostics,
+  runtimePerformanceDiagnosticsSnapshot
+} from './runtimePerformance.js';
 import { staticWorldBatchingDiagnosticsSnapshot } from './StaticWorldBatching.js';
 import type { StreamingDiagnostics } from './streamingScheduler.js';
 
@@ -53,8 +57,13 @@ export interface RendererRuntimeSnapshot {
   frameSamples: number;
   p50FrameMs: number;
   p95FrameMs: number;
+  p99FrameMs: number;
   maxFrameMs: number;
+  framesOver16_7Ms: number;
+  framesOver33Ms: number;
+  framesOver50Ms: number;
   streaming?: StreamingDiagnostics;
+  hotPaths?: ReturnType<typeof runtimePerformanceDiagnosticsSnapshot>;
   fixture: ReturnType<typeof fixtureLightingDiagnosticsSnapshot>;
   batching: ReturnType<typeof staticWorldBatchingDiagnosticsSnapshot>;
   arch: ReturnType<typeof archPresentationDiagnosticsSnapshot>;
@@ -137,14 +146,20 @@ function captureEvent(game: ProjectNoclipGame, kind: FailureKind, persist = fals
 function snapshot(game: ProjectNoclipGame): RendererRuntimeSnapshot {
   const state = stateFor(game);
   const frameTimes = state.frameTimes;
+  const renderer = access(game).renderer;
   return {
     scenario: state.scenario,
     ...counts(game),
     frameSamples: frameTimes.length,
     p50FrameMs: percentile(frameTimes, 0.5),
     p95FrameMs: percentile(frameTimes, 0.95),
+    p99FrameMs: percentile(frameTimes, 0.99),
     maxFrameMs: frameTimes.length > 0 ? Math.max(...frameTimes) : 0,
+    framesOver16_7Ms: frameTimes.filter((value) => value > 16.7).length,
+    framesOver33Ms: frameTimes.filter((value) => value > 33).length,
+    framesOver50Ms: frameTimes.filter((value) => value > 50).length,
     streaming: streaming(),
+    hotPaths: renderer ? runtimePerformanceDiagnosticsSnapshot(renderer) : undefined,
     fixture: fixtureLightingDiagnosticsSnapshot(),
     batching: staticWorldBatchingDiagnosticsSnapshot(),
     arch: archPresentationDiagnosticsSnapshot(),
@@ -157,6 +172,9 @@ function beginScenario(game: ProjectNoclipGame, label: string): void {
   state.scenario = label;
   state.frameTimes.length = 0;
   state.recentEvents.length = 0;
+  state.lastRafAt = undefined;
+  const renderer = access(game).renderer;
+  if (renderer) resetRuntimePerformanceDiagnostics(renderer);
   const diagnostics = streaming();
   if (diagnostics) {
     diagnostics.queueDepthPeak = diagnostics.queueDepth;

@@ -85,4 +85,13 @@ Journey save schema remains v2. No Player Character field was added to SaveData 
 
 The initial creator supports character name, body/frame, skin tone, hair preset/colour, upper clothing/colour, lower clothing/colour, Randomize, Reset, Back, and Begin Journey. Its preview is deliberately a simple DOM/CSS mannequin.
 
-The mannequin is not an in-world player Representation. A future avatar/mirror/multiplayer/Cinematic Mode implementation should consume semantic `PlayerCharacterProfile` data and use `CharacterProfileId` as the actor reference rather than storing renderer state in the profile.
+The mannequin is not an in-world player Representation. Dev.9.8 introduces the renderer-independent contract in `src/player-character/avatar.ts` and `docs/PLAYER_AVATAR_REPRESENTATION.md`:
+
+```text
+PlayerCharacterProfile
+  -> AvatarAppearance
+  -> AvatarDefinition
+  -> AvatarRuntime [FUTURE]
+```
+
+The mapping preserves `CharacterProfileId` as actor ownership and does not add Journey/world-seed identity, renderer state, collision dimensions, camera state, or live animation to the profile. Future avatar, mirror, multiplayer, third-person, and Cinematic Mode work should resolve the actor by `CharacterProfileId` through this contract rather than reinterpret Journey-local `characterId`.

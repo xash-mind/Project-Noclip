@@ -3,7 +3,7 @@ import { CameraFrame } from 'playcanvas/build/playcanvas/src/extras/render-passe
 import { LEVEL0_AMBIENT, LEVEL0_FOG_COLOR, resolveBlackoutRenderState } from './blackoutRendering.js';
 import { ProceduralAmbience } from '../audio/Ambience.js';
 import { PlayerIntent } from '../input/PlayerIntent.js';
-import { addToInventory, INVENTORY_CAPACITY, removeFromInventory, updateInventoryItem } from '../inventory/inventory.js';
+import { addToInventory, INVENTORY_CAPACITY, moveInstance, removeFromInventory, updateInventoryItem } from '../inventory/inventory.js';
 import { ITEM_DEFINITIONS } from '../items/definitions.js';
 import { createItemInstance, transferItem } from '../items/factory.js';
 import { rollStarterDefinitions, simulateStarterRolls } from '../items/starterRoll.js';
@@ -111,7 +111,8 @@ export class ProjectNoclipGame {
     this.canvas = canvas;
     this.ui = new GameUI({
       onNewGame: (seed) => void this.startNew(seed), onContinue: () => void this.continueGame(), onReset: () => void this.resetGame(),
-      onResume: () => this.resumeInput(), onSelectItem: (id) => this.selectItem(id), onTuningChange: (patch) => this.updateTuning(patch),
+      onResume: () => this.resumeInput(), onSelectItem: (id) => this.selectItem(id), onMoveItem: (id, targetIndex) => this.moveInventoryItem(id, targetIndex),
+      onInventoryVisibilityChange: (open) => this.handleInventoryVisibility(open), onTuningChange: (patch) => this.updateTuning(patch),
       onSeedChange: (seed) => void this.startNew(seed), onSimulateStarter: () => this.simulateStarters(), onExportTuning: () => this.exportTuning(),
       onLocateRegion: (regionId) => this.locateRegion(regionId),
       onLocateBlackout: () => this.locateBlackout(), onLocateHoleCluster: () => this.locateHoleCluster(), onLocateManilaRoom: () => this.locateManilaRoom(),
@@ -199,18 +200,26 @@ export class ProjectNoclipGame {
     window.addEventListener('keydown', (event) => {
       if (event.code === 'Backquote') {
         event.preventDefault();
+        if (this.ui.isInventoryOpen()) { this.ui.closeInventory(); return; }
         if (this.started) this.toggleWorldLab(); else this.ui.toggleLab();
         return;
       }
       if (!this.started) return;
+      if (event.code === 'KeyI') {
+        event.preventDefault();
+        if (!this.ui.isLabOpen() && !this.ui.isNoteOpen()) this.ui.toggleInventory();
+        return;
+      }
+      if (event.code === 'Escape' && this.ui.isInventoryOpen()) { event.preventDefault(); this.ui.closeInventory(); return; }
       if (event.code === 'Escape' && this.ui.isNoteOpen()) { this.ui.hideNote(); return; }
+      if (this.ui.isInventoryOpen()) return;
       if (event.code === 'KeyE') this.interact(); else if (event.code === 'KeyF') this.useSelectedItem(); else if (event.code === 'KeyG') this.dropSelectedItem(); else if (event.code === 'KeyM') this.toggleMarkerMode();
       else if (/^Digit[1-6]$/.test(event.code)) { const item = this.save?.inventory[Number(event.code.slice(-1)) - 1]; if (item) this.selectItem(item.instanceId); }
       this.input.keyDown(event.code);
     });
     window.addEventListener('keyup', (event) => this.input.keyUp(event.code));
     window.addEventListener('mousemove', (event) => {
-      if (this.mobileInputActive || document.pointerLockElement !== this.canvas || this.paused || this.ui.isLabOpen() || this.ui.isNoteOpen()) return;
+      if (this.mobileInputActive || document.pointerLockElement !== this.canvas || this.paused || this.ui.isLabOpen() || this.ui.isNoteOpen() || this.ui.isInventoryOpen()) return;
       this.applyLookDelta(event.movementX, event.movementY);
       if (this.drawing) this.sampleMark();
     });
@@ -220,20 +229,33 @@ export class ProjectNoclipGame {
     window.addEventListener('resize', () => this.syncTouchOrientation());
     document.addEventListener('pointerlockchange', () => {
       if (!this.started || this.mobileInputActive) return; this.paused = document.pointerLockElement !== this.canvas;
-      this.ui.setPaused(this.paused && !this.ui.isLabOpen() && !this.ui.isNoteOpen()); if (this.paused) this.input.clearKeyboard();
+      this.ui.setPaused(this.paused && !this.ui.isLabOpen() && !this.ui.isNoteOpen() && !this.ui.isInventoryOpen()); if (this.paused) this.input.clearKeyboard();
     });
-    this.canvas.addEventListener('click', () => { if (this.started && !this.mobileInputActive && !this.ui.isLabOpen() && !this.ui.isNoteOpen() && document.pointerLockElement !== this.canvas) this.requestPointerLock(); });
+    this.canvas.addEventListener('click', () => { if (this.started && !this.mobileInputActive && !this.ui.isLabOpen() && !this.ui.isNoteOpen() && !this.ui.isInventoryOpen() && document.pointerLockElement !== this.canvas) this.requestPointerLock(); });
   }
 
   private resumeInput(): void {
-    if (!this.started || this.ui.isLabOpen() || this.ui.isNoteOpen()) return;
+    if (!this.started || this.ui.isLabOpen() || this.ui.isNoteOpen() || this.ui.isInventoryOpen()) return;
     if (this.ui.prefersTouchControls()) {
       this.mobileInputActive = true; this.input.clearAll(); this.paused = !this.ui.isTouchLandscape(); this.ui.setPaused(false); return;
     }
     this.mobileInputActive = false; this.requestPointerLock();
   }
 
-  private requestPointerLock(): void { if (this.started && !this.mobileInputActive && !this.ui.isLabOpen() && !this.ui.isNoteOpen()) void this.canvas.requestPointerLock(); }
+  private requestPointerLock(): void { if (this.started && !this.mobileInputActive && !this.ui.isLabOpen() && !this.ui.isNoteOpen() && !this.ui.isInventoryOpen()) void this.canvas.requestPointerLock(); }
+
+  private handleInventoryVisibility(open: boolean): void {
+    if (!this.started) return;
+    if (this.drawing) this.finishMark();
+    this.input.clearAll();
+    if (open) {
+      this.paused = true;
+      this.ui.setPaused(false);
+      if (document.pointerLockElement === this.canvas) document.exitPointerLock();
+      return;
+    }
+    this.resumeInput();
+  }
 
   private toggleWorldLab(): void {
     if (this.drawing) this.finishMark();
@@ -266,11 +288,11 @@ export class ProjectNoclipGame {
   private pauseForFocusLoss(): void {
     if (!this.started) return;
     this.paused = true; this.input.clearAll();
-    if (!this.ui.isLabOpen() && !this.ui.isNoteOpen()) this.ui.setPaused(true);
+    if (!this.ui.isLabOpen() && !this.ui.isNoteOpen() && !this.ui.isInventoryOpen()) this.ui.setPaused(true);
   }
 
   private touchActionAllowed(): boolean {
-    return this.started && this.mobileInputActive && this.ui.isTouchLandscape() && !this.paused && !this.ui.isLabOpen() && !this.ui.isNoteOpen();
+    return this.started && this.mobileInputActive && this.ui.isTouchLandscape() && !this.paused && !this.ui.isLabOpen() && !this.ui.isNoteOpen() && !this.ui.isInventoryOpen();
   }
 
   private handleTouchMove(forward: number, strafe: number): void {
@@ -546,7 +568,30 @@ export class ProjectNoclipGame {
     try { this.save.inventory = addToInventory(this.save.inventory, visual.item, this.save.characterId); if (visual.lootNodeId) this.save.pickedLootNodeIds.push(visual.lootNodeId); this.save.droppedItems = this.save.droppedItems.filter((drop) => drop.item.instanceId !== visual.item.instanceId); this.renderer.removeInteraction(visual.id); this.save.selectedItemId ??= visual.item.instanceId; this.ui.toast(`Found: ${ITEM_DEFINITIONS[visual.item.definitionId].name}`); this.ui.updateInventory(this.save.inventory, this.save.selectedItemId); void this.persist(); }
     catch (error) { this.ui.toast(error instanceof Error ? error.message : 'Could not pick up item'); }
   }
-  private selectItem(instanceId: string): void { if (!this.save?.inventory.some((item) => item.instanceId === instanceId)) return; this.save.selectedItemId = instanceId; this.ui.updateInventory(this.save.inventory, instanceId); }
+
+  private selectItem(instanceId: string): void {
+    if (!this.save?.inventory.some((item) => item.instanceId === instanceId)) return;
+    this.save.selectedItemId = instanceId;
+    this.ui.updateInventory(this.save.inventory, instanceId);
+    void this.persist();
+  }
+
+  private moveInventoryItem(instanceId: string, targetIndex: number): void {
+    if (!this.save) return;
+    try {
+      const moved = moveInstance({
+        containerId: `character:${this.save.characterId}`,
+        owner: { type: 'character', id: this.save.characterId },
+        capacity: INVENTORY_CAPACITY,
+        items: this.save.inventory
+      }, instanceId, targetIndex);
+      this.save.inventory = moved.items;
+      this.ui.updateInventory(this.save.inventory, this.save.selectedItemId);
+      void this.persist();
+    } catch (error) {
+      this.ui.toast(error instanceof Error ? error.message : 'Could not reorder inventory');
+    }
+  }
 
   private useSelectedItem(): void {
     if (!this.save) return; const item = this.save.inventory.find((candidate) => candidate.instanceId === this.save?.selectedItemId); if (!item) { this.ui.toast('Nothing is selected.'); return; }

@@ -1,5 +1,6 @@
 import './mobile-controls.css';
 import './world-lab.css';
+import './inventory.css';
 import { ITEM_DEFINITIONS } from '../items/definitions.js';
 import type { ItemInstance } from '../items/types.js';
 import { CharacterCreator } from '../player-character/CharacterCreator.js';
@@ -7,6 +8,8 @@ import { clearObjectCatalogShowcase, filterObjectCatalog, OBJECT_CATALOG, OBJECT
 import type { TimelineSnapshot } from '../simulation/timeline.js';
 import { WORLD_VOCABULARY_CATEGORIES, worldCatalogByCategory } from '../world/catalog.js';
 import type { RegionId, WorldTuning } from '../world/types.js';
+import { InventorySurface } from './InventorySurface.js';
+import { inventoryItemKey, presentInventoryItem } from './inventoryPresentation.js';
 
 function worldVocabularyMarkup(): string {
   const grouped = worldCatalogByCategory();
@@ -25,6 +28,8 @@ export interface UIHandlers {
   onReset(): void;
   onResume(): void;
   onSelectItem(instanceId: string): void;
+  onMoveItem(instanceId: string, targetIndex: number): void;
+  onInventoryVisibilityChange(open: boolean): void;
   onTuningChange(patch: Partial<WorldTuning>): void;
   onSeedChange(seed: string): void;
   onSimulateStarter(): void;
@@ -55,6 +60,7 @@ export class GameUI {
   private watch!: HTMLElement;
   private interaction!: HTMLElement;
   private inventory!: HTMLElement;
+  private inventorySurface?: InventorySurface;
   private hydrationFill!: HTMLElement;
   private batteryFill!: HTMLElement;
   private pause!: HTMLElement;
@@ -91,8 +97,8 @@ export class GameUI {
             <label>World seed<input data-ui="seed" maxlength="48" value="threshold-001" /></label>
             <button class="primary" data-action="new">New Game</button>
             <button data-action="continue">Continue saved journey</button>
-            <small class="desktop-help">WASD move · Shift sprint · E interact · F use · G drop · M marker · &#96; World Lab</small>
-            <small class="touch-help">Landscape touch: Move · hold Sprint · drag Look · Marker · Interact / Use · Lab</small>
+            <small class="desktop-help">WASD move · Shift sprint · E interact · F use · G drop · M marker · I inventory · &#96; World Lab</small>
+            <small class="touch-help">Landscape touch: Move · hold Sprint · drag Look · Inventory · Marker · Interact / Use · Lab</small>
           </div>
         </div>
       </section>
@@ -107,7 +113,7 @@ export class GameUI {
         <div class="inventory" data-ui="inventory"></div>
         <div class="toast-stack" data-ui="toasts"></div>
         <div class="marker-mode" data-ui="marker-mode"><span class="desktop-marker-instruction">MARKER READY — hold primary button while looking at a nearby wall</span><span class="touch-marker-instruction">MARKER READY — drag the LOOK area while aiming at a nearby wall</span></div>
-        <div class="help">E interact · F use · G drop · M marker · &#96; World Lab · Esc pause</div>
+        <div class="help">E interact · F use · G drop · M marker · I inventory · &#96; World Lab · Esc pause</div>
         <div class="touch-controls" data-ui="touch-controls" aria-label="Touch gameplay controls">
           <div class="touch-move" data-touch="move" aria-label="Movement control"><div class="touch-stick" data-touch="stick"></div><span>Move</span></div>
           <div class="touch-look" data-touch="look" aria-label="Camera look and marker drawing area"><span>Look</span></div>
@@ -286,6 +292,11 @@ export class GameUI {
     this.required<HTMLInputElement>('[data-lab="bypass"]').addEventListener('change', (event) => this.handlers.onTuningChange({ gateBypass: (event.target as HTMLInputElement).checked }));
     this.required<HTMLInputElement>('[data-lab="audio-monitor"]').addEventListener('change', (event) => this.handlers.onTuningChange({ labAudioMonitor: (event.target as HTMLInputElement).checked }));
     this.installTouchControls();
+    this.inventorySurface = new InventorySurface(this.root, {
+      onSelect: (instanceId) => this.handlers.onSelectItem(instanceId),
+      onMove: (instanceId, targetIndex) => this.handlers.onMoveItem(instanceId, targetIndex),
+      onVisibilityChange: (open) => this.handlers.onInventoryVisibilityChange(open)
+    });
   }
 
   private installTouchControls(): void {
@@ -403,6 +414,9 @@ export class GameUI {
   setContinueAvailable(available: boolean): void { this.continueButton.disabled = !available; }
   showGame(): void { this.characterCreator.hide(); this.title.hidden = true; this.hud.hidden = false; }
   setPaused(paused: boolean): void { this.pause.classList.toggle('visible', paused); }
+  toggleInventory(): boolean { return this.inventorySurface?.toggle() ?? false; }
+  closeInventory(): void { this.inventorySurface?.close(); }
+  isInventoryOpen(): boolean { return this.inventorySurface?.isOpen() ?? false; }
   toggleLab(): boolean {
     const open = !this.lab.classList.contains('visible');
     this.lab.classList.toggle('visible', open);
@@ -446,21 +460,29 @@ export class GameUI {
   }
 
   updateInventory(items: readonly ItemInstance[], selectedItemId?: string): void {
-    this.inventory.innerHTML = '';
+    this.inventory.replaceChildren();
     for (let index = 0; index < 6; index += 1) {
       const item = items[index];
       const button = document.createElement('button');
+      button.type = 'button';
       button.className = `slot${item?.instanceId === selectedItemId ? ' selected' : ''}${item ? '' : ' empty'}`;
       if (item) {
-        const definition = ITEM_DEFINITIONS[item.definitionId];
-        const state = item.charge === undefined ? `Condition ${Math.round(item.condition * 100)}%` : `Charge ${Math.round(item.charge * 100)}%`;
-        const strong = document.createElement('strong'); strong.textContent = `${index + 1}. ${definition.name}`;
-        const small = document.createElement('small'); small.textContent = state;
-        button.append(strong, small); button.title = definition.description;
+        const presentation = presentInventoryItem(item, selectedItemId);
+        button.dataset.itemInstanceId = inventoryItemKey(item);
+        button.dataset.uiKey = inventoryItemKey(item);
+        button.setAttribute('aria-pressed', String(item.instanceId === selectedItemId));
+        button.setAttribute('aria-label', `${index + 1}. ${presentation.definition.name}, ${presentation.quantityLabel}, ${presentation.primaryState}`);
+        const line = document.createElement('span'); line.className = 'slot-line';
+        const strong = document.createElement('strong'); strong.textContent = `${index + 1}. ${presentation.definition.name}`;
+        line.appendChild(strong);
+        if (item.quantity > 1) { const quantity = document.createElement('span'); quantity.className = 'slot-quantity'; quantity.textContent = presentation.quantityLabel; line.appendChild(quantity); }
+        const small = document.createElement('small'); small.textContent = presentation.primaryState;
+        button.append(line, small); button.title = presentation.definition.description;
         button.addEventListener('click', () => this.handlers.onSelectItem(item.instanceId));
-      } else button.textContent = `${index + 1}. Empty`;
+      } else { button.textContent = `${index + 1}. Empty`; button.dataset.uiKey = `empty:${index}`; button.disabled = true; }
       this.inventory.appendChild(button);
     }
+    this.inventorySurface?.update(items, selectedItemId);
   }
 
   updateMetrics(text: string): void { this.metrics.textContent = text; }

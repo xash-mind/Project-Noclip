@@ -58,6 +58,8 @@ export interface VisibilityParticipationDiagnostics {
   skippedUpdates: number;
   invalidations: number;
   updateRateHz: number;
+  topologyBuilds: number;
+  topologyCacheHits: number;
   topologyBuildMs: number;
   lastTopologyBuildMs: number;
   maxTopologyBuildMs: number;
@@ -99,6 +101,9 @@ interface RuntimeState {
   lastCellZ?: number;
   lastLoadRadius?: number;
   predictiveSuppressedUntilMs: number;
+  topologyCacheKey?: string;
+  topologyCache?: PreparedVisibilityTopology;
+  lastPublishedAtMs: number;
   diagnostics: VisibilityParticipationDiagnostics;
 }
 
@@ -116,6 +121,7 @@ function emptyMf1Counts(): Record<RendererParticipationState, number> {
 function createDiagnostics(): VisibilityParticipationDiagnostics {
   return {
     updates: 0, skippedUpdates: 0, invalidations: 0, updateRateHz: 0,
+    topologyBuilds: 0, topologyCacheHits: 0,
     topologyBuildMs: 0, lastTopologyBuildMs: 0, maxTopologyBuildMs: 0,
     snapshotMs: 0, lastSnapshotMs: 0, maxSnapshotMs: 0,
     participationDecisionMs: 0, lastParticipationDecisionMs: 0, maxParticipationDecisionMs: 0,
@@ -131,10 +137,31 @@ function stateFor(game: VisibilityGame): RuntimeState {
   if (existing) return existing;
   const created: RuntimeState = {
     prior: new Map(), lastUpdateAtMs: Number.NEGATIVE_INFINITY, firstUpdateAtMs: 0,
-    predictiveSuppressedUntilMs: Number.NEGATIVE_INFINITY, diagnostics: createDiagnostics()
+    predictiveSuppressedUntilMs: Number.NEGATIVE_INFINITY,
+    lastPublishedAtMs: Number.NEGATIVE_INFINITY,
+    diagnostics: createDiagnostics()
   };
   runtimeStates.set(game, created);
   return created;
+}
+
+function stableRuntimeKey(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? String(value);
+  if (Array.isArray(value)) return `[${value.map((entry) => stableRuntimeKey(entry)).join(',')}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableRuntimeKey(record[key])}`).join(',')}}`;
+}
+
+function topologyKey(
+  seed: string,
+  worldDay: number,
+  exposure: number,
+  tuning: WorldTuning,
+  centerX: number,
+  centerZ: number,
+  loadRadius: number
+): string {
+  return `${seed}|${worldDay}|${exposure}|${centerX}:${centerZ}:${loadRadius}|${stableRuntimeKey(tuning)}`;
 }
 
 function legacyCoordinates(centerX: number, centerZ: number, radius: number): Array<{ x: number; z: number }> {
@@ -228,11 +255,16 @@ function updatePrior(state: RuntimeState, decision: VisibilityParticipationDecis
   state.prior = next;
 }
 
-function publish(game: VisibilityGame): void {
+function publish(game: VisibilityGame, force = false): void {
   if (typeof window === 'undefined') return;
-  const diagnostics = stateFor(game).diagnostics;
+  const state = stateFor(game);
+  const timestamp = now();
+  // Diagnostics are development evidence, not gameplay authority. Avoid cloning
+  // several large Cell/category arrays on every render-frame skip.
+  if (!force && timestamp - state.lastPublishedAtMs < 250) return;
+  state.lastPublishedAtMs = timestamp;
   (window as unknown as { __noclipVisibilityParticipationDiagnostics?: VisibilityParticipationDiagnostics })
-    .__noclipVisibilityParticipationDiagnostics = structuredClone(diagnostics);
+    .__noclipVisibilityParticipationDiagnostics = structuredClone(state.diagnostics);
 }
 
 function clearVisibilityAuthority(game: VisibilityGame, renderer: WorldRenderer): void {
@@ -243,6 +275,8 @@ function clearVisibilityAuthority(game: VisibilityGame, renderer: WorldRenderer)
   state.lastCellX = undefined;
   state.lastCellZ = undefined;
   state.lastLoadRadius = undefined;
+  state.topologyCacheKey = undefined;
+  state.topologyCache = undefined;
 }
 
 function applyVisibilityParticipation(game: VisibilityGame, force = false): void {
@@ -289,15 +323,33 @@ function applyVisibilityParticipation(game: VisibilityGame, force = false): void
   const worldDay = gameState.tuning.worldDayOverride ?? calculateWorldDay(Date.now());
   const exposure = gameState.tuning.exposureOverride ?? calculateExposureDay(gameState.save.exposure);
 
-  const topologyStart = now();
-  const topology = buildGen3VisibilityTopology({
-    seed: gameState.save.seed,
+  const nextTopologyKey = topologyKey(
+    gameState.save.seed,
     worldDay,
     exposure,
-    tuning: gameState.tuning,
-    cells: coordinates
-  });
-  const topologyMs = now() - topologyStart;
+    gameState.tuning,
+    gameState.currentCellX,
+    gameState.currentCellZ,
+    loadRadius
+  );
+  let topology = runtime.topologyCache;
+  let topologyMs = 0;
+  if (!topology || runtime.topologyCacheKey !== nextTopologyKey) {
+    const topologyStart = now();
+    topology = buildGen3VisibilityTopology({
+      seed: gameState.save.seed,
+      worldDay,
+      exposure,
+      tuning: gameState.tuning,
+      cells: coordinates
+    });
+    topologyMs = now() - topologyStart;
+    runtime.topologyCache = topology;
+    runtime.topologyCacheKey = nextTopologyKey;
+    runtime.diagnostics.topologyBuilds += 1;
+  } else {
+    runtime.diagnostics.topologyCacheHits += 1;
+  }
 
   const snapshotStart = now();
   // Intentionally omit camera direction/FOV. Topology decides architectural
@@ -399,7 +451,7 @@ function applyVisibilityParticipation(game: VisibilityGame, force = false): void
   runtime.lastCellX = gameState.currentCellX;
   runtime.lastCellZ = gameState.currentCellZ;
   runtime.lastLoadRadius = loadRadius;
-  publish(game);
+  publish(game, true);
 }
 
 export function visibilityParticipationDiagnostics(game: VisibilityGame): VisibilityParticipationDiagnostics {
