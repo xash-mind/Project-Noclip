@@ -13,7 +13,7 @@ const surfaceSource = await readFile(new URL('../src/renderer/level0SurfacePrese
 const casingSource = await readFile(new URL('../src/renderer/ordinaryCasingMaterialPresentation.ts', import.meta.url), 'utf8');
 const regionSource = await readFile(new URL('../src/renderer/level0RegionPresentation.ts', import.meta.url), 'utf8');
 const wallSource = await readFile(new URL('../src/renderer/wallJunctionPresentation.ts', import.meta.url), 'utf8');
-const archSource = await readFile(new URL('../src/renderer/archDividerRuntimeCorrection.ts', import.meta.url), 'utf8');
+const collisionSource = await readFile(new URL('../src/renderer/archDividerCollision.ts', import.meta.url), 'utf8');
 const fixtureSource = await readFile(new URL('../src/renderer/fixtureLighting.ts', import.meta.url), 'utf8');
 const finalMaterialSource = await readFile(new URL('../src/renderer/finalLevel0MaterialPresentation.ts', import.meta.url), 'utf8');
 const runtimeSource = await readFile(new URL('../src/renderer/runtimePerformance.ts', import.meta.url), 'utf8');
@@ -24,7 +24,7 @@ const retiredCellWrapperSources = [
   casingSource,
   regionSource,
   wallSource,
-  archSource,
+  collisionSource,
   fixtureSource,
   finalMaterialSource,
   runtimeSource,
@@ -39,8 +39,7 @@ test('one explicit renderer lifecycle owns the accepted synchronous Cell load or
     'level0-region-presentation',
     'schedule-nearby-arch-presentation',
     'wall-junction-presentation',
-    'arch-divider-runtime-correction',
-    'schedule-nearby-arch-collision-reconciliation',
+    'realize-canonical-arch-collision',
     'fixture-lighting-attach',
     'static-batching-dirty',
     'runtime-derived-state-register',
@@ -53,8 +52,8 @@ test('one explicit renderer lifecycle owns the accepted synchronous Cell load or
   assert.ok(lifecycleSource.includes('applyLevel0RegionPresentation(this, visual)'));
   assert.ok(lifecycleSource.includes('scheduleNearbyArchPresentation(this, descriptor)'));
   assert.ok(lifecycleSource.includes('applyWallJunctionPresentation(visual)'));
-  assert.ok(lifecycleSource.includes('applyArchDividerRuntimeCorrection(this, visual)'));
-  assert.ok(lifecycleSource.includes('scheduleNearbyArchCollisionReconciliation(this, descriptor)'));
+  assert.ok(lifecycleSource.includes('realizeNearbyArchCollision(this, descriptor)'));
+  assert.ok(lifecycleSource.includes('syncAlreadyIndexedArchNeighbors(this, affectedArchCells, descriptor.id, alreadyLoaded)'));
   assert.ok(lifecycleSource.includes('attachFixtureLights(this, visual)'));
   assert.ok(lifecycleSource.includes('markStaticWorldBatchingDirty()'));
   assert.ok(lifecycleSource.includes('registerRuntimeCellState(this, descriptor)'));
@@ -62,21 +61,22 @@ test('one explicit renderer lifecycle owns the accepted synchronous Cell load or
   assert.ok(lifecycleSource.includes('scheduleFinalLevel0MaterialsAfterArchReconstruction(this, descriptor)'));
 });
 
-test('one explicit renderer lifecycle owns unload cleanup before and after base entity destruction', () => {
+test('one explicit renderer lifecycle owns unload cleanup and canonical neighbor collision refresh', () => {
   assert.deepEqual([...RENDERER_CELL_UNLOAD_ORDER], [
     'runtime-derived-state-unregister',
     'fixture-lighting-detach',
     'base-cell-destroy',
     'schedule-nearby-arch-presentation',
-    'schedule-nearby-arch-collision-reconciliation',
+    'realize-neighbor-arch-collision',
     'static-batching-dirty'
   ]);
   const unindex = lifecycleSource.indexOf('unregisterRuntimeCellState(this, cellId)');
   const fixture = lifecycleSource.indexOf('detachCellFixtures(this, cellId, descriptor)');
   const base = lifecycleSource.indexOf('baseUnloadCell.call(this, cellId)');
   const archPresentation = lifecycleSource.indexOf('scheduleNearbyArchPresentation(this, descriptor)', base);
-  const collision = lifecycleSource.indexOf('scheduleNearbyArchCollisionReconciliation(this, descriptor)', base);
-  assert.ok(unindex >= 0 && fixture > unindex && base > fixture && archPresentation > base && collision > archPresentation);
+  const collision = lifecycleSource.indexOf('realizeNearbyArchCollision(this, descriptor)', base);
+  const refresh = lifecycleSource.indexOf('refreshRuntimeCellCollisionState(this, affectedCellId)', collision);
+  assert.ok(unindex >= 0 && fixture > unindex && base > fixture && archPresentation > base && collision > archPresentation && refresh > collision);
 });
 
 test('retired participants no longer stack WorldRenderer Cell prototype wrappers', () => {
@@ -101,12 +101,12 @@ test('StaticWorldBatching owns batching only and is dirtied explicitly by the li
   assert.ok(batchingSource.includes('window.setInterval(reconcile, RECONCILE_INTERVAL_MS)'));
 });
 
-test('accepted deferred Region/A-A1/final-material boundaries remain explicit Wave 1 debt', () => {
+test('Wave 2 removes only A-A1 collision deferral while preserving visible Arch and final-material deferred boundaries', () => {
   assert.ok(regionSource.includes('queueMicrotask(() =>'));
-  assert.ok(archSource.includes('queueMicrotask(() =>'));
+  assert.equal(collisionSource.includes('queueMicrotask'), false);
   assert.ok(finalMaterialSource.includes('queueMicrotask(() => queueMicrotask(() =>'));
   assert.ok(lifecycleSource.includes('scheduleNearbyArchPresentation(this, descriptor)'));
-  assert.ok(lifecycleSource.includes('scheduleNearbyArchCollisionReconciliation(this, descriptor)'));
+  assert.equal(lifecycleSource.includes('scheduleNearbyArchCollisionReconciliation'), false);
   assert.ok(lifecycleSource.includes('scheduleFinalLevel0MaterialsAfterArchReconstruction(this, descriptor)'));
 });
 
