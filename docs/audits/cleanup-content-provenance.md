@@ -1,39 +1,39 @@
 # Executive Summary
 
-This is a factual provenance and external-source-separation audit of Project Noclip at:
+Audit target:
 
-- Base ref: `preview/cleanup-governance-baseline`
-- Base SHA: `741414a0f9606f9fb9af06f85b6c601c275e266b`
-- Version: `0.3.0-dev.9.8`
-- Audit branch: `agent/cleanup-audit-provenance`
+- base: `preview/cleanup-governance-baseline`
+- base SHA: `741414a0f9606f9fb9af06f85b6c601c275e266b`
+- VERSION: `0.3.0-dev.9.8`
+- branch: `agent/cleanup-audit-provenance`
 
-This document is not legal advice. It records repository evidence, source-page statements, explicit media/license metadata where available, and unresolved questions. It does not infer that public visibility grants reuse rights, that a page license necessarily governs every attachment, that modification cures an unresolved rights chain, or that one source/canon automatically defines Project Noclip world truth.
+This is factual provenance hygiene, not legal advice. It does not infer that public visibility grants reuse rights, that a wiki page license automatically governs every attachment, that modification removes an unresolved rights question, or that one Backrooms source/canon automatically defines Project Noclip world truth.
 
-The repository's permanent provenance model is directionally correct and should be preserved. The strongest distinction is:
+The repository's permanent provenance model is sound. The key separation is:
 
 ```text
-BACKROOMS / EXTERNAL CONTENT IDENTITY
+EXTERNAL SOURCE FACT
 !=
-PROJECT NOCLIP ACCEPTANCE / INTERPRETATION
+PROJECT NOCLIP INTERPRETATION / ACCEPTANCE
 !=
-PROJECT NOCLIP SOFTWARE / ENGINEERING IMPLEMENTATION
+PROJECT-NOCLIP-ORIGINAL IMPLEMENTATION
 ```
 
-For current Level 0, the recognizable source-derived layer includes the ordinary yellow-wallpaper / damp-carpet / suspended-ceiling / fluorescent-buzz identity, Pillar, Arch, Hole, Blackout and Red Rooms source concepts, plus the externally established item name/concept `Almond Water`. The current procedural geography, deterministic Fields, Region model, semantic topology, Generation 3 versioning, visibility architecture, Carver implementation, NAL/Studio authoring architecture, player-character identity model, Item Instance identity model, Inventory domain and renderer/runtime techniques are Project-Noclip-original engineering even when they implement source-derived content.
+The strongest source-derived layer is recognizable Level 0 content identity: ordinary yellow/pale wallpaper, damp carpet, suspended ceiling, fluorescent fixtures/buzz, Pillars, Arches, Holes, Blackout and Red Rooms. `Almond Water` is also an externally established Backrooms item concept/name. By contrast, Generation 3, deterministic Fields, Region affinity, semantic topology, the Carver pass, Visibility Snapshot/participation, Journey persistence/versioning, PAU/NAL/Studio, Character Profile identity, Item Instance identity, Inventory behavior and renderer/runtime techniques are Project-Noclip-original engineering even where they implement source-derived content.
 
-The largest provenance risk is not the code. It is the small committed media set. The repository contains three source wallpaper WebP derivatives under `assets/source/images/`. Their metadata and history establish that they were user-provided and prepared as game-ready derivatives, but do not establish the underlying source identity, creator, original license/permission chain, attribution requirement, or whether the asserted project-use authorization is sufficient for repository distribution. Their current safe documentation position remains `UNKNOWN / REVIEW REQUIRED`.
+The largest unresolved provenance risk is the three committed M-W1 source wallpaper WebPs. Repository metadata/history establishes that they were user-provided and prepared as derivatives, but does not establish the underlying source(s), creator(s), original license/permission chain, attribution obligations or redistribution scope. They remain `UNKNOWN / REVIEW REQUIRED`.
 
-The audited tree contains no committed source audio, meshes, fonts, videos or reference screenshots. Current ambient sound is procedurally synthesized with Web Audio rather than copied from an external recording. Therefore the *fluorescent-buzz identity* is source-derived, while the waveform/tuning/runtime implementation is Project-Noclip-original.
+The audited tree contains no committed source audio, meshes, fonts, videos or reference screenshots. Current ambience is procedurally synthesized in `src/audio/Ambience.ts`; therefore fluorescent-buzz *identity* is source-derived while the actual waveform/tuning/runtime implementation is Project-Noclip-original and contains no copied audio recording.
 
-External-source verification also produced a useful distinction between page-level and file-level licensing. The current Backrooms Wiki Level 0 page states CC BY-SA 3.0 for page text, while its license box gives separate media entries. The baseline photo and Arch photo are explicitly credited to Bob Mazza under CC0 1.0; the Pillar and Blackout images are explicitly credited to Alfarex under CC BY-SA 4.0. The current license box does not safely resolve the Hole `/4` attachment because one displayed media entry named `4` links to `/1`, and it does not show a file-specific entry for the Red Rooms `/6` image. Those gaps must remain `UNKNOWN / REVIEW REQUIRED` rather than inheriting page-level terms by assumption.
+External-source inspection also confirms that page-level and file-level terms must stay separate. The retrieved Backrooms Wiki Level 0 license box states CC BY-SA 3.0 for page text, while listing separate media terms: baseline and Arch photographs are credited to Bob Mazza under CC0 1.0; Pillar `/3` and Blackout `/5` are credited to Alfarex under CC BY-SA 4.0. Hole `/4` is not safely resolved because the displayed media entry named `4` links to `/1`, and no file-specific `/6` Red Rooms entry was visible in the retrieved license box. Those media questions remain `UNKNOWN / REVIEW REQUIRED`.
 
-No substantial copied external prose was found in the audited current world/provenance/reference surfaces or implementation. Current reference notes use short factual paraphrases and extracted observations. Some phrasing is close to source terminology because it names factual characteristics; those passages should continue to be treated as concise evidence notes rather than a license to import source prose wholesale.
+Source-page revision metadata was not treated as a stable provenance fact because separate retrieval snapshots exposed drift. Later canonicalization should record the exact access date/revision alongside any evidence promoted from a changing external page.
 
-No product decision is made here. In particular this audit does not decide which Backrooms canon Project Noclip should adopt, whether any disputed content should be removed, whether a Region should visually change, or whether Project Noclip should stop using a source-derived concept.
+No substantial copied external prose was found in the audited current world/provenance/reference surfaces or relevant implementation. No product/canon/removal decision is made here.
 
 # Provenance Model Validation
 
-The permanent classes remain exactly:
+Use exactly the permanent classes already established by governance:
 
 - `SOURCE-DERIVED`
 - `INTERPRETATION`
@@ -41,632 +41,617 @@ The permanent classes remain exactly:
 - `REAL-WORLD-INSPIRATION`
 - `UNKNOWN / REVIEW REQUIRED`
 
-The current governance model correctly separates evidence layers:
+Current ownership boundaries are correct:
 
-1. `docs/references/**` owns raw source/evidence history and fidelity extraction.
-2. `docs/CONTENT_PROVENANCE.md` owns the concept-level provenance ledger.
+1. `docs/references/**` owns raw source/evidence history and fidelity observations.
+2. `docs/CONTENT_PROVENANCE.md` owns the canonical concept ledger.
 3. `WORLD.md` owns accepted Project Noclip world truth.
-4. `docs/VISION.md` owns product/creative direction.
-5. Runtime and presentation code own implementation, not external canon.
+4. `docs/VISION.md` owns creative/product direction.
+5. Runtime/presentation code owns implementation, not external canon.
 
-This audit found no reason to invent another top-level class. Several concepts require more than one existing class because different layers of the same player-facing result have different provenance. Example:
-
-```text
-SOURCE-DERIVED
-  Level 0 has yellow patterned wall identity and fluorescent buzz.
-
-INTERPRETATION
-  Project Noclip chooses continuous Region-aware procedural presentation
-  and deterministic variation to express that identity.
-
-PROJECT-NOCLIP-ORIGINAL
-  Generation 3 fields/topology, wallpaper resolver, UV phase rules,
-  PAU/NAL, Studio, renderer integration and performance architecture.
-```
-
-The principal model weakness is completeness, not taxonomy. Current content and engineering have grown faster than the canonical concept ledger. Synthesis should therefore extend the ledger rather than replace its structure.
+The taxonomy does not need another top-level class. The gap is ledger completeness. Mixed player-facing concepts should use multiple existing classes for their different layers rather than collapsing content identity, project interpretation and software implementation into one provenance claim.
 
 # Current Concept Matrix
 
-## CONCEPT: Level 0 / Ordinary Level 0
+## Level 0 / Ordinary
 
 **CONCEPT:** Level 0 / Ordinary Level 0
 
 **CLASSIFICATION:** `SOURCE-DERIVED`; `INTERPRETATION`; `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** The audited Backrooms Wiki Level 0 page presents a yellow-wallpaper, moist-carpet, suspended-ceiling, fluorescent-lit labyrinthine environment and describes the ordinary fluorescent buzz. The baseline photograph is externally sourced.
+**EXTERNAL SOURCE FACT:** The recorded Level 0 source presents yellow/pale wallpaper, moist carpet, suspended/drop ceiling, fluorescent lighting/buzz and labyrinthine office/retail-like space.
 
-**PROJECT ACCEPTED INTERPRETATION:** Ordinary Level 0 is the shared continuous substrate from which current Regions and layered Conditions/Carvers emerge. The project deliberately does not reproduce every source-page anomaly or spatial claim literally.
+**PROJECT ACCEPTED INTERPRETATION:** Ordinary Level 0 is the continuous substrate under current Regions/Conditions/Carvers. Source claims such as arbitrary shifting, Isolation Effect or anomalous voices are not automatically Project world truth.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Generation 3 connectivity-first topology, deterministic architecture solver, Field sampling, world-space semantic IDs, Cell-independent Region continuity, save/version compatibility, renderer/presentation ownership and performance implementation.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Generation 3 topology/solver, deterministic semantic addresses, continuous Fields/Regions, save/version rules, renderer ownership and performance implementation.
 
-**SOURCE URLS:** `https://backrooms-wiki.wikidot.com/level-0`; baseline media recorded in `REF-L0-001`.
+**SOURCE URLS:** `https://backrooms-wiki.wikidot.com/level-0`
 
-**REFERENCE PACK:** `docs/references/level-0/REFERENCES.md` — `REF-L0-001`.
+**REFERENCE PACK:** `REF-L0-001`
 
-**IMPLEMENTATION OWNER:** `src/world/gen3.ts`, `src/world/fields.ts`, `src/world/gen3SpaceTopology*.ts`, `src/world/gen3Architecture*.ts`, renderer/presentation owners from `docs/CODE_MAP.md`.
+**IMPLEMENTATION OWNER:** `src/world/gen3.ts`, `src/world/fields.ts`, `src/world/gen3SpaceTopology*.ts`, `src/world/gen3Architecture*.ts`, renderer/presentation owners.
 
-**MEDIA COPIED INTO REPO?** No baseline reference photograph was found as a committed repository copy.
+**MEDIA COPIED INTO REPO?** NO for the baseline photograph.
 
-**LICENSE/PERMISSION EVIDENCE:** Current source page media box explicitly credits the baseline image to Bob Mazza under CC0 1.0. Page text separately states CC BY-SA 3.0. These are recorded source statements; no project-wide licensing conclusion is made.
+**LICENSE/PERMISSION EVIDENCE:** Retrieved media box credits the baseline image to Bob Mazza under CC0 1.0; page text separately states CC BY-SA 3.0.
 
-**ATTRIBUTION:** Source identity should remain recorded even where a media license does not require attribution. Page-text attribution requirements should be tracked separately from media terms.
+**ATTRIBUTION:** Keep source/creator records separate for page text and media; no project-wide license conclusion here.
 
-**UNKNOWN QUESTIONS:** Scope/applicability of source-page terms to downstream Project Noclip content is a separate rights question; see `PROV-LEGAL-005`.
+**UNKNOWN QUESTIONS:** Scope/applicability of source-site terms to Project Noclip distribution; see `PROV-LEGAL-005`.
 
-**RECOMMENDED LEDGER UPDATE:** Retain the source/interpretation/original split; add file-specific baseline media credit/license evidence and current source-page revision/access evidence.
+**RECOMMENDED LEDGER UPDATE:** Preserve the three-layer split and add current file-specific baseline media evidence plus evidence-capture date/revision.
 
-## CONCEPT: Pillar Field
+## Pillar Field
 
 **CONCEPT:** Pillar Field
 
 **CLASSIFICATION:** `SOURCE-DERIVED`; `INTERPRETATION`; `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** The source page recognizes a Pillar Variation with rectangular wallpaper-clad supports, grid/lattice characteristics and shallower/less-moist carpet; the source text also describes instability/path changes not currently adopted literally.
+**EXTERNAL SOURCE FACT:** Pillar Variation is source-supported, including rectangular wallpaper-clad pillars, grid/lattice character and shallower/less-moist carpet; the source also reports path shifting.
 
-**PROJECT ACCEPTED INTERPRETATION:** Project Noclip makes Pillar Field a continuous Region modifier of Ordinary Level 0, preserves current Euclidean deterministic geometry and expresses deeper pillar affinity without treating a streaming Cell as a district.
+**PROJECT ACCEPTED INTERPRETATION:** A continuous Region modifier of Ordinary Level 0 with deterministic Euclidean geometry; source-described live path shifting is not adopted literally.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Region affinity/depth implementation, deterministic lattice sampling, exact rarity/density blending, solver integration, compatibility/save behavior and rendering.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Region affinity/depth, deterministic lattice sampling, density/rarity blending, route-clearance and topology integration.
 
-**SOURCE URLS:** `https://backrooms-wiki.wikidot.com/level-0`; attachment `/3` recorded in `REF-L0-002`.
+**SOURCE URLS:** Level 0 page; attachment `/3`.
 
-**REFERENCE PACK:** `REF-L0-002`.
+**REFERENCE PACK:** `REF-L0-002`
 
 **IMPLEMENTATION OWNER:** `src/world/fields.ts`, `src/world/gen3.ts`, `src/world/gen3ArchitectureCore.ts`, `src/world/gen3SpaceTopologyBuild.ts`.
 
-**MEDIA COPIED INTO REPO?** No.
+**MEDIA COPIED INTO REPO?** NO.
 
-**LICENSE/PERMISSION EVIDENCE:** Current Level 0 page media box explicitly lists media name `3`, creator Alfarex, CC BY-SA 4.0, with source link `/3`.
+**LICENSE/PERMISSION EVIDENCE:** Retrieved file-specific media entry: `3`, Alfarex, CC BY-SA 4.0, source `/3`.
 
-**ATTRIBUTION:** The source page states an attribution-bearing license for this attachment. Exact fulfillment belongs to later distribution/licensing review, not this audit.
+**ATTRIBUTION:** Attribution-bearing media terms are explicitly stated by the source; downstream fulfillment is outside this audit.
 
-**UNKNOWN QUESTIONS:** Whether older repo wording that referenced a more general CC BY-SA 3.0 render credit should be superseded by the current file-specific CC BY-SA 4.0 evidence.
+**UNKNOWN QUESTIONS:** Whether older repository wording using a general CC BY-SA 3.0 render credit should be superseded by this file-specific evidence.
 
-**RECOMMENDED LEDGER UPDATE:** Record current file-specific creator/license evidence for `/3`; preserve source-described path-shift behavior as source fact but not implemented Project canon.
+**RECOMMENDED LEDGER UPDATE:** Record exact `/3` creator/license evidence and keep source-described shifting separate from Project acceptance.
 
-## CONCEPT: P-A1 — Pillar Pier
+## P-A1
 
 **CONCEPT:** P-A1 — Pillar Pier
 
 **CLASSIFICATION:** `SOURCE-DERIVED`; `INTERPRETATION`; `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** Rectangular floor-to-ceiling wallpaper-clad pillar/pier identity and repeated pillar spacing are source-supported.
+**EXTERNAL SOURCE FACT:** Rectangular floor-to-ceiling wallpaper-clad supports and repeated pillar spacing are source-supported.
 
-**PROJECT ACCEPTED INTERPRETATION:** P-A1 is the named Region-owned architecture pattern for Project Noclip's Pillar Field rather than a claim that the external source defines this exact semantic architecture taxonomy.
+**PROJECT ACCEPTED INTERPRETATION:** P-A1 is Project Noclip's named Region-owned architecture pattern for that direction.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Stable pattern ID, 7.2 m lattice, exact Project dimensions, depth-based expression, route-clearance law, generation address and renderer ownership.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Stable P-A1 ID, exact dimensions/lattice, depth expression, deterministic generation address and renderer ownership.
 
-**SOURCE URLS:** Level 0 page and `/3` attachment.
+**SOURCE URLS:** Level 0 page; `/3`.
 
-**REFERENCE PACK:** `REF-L0-002`.
+**REFERENCE PACK:** `REF-L0-002`
 
 **IMPLEMENTATION OWNER:** `src/world/gen3ArchitectureCore.ts`, `src/world/gen3SpaceTopologyBuild.ts`, `src/renderer/level0SurfacePresentation.ts`.
 
-**MEDIA COPIED INTO REPO?** No.
+**MEDIA COPIED INTO REPO?** NO.
 
-**LICENSE/PERMISSION EVIDENCE:** Same external media evidence as Pillar Field; no source media copied into P-A1 implementation.
+**LICENSE/PERMISSION EVIDENCE:** Same external `/3` evidence as Pillar Field; no source image is embedded in P-A1 code.
 
-**ATTRIBUTION:** See Pillar Field evidence.
+**ATTRIBUTION:** See Pillar Field.
 
-**UNKNOWN QUESTIONS:** None material to the software pattern itself; future source-media use remains asset-specific.
+**UNKNOWN QUESTIONS:** None material to the software pattern itself.
 
-**RECOMMENDED LEDGER UPDATE:** Explicitly separate source-derived pier visual identity from Project-original P-A1 semantic ID, dimensions and deterministic implementation.
+**RECOMMENDED LEDGER UPDATE:** Explicitly separate source pier identity from Project-original taxonomy/dimensions/solver.
 
-## CONCEPT: Arch Rooms
+## Arch Rooms
 
 **CONCEPT:** Arch Rooms
 
 **CLASSIFICATION:** `SOURCE-DERIVED`; `INTERPRETATION`; `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** Source evidence supports a pale Arch Variation with repeated arch-shaped openings in a continuous divider/wall, deeper/wetter carpet and unusual spatial stability.
+**EXTERNAL SOURCE FACT:** Source evidence supports pale archway sections, repeated openings, deeper/wetter carpet and comparatively stable spatial behavior.
 
-**PROJECT ACCEPTED INTERPRETATION:** Project Noclip models this as a continuous Arch Rooms Region modifier, keeps current geometry Euclidean/stable and treats the source image as a divider grammar rather than freestanding monuments.
+**PROJECT ACCEPTED INTERPRETATION:** A continuous Arch Rooms Region modifier; the visual is interpreted as a divider/wall grammar rather than freestanding monuments.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Region affinity/depth, topology integration, exact divider dimensions, bounded irregularity rules, termination logic, collision reconstruction and renderer implementation.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Region affinity/depth, exact divider dimensions, bounded irregularity/termination, topology/collision reconstruction and rendering.
 
-**SOURCE URLS:** `https://backrooms-wiki.wikidot.com/level-0`; Arch media `/2` recorded in `REF-L0-007`.
+**SOURCE URLS:** Level 0 page; attachment `/2`.
 
-**REFERENCE PACK:** `REF-L0-007`.
+**REFERENCE PACK:** `REF-L0-007`
 
-**IMPLEMENTATION OWNER:** `src/world/fields.ts`, `src/world/gen3SpaceTopologyDomain.ts`, `src/world/gen3SpaceTopologyBuild.ts`, `src/renderer/level0RegionPresentation.ts`, `src/renderer/archDividerRuntimeCorrection.ts`.
+**IMPLEMENTATION OWNER:** `src/world/fields.ts`, `src/world/gen3SpaceTopology*.ts`, `src/renderer/level0RegionPresentation.ts`, `src/renderer/archDividerRuntimeCorrection.ts`.
 
-**MEDIA COPIED INTO REPO?** No.
+**MEDIA COPIED INTO REPO?** NO.
 
-**LICENSE/PERMISSION EVIDENCE:** Current source page media box lists the Arch image as “Arches,” creator Bob Mazza, CC0 1.0, with an archive source link.
+**LICENSE/PERMISSION EVIDENCE:** Retrieved media box credits “Arches” to Bob Mazza under CC0 1.0 with an Archive source.
 
-**ATTRIBUTION:** Preserve creator/source recording even where the stated media license does not require attribution.
+**ATTRIBUTION:** Preserve creator/source record even where the stated media license does not require attribution.
 
-**UNKNOWN QUESTIONS:** No material file-level license ambiguity found for `/2` in the current source page; downstream project-license implications are outside this audit.
+**UNKNOWN QUESTIONS:** No material file-level ambiguity found for `/2`; downstream legal scope is separate.
 
-**RECOMMENDED LEDGER UPDATE:** Add the file-specific Bob Mazza / CC0 1.0 evidence; retain the existing warning that source identity does not prescribe exact Project divider dimensions or renderer construction.
+**RECOMMENDED LEDGER UPDATE:** Add Bob Mazza / CC0 1.0 file-specific evidence; retain interpretation warning.
 
-## CONCEPT: A-A1 — Arch Divider
+## A-A1
 
 **CONCEPT:** A-A1 — Arch Divider
 
 **CLASSIFICATION:** `SOURCE-DERIVED`; `INTERPRETATION`; `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** A continuous divider/wall with repeated arch-shaped openings is source-supported.
+**EXTERNAL SOURCE FACT:** A repeated arch-opening wall/divider identity is source-supported.
 
-**PROJECT ACCEPTED INTERPRETATION:** A-A1 is Project Noclip's semantic architecture pattern for expressing that source direction inside the Arch Rooms Region.
+**PROJECT ACCEPTED INTERPRETATION:** A-A1 is the semantic Project architecture pattern used to express that source direction.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** A-A1 stable ID and conceptual piece vocabulary, exact piers/header/curve/lower-panel/termination dimensions, topology ownership, continuity across Cells, collision correction and presentation reconstruction.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Stable ID, exact piers/header/curve/lower-panel/termination vocabulary, topology ownership, Cell continuity, collision and material reconstruction.
 
-**SOURCE URLS:** Level 0 page, `/2` attachment.
+**SOURCE URLS:** Level 0 page; `/2`.
 
-**REFERENCE PACK:** `REF-L0-007`.
+**REFERENCE PACK:** `REF-L0-007`
 
-**IMPLEMENTATION OWNER:** `src/world/gen3ArchitectureCore.ts`, `src/world/gen3SpaceTopologyBuild.ts`, `src/renderer/level0RegionPresentation.ts`, `src/renderer/archDividerRuntimeCorrection.ts`, `src/renderer/finalLevel0MaterialPresentation.ts`.
+**IMPLEMENTATION OWNER:** Gen3 architecture/topology plus Arch renderer owners.
 
-**MEDIA COPIED INTO REPO?** No.
+**MEDIA COPIED INTO REPO?** NO.
 
-**LICENSE/PERMISSION EVIDENCE:** Same external Arch image evidence as above.
+**LICENSE/PERMISSION EVIDENCE:** Same `/2` evidence as Arch Rooms.
 
-**ATTRIBUTION:** Same external Arch source record as above.
+**ATTRIBUTION:** Same source record as Arch Rooms.
 
 **UNKNOWN QUESTIONS:** None material to A-A1 engineering originality.
 
-**RECOMMENDED LEDGER UPDATE:** Explicitly identify A-A1 taxonomy and dimensions as Project-original implementation/interpretation, not external canon.
+**RECOMMENDED LEDGER UPDATE:** Mark exact A-A1 taxonomy/dimensions/implementation as Project-original.
 
-## CONCEPT: M-W1 wallpaper identity
+## M-W1 wallpaper identity
 
 **CONCEPT:** M-W1 wallpaper identity
 
 **CLASSIFICATION:** `SOURCE-DERIVED`; `INTERPRETATION`; `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** Yellow/pale patterned wallpaper is a core source-supported Level 0 visual identity.
+**EXTERNAL SOURCE FACT:** Yellow/pale patterned wallpaper is a core recognizable Level 0 visual identity.
 
-**PROJECT ACCEPTED INTERPRETATION:** Project Noclip uses a deterministic multi-family wallpaper treatment with controlled brightness/variation to reproduce the accepted identity procedurally across Region-owned wall surfaces.
+**PROJECT ACCEPTED INTERPRETATION:** Deterministic multi-family wallpaper variation with Region-aware presentation and controlled brightness/scale.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** M-W1 semantic material ID, deterministic family resolver, family weights, world-space UV/phase rules, image-transform pipeline, typed Asset slots, Region-aware material ownership, fallback behavior and renderer cache integration.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** M-W1 semantic ID, family resolver/weights, world-space UV/phase rules, Asset slots, fallback/cache/material runtime.
 
-**SOURCE URLS:** Level 0 page and baseline/variation references.
+**SOURCE URLS:** Level 0 source/reference URLs.
 
-**REFERENCE PACK:** `REF-L0-001`, `REF-L0-002`, `REF-L0-003`, `REF-L0-004`, `REF-L0-007`.
+**REFERENCE PACK:** `REF-L0-001`, `REF-L0-002`, `REF-L0-003`, `REF-L0-004`, `REF-L0-007`
 
-**IMPLEMENTATION OWNER:** `src/presentation/definitions/level0-materials.json`, `src/renderer/ordinaryWallpaperRules.ts`, `src/renderer/ordinaryWallpaperAssets.ts`, `src/renderer/ordinaryWallpaperPresentation.ts`, `src/renderer/presentationImageTextures.ts`.
+**IMPLEMENTATION OWNER:** `src/presentation/definitions/level0-materials.json`, `src/renderer/ordinaryWallpaper*.ts`, `src/renderer/presentationImageTextures.ts`.
 
-**MEDIA COPIED INTO REPO?** Yes, but only the three A/B/C derived wallpaper source assets identified separately below; source-reference photographs themselves are not committed.
+**MEDIA COPIED INTO REPO?** YES only for the separate A/B/C wallpaper derivative files below.
 
-**LICENSE/PERMISSION EVIDENCE:** Concept identity is externally evidenced. The committed A/B/C media chain is unresolved and must not inherit unrelated reference-image terms.
+**LICENSE/PERMISSION EVIDENCE:** Source-backed wallpaper identity does not resolve the rights chain of the committed A/B/C files.
 
-**ATTRIBUTION:** Unknown for A/B/C until their underlying source chain is identified.
+**ATTRIBUTION:** UNKNOWN for A/B/C until their source chain is established.
 
-**UNKNOWN QUESTIONS:** Underlying source/creator/license/permission chain for A/B/C; whether their visual motifs derive from a specific externally controlled image or independent/user-created source material.
+**UNKNOWN QUESTIONS:** Origin/creator/license/permission chain for A/B/C.
 
-**RECOMMENDED LEDGER UPDATE:** Keep M-W1 concept provenance separate from A/B/C file provenance; do not let source-backed wallpaper identity imply resolved rights for the committed textures.
+**RECOMMENDED LEDGER UPDATE:** Keep concept provenance and file provenance as separate ledger records.
 
-## CONCEPT: M-W1 A/B/C committed assets
+## M-W1 A/B/C committed assets
 
 **CONCEPT:** `level0.wallpaper.a-chevron`, `level0.wallpaper.b-dots`, `level0.wallpaper.c-lines`
 
 **CLASSIFICATION:** `UNKNOWN / REVIEW REQUIRED`
 
-**EXTERNAL SOURCE FACT:** Repository metadata says each is a “User-provided Level 0 wallpaper reference prepared as a dev.9.1 game-ready derivative.” Git history further calls A/B “supplied ... source derivatives.” This proves provenance assertions inside the project, not the underlying rights chain.
+**EXTERNAL SOURCE FACT:** Project metadata calls each a user-provided Level 0 wallpaper reference prepared as a game-ready derivative; history independently calls A/B supplied source derivatives.
 
-**PROJECT ACCEPTED INTERPRETATION:** They are treated as current M-W1 source assets and consumed through NAL/presentation Asset slots.
+**PROJECT ACCEPTED INTERPRETATION:** Current M-W1 source assets consumed through NAL/presentation Asset slots.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** File preparation workflow, semantic Asset IDs, NAL definition/build validation, hashing, runtime resolution and material treatment are Project implementation. The image bytes themselves cannot be classified as Project-original from current evidence.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Asset IDs, technical preparation/build validation, hashes, runtime resolution and material application. The image bytes themselves cannot be classified as original from current evidence.
 
-**SOURCE URLS:** No underlying external source URL is recorded in `assets/definitions/library.json`.
+**SOURCE URLS:** No underlying source URL recorded in `assets/definitions/library.json`.
 
-**REFERENCE PACK:** No dedicated asset-origin reference entry.
+**REFERENCE PACK:** No dedicated origin reference.
 
-**IMPLEMENTATION OWNER:** `assets/source/images/`, `assets/definitions/library.json`, NAL build/runtime path.
+**IMPLEMENTATION OWNER:** `assets/source/images/`, `assets/definitions/library.json`, NAL.
 
-**MEDIA COPIED INTO REPO?** Yes.
+**MEDIA COPIED INTO REPO?** YES.
 
-**LICENSE/PERMISSION EVIDENCE:** Metadata states “User-provided source; project-use authorization asserted in the development conversation.” No creator identity, original license/permission artifact, source URL, transfer/scope statement or attribution requirement is recorded.
+**LICENSE/PERMISSION EVIDENCE:** Metadata only states that project-use authorization was asserted in the development conversation; no creator/source/license/permission artifact is recorded.
 
-**ATTRIBUTION:** Unknown.
+**ATTRIBUTION:** UNKNOWN.
 
-**UNKNOWN QUESTIONS:** Original source bytes; creator; how the user obtained each source; whether the three are edits/crops/reconstructions of another work; exact authorization scope; redistribution rights; required notices/attribution; whether A/B/C share one source chain or three different chains.
+**UNKNOWN QUESTIONS:** Original source(s), creator(s), modification chain, permission scope, redistribution rights, attribution/notices, original hashes.
 
-**RECOMMENDED LEDGER UPDATE:** Keep `UNKNOWN / REVIEW REQUIRED` until evidence resolves `PROV-LEGAL-001`. Add per-file origin fields and immutable source hashes in the canonical ledger/intake record when known.
+**RECOMMENDED LEDGER UPDATE:** Keep `UNKNOWN / REVIEW REQUIRED` until `PROV-LEGAL-001` is evidenced per file.
 
-## CONCEPT: Floor / carpet identity
+## Floor / carpet identity
 
 **CONCEPT:** M-C1 Level 0 carpet identity
 
 **CLASSIFICATION:** `SOURCE-DERIVED`; `INTERPRETATION`; `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** Brownish-beige tight-knit carpet, ordinarily damp/moist and visually affected by fluorescent cast, is supported by the audited Level 0 source and references.
+**EXTERNAL SOURCE FACT:** Brownish-beige/tan tight-knit carpet with persistent moisture is source-supported.
 
-**PROJECT ACCEPTED INTERPRETATION:** Carpet remains owned by the underlying Region/floor presentation even where a Hole Carver removes floor area; Project parameters approximate the source identity rather than claiming exact physical measurements from the source.
+**PROJECT ACCEPTED INTERPRETATION:** The Region/floor presentation owns surviving carpet even where a Hole Carver removes floor area.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** M-C1 semantic material definition, shader/material parameters, Region-aware finalization, Hole-survivor ownership and renderer lifecycle.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** M-C1 ID, numeric material values, shader/presentation implementation and CV-H1 ownership law.
 
-**SOURCE URLS:** Level 0 page; relevant Level 0 reference entries.
+**SOURCE URLS:** Level 0 page.
 
-**REFERENCE PACK:** `REF-L0-001` plus Region-specific references.
+**REFERENCE PACK:** `REF-L0-001` plus Region references.
 
-**IMPLEMENTATION OWNER:** `src/presentation/definitions/level0-materials.json`, `src/renderer/level0SurfacePresentation.ts`, `src/renderer/finalLevel0MaterialPresentation.ts`.
+**IMPLEMENTATION OWNER:** material definitions, `level0SurfacePresentation.ts`, `finalLevel0MaterialPresentation.ts`.
 
-**MEDIA COPIED INTO REPO?** No dedicated carpet texture asset was found.
+**MEDIA COPIED INTO REPO?** NO dedicated carpet asset.
 
-**LICENSE/PERMISSION EVIDENCE:** Source facts are textual/visual evidence; no copied carpet media exists in the repository.
+**LICENSE/PERMISSION EVIDENCE:** No copied carpet media.
 
-**ATTRIBUTION:** Page/source attribution belongs to source-backed content documentation; there is no separate committed carpet media attribution.
+**ATTRIBUTION:** Source-backed content documentation only.
 
 **UNKNOWN QUESTIONS:** None material to current asset inventory.
 
-**RECOMMENDED LEDGER UPDATE:** Explicitly separate source-derived carpet identity from Project-original shader/Condition implementation and CV-H1 floor-ownership law.
+**RECOMMENDED LEDGER UPDATE:** Split source carpet identity from Project numeric/shader/ownership choices.
 
-## CONCEPT: Current carpet Conditions
+## Carpet Conditions
 
 **CONCEPT:** `damp-carpet`, `deep-wet-carpet`, `shallow-dry-carpet`
 
 **CLASSIFICATION:** `SOURCE-DERIVED`; `INTERPRETATION`; `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** The source distinguishes ordinary moist carpet, deeper/wetter Arch carpet and shallower/less-moist Pillar carpet.
+**EXTERNAL SOURCE FACT:** Ordinary moisture, deeper/wetter Arch carpet and shallower/less-moist Pillar carpet are source-supported.
 
-**PROJECT ACCEPTED INTERPRETATION:** Project Noclip expresses these facts as named Conditions owned by current Region/floor policy.
+**PROJECT ACCEPTED INTERPRETATION:** Expressed as named semantic Conditions driven by Region policy.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Condition stable IDs, deterministic mapping, numeric material values, renderer parameters, Region thresholds and save/runtime representation.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Stable Condition IDs, deterministic mapping, thresholds and material values.
 
-**SOURCE URLS:** Level 0 page and `REF-L0-001`, `REF-L0-002`, `REF-L0-007`.
+**SOURCE URLS:** Level 0 page.
 
-**REFERENCE PACK:** Level 0 pack.
+**REFERENCE PACK:** `REF-L0-001`, `REF-L0-002`, `REF-L0-007`
 
-**IMPLEMENTATION OWNER:** `src/world/gen3.ts`, presentation/material owners.
+**IMPLEMENTATION OWNER:** Gen3 Condition resolution and material presentation.
 
-**MEDIA COPIED INTO REPO?** No.
+**MEDIA COPIED INTO REPO?** NO.
 
 **LICENSE/PERMISSION EVIDENCE:** No dedicated media.
 
-**ATTRIBUTION:** Source-backed content notes should cite the Level 0 source/reference pack.
+**ATTRIBUTION:** Source facts only.
 
-**UNKNOWN QUESTIONS:** Exact numeric wetness/depth values are not external facts and should remain documented as Project interpretation/implementation.
+**UNKNOWN QUESTIONS:** Exact numeric wetness/depth values are not external facts.
 
-**RECOMMENDED LEDGER UPDATE:** Add the three Conditions as explicit split provenance entries if not already granularly represented.
+**RECOMMENDED LEDGER UPDATE:** Add granular Condition split if synthesis wants per-condition entries.
 
-## CONCEPT: M-CE1 ceiling identity
+## M-CE1 ceiling
 
-**CONCEPT:** M-CE1 suspended Level 0 ceiling
+**CONCEPT:** M-CE1 suspended ceiling identity
 
 **CLASSIFICATION:** `SOURCE-DERIVED`; `INTERPRETATION`; `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** Pale suspended/drop-ceiling tiles and repeated ceiling services/fixtures are source-supported.
+**EXTERNAL SOURCE FACT:** Suspended/drop-ceiling tiles and repeated fluorescent fixture rhythm are source-supported.
 
-**PROJECT ACCEPTED INTERPRETATION:** Project Noclip uses a stable suspended-ceiling material/geometry grammar across current Level 0 Regions unless a stronger content owner overrides it.
+**PROJECT ACCEPTED INTERPRETATION:** Shared ceiling grammar across current Level 0 unless a stronger semantic owner overrides it.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** M-CE1 material ID, exact dimensions, tile/grid construction, renderer ownership and performance implementation.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** M-CE1 ID, exact geometry/material values, renderer ownership/performance.
 
-**SOURCE URLS:** Level 0 page and current Level 0 reference pack.
+**SOURCE URLS:** Level 0 page.
 
-**REFERENCE PACK:** `REF-L0-001`, `REF-L0-002`, `REF-L0-007`.
+**REFERENCE PACK:** current Level 0 pack.
 
-**IMPLEMENTATION OWNER:** `src/presentation/definitions/level0-materials.json`, `src/renderer/level0SurfacePresentation.ts`.
+**IMPLEMENTATION OWNER:** level0 material/surface presentation.
 
-**MEDIA COPIED INTO REPO?** No dedicated ceiling texture asset found.
+**MEDIA COPIED INTO REPO?** NO dedicated ceiling asset.
 
-**LICENSE/PERMISSION EVIDENCE:** No dedicated media.
+**LICENSE/PERMISSION EVIDENCE:** No copied ceiling media.
 
 **ATTRIBUTION:** Source documentation only.
 
-**UNKNOWN QUESTIONS:** None material to current media.
+**UNKNOWN QUESTIONS:** None material to media.
 
-**RECOMMENDED LEDGER UPDATE:** Explicitly separate source ceiling identity from Project exact material/geometry parameters.
+**RECOMMENDED LEDGER UPDATE:** Split source ceiling identity from Project exact construction.
 
-## CONCEPT: M-F1 fluorescent identity
+## M-F1 fluorescent
 
-**CONCEPT:** M-F1 fluorescent panel / ordinary fluorescent ambience
+**CONCEPT:** M-F1 fluorescent panel / ambience identity
 
 **CLASSIFICATION:** `SOURCE-DERIVED`; `INTERPRETATION`; `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** Repeated rectangular fluorescent fixtures and pervasive fluctuating fluorescent buzzing are source-supported Level 0 identity.
+**EXTERNAL SOURCE FACT:** Repeated rectangular fluorescent lights and pervasive fluctuating buzzing are source-supported.
 
-**PROJECT ACCEPTED INTERPRETATION:** Project Noclip synchronizes panel emission, physical light energy and procedural hum/flicker under a deterministic world-lighting law, with reduced-flicker accessibility behavior routed through the same ownership path.
+**PROJECT ACCEPTED INTERPRETATION:** Panel emission, physical light energy and procedural hum/flicker are synchronized under deterministic lighting law.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** M-F1 semantic material, fixture ownership, physical-light allocation strategy, deterministic pulse law, Web Audio synthesis, light-field diagnostics, renderer integration and performance architecture.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** M-F1 ID, fixture ownership, light allocation, pulse law, Web Audio synthesis, diagnostics and performance implementation.
 
-**SOURCE URLS:** Level 0 page; relevant Level 0 references.
+**SOURCE URLS:** Level 0 page.
 
 **REFERENCE PACK:** `REF-L0-001` and supporting entries.
 
-**IMPLEMENTATION OWNER:** `src/world/lighting.ts`, `src/renderer/fixtureLighting.ts`, `src/renderer/level0SurfacePresentation.ts`, `src/audio/Ambience.ts`.
+**IMPLEMENTATION OWNER:** `src/world/lighting.ts`, `src/renderer/fixtureLighting.ts`, `src/audio/Ambience.ts`.
 
-**MEDIA COPIED INTO REPO?** No external fluorescent audio recording or fixture texture was found.
+**MEDIA COPIED INTO REPO?** NO external fluorescent audio recording or fixture texture.
 
-**LICENSE/PERMISSION EVIDENCE:** No copied audio payload. Source-backed identity comes from text/reference evidence.
+**LICENSE/PERMISSION EVIDENCE:** No copied audio payload.
 
-**ATTRIBUTION:** Source identity documentation only; procedural audio code is Project implementation.
+**ATTRIBUTION:** Source identity separately; procedural implementation is Project code.
 
-**UNKNOWN QUESTIONS:** If future recorded buzz/audio is imported, it requires file-specific provenance independent of the source concept.
+**UNKNOWN QUESTIONS:** Future recorded audio requires independent file-level intake.
 
-**RECOMMENDED LEDGER UPDATE:** Add explicit note that current sound is synthesized, not copied; preserve source-derived ambience identity versus Project-original waveform/runtime implementation.
+**RECOMMENDED LEDGER UPDATE:** State explicitly that current ambience is synthesized rather than externally recorded.
 
-## CONCEPT: C-B1 Blackout
+## C-B1 Blackout
 
 **CONCEPT:** C-B1 Blackout
 
 **CLASSIFICATION:** `SOURCE-DERIVED`; `INTERPRETATION`; `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** The source describes recognizable Level 0 architecture under full local fixture darkness, loss of local fluorescent buzz, rougher surfaces/possible recessed fluid and navigation toward external light/buzz cues.
+**EXTERNAL SOURCE FACT:** Source supports unlit Level 0-like sections, loss of local buzz, rough surfaces, possible recessed fluid and navigation toward light/buzz.
 
-**PROJECT ACCEPTED INTERPRETATION:** Blackout is a Condition over ordinary Level 0 rather than a separate Region/template. Project Noclip expresses boundaries continuously and keeps current geometry deterministic.
+**PROJECT ACCEPTED INTERPRETATION:** A Condition over recognizable Level 0, with continuous deterministic boundary behavior rather than a separate room template.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Blackout pressure Field, resolution thresholds, continuous escape-cue calculation, physical light suppression, renderer/audio blending, diagnostics and tests.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Blackout Field/thresholds, escape cue, physical-light suppression, renderer/audio blending and diagnostics.
 
-**SOURCE URLS:** Level 0 page; `/5` attachment.
+**SOURCE URLS:** Level 0 page; `/5`.
 
-**REFERENCE PACK:** `REF-L0-004`.
+**REFERENCE PACK:** `REF-L0-004`
 
-**IMPLEMENTATION OWNER:** `src/world/fields.ts`, `src/world/gen3.ts`, `src/world/lighting.ts`, `src/renderer/fixtureLighting.ts`, `src/app/blackoutRendering.ts`, `src/audio/Ambience.ts`.
+**IMPLEMENTATION OWNER:** world Fields/lighting, fixture renderer, blackout runtime, ambience.
 
-**MEDIA COPIED INTO REPO?** No.
+**MEDIA COPIED INTO REPO?** NO.
 
-**LICENSE/PERMISSION EVIDENCE:** Current Level 0 media box explicitly lists media name `5`, creator Alfarex, CC BY-SA 4.0, source `/5`.
+**LICENSE/PERMISSION EVIDENCE:** Retrieved file-specific entry: `5`, Alfarex, CC BY-SA 4.0, source `/5`.
 
-**ATTRIBUTION:** The source page states attribution-bearing terms for `/5`; exact downstream fulfillment is outside this audit.
+**ATTRIBUTION:** Attribution-bearing terms stated by source; no legal conclusion here.
 
-**UNKNOWN QUESTIONS:** None material to current committed assets.
+**UNKNOWN QUESTIONS:** None material to committed media.
 
-**RECOMMENDED LEDGER UPDATE:** Replace/generalize older page-level media wording with current file-specific `/5` evidence; retain source/interpretation/implementation split.
+**RECOMMENDED LEDGER UPDATE:** Add exact `/5` creator/license evidence.
 
-## CONCEPT: CV-H1 Holes
+## CV-H1 Holes
 
 **CONCEPT:** CV-H1 floor-hole cluster
 
 **CLASSIFICATION:** `SOURCE-DERIVED`; `INTERPRETATION`; `PROJECT-NOCLIP-ORIGINAL`; `UNKNOWN / REVIEW REQUIRED`
 
-**EXTERNAL SOURCE FACT:** Source text/image evidence supports close/grid groups of discrete square, very dark/deep floor openings with surrounding ordinary Level 0 surfaces and readable bypass space.
+**EXTERNAL SOURCE FACT:** Source supports dark/deep floor openings in close/grid groups with bypassable surrounding Level 0 floor.
 
-**PROJECT ACCEPTED INTERPRETATION:** Project Noclip implements Holes as a subtractive floor Carver over existing Region architecture/floor ownership instead of a separate room template. Exact density, collision, depth and fall behavior are Project decisions.
+**PROJECT ACCEPTED INTERPRETATION:** Implemented as a subtractive Carver over Region-owned floor/architecture rather than a separate template.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Carver stable ID, deterministic candidate/gate law, world-space lattice/cluster placement, bypass/overlap constraints, floor reconstruction, Region-aware surviving carpet ownership, collision/runtime implementation.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Carver ID/pass, deterministic gate/lattice/cluster placement, bypass constraints, floor reconstruction, collision and Region-aware surviving carpet.
 
-**SOURCE URLS:** Level 0 page; official attachment path `/4`; user-supplied Drive mirror recorded in `REF-L0-003`.
+**SOURCE URLS:** Level 0 page; official `/4`; user-provided Drive mirror recorded in the reference pack.
 
-**REFERENCE PACK:** `REF-L0-003`.
+**REFERENCE PACK:** `REF-L0-003`
 
-**IMPLEMENTATION OWNER:** `src/world/gen3.ts`, `src/world/generator.ts`, `src/renderer/WorldRenderer.ts`, `src/renderer/level0RegionPresentation.ts`, `src/renderer/finalLevel0MaterialPresentation.ts`.
+**IMPLEMENTATION OWNER:** Gen3/generator plus WorldRenderer/Region/final-material presentation.
 
-**MEDIA COPIED INTO REPO?** No Hole reference image found committed.
+**MEDIA COPIED INTO REPO?** NO Hole reference image.
 
-**LICENSE/PERMISSION EVIDENCE:** The current source page's visible media box contains an entry named `4` but its source link points to `/1`, creating a mapping mismatch. The audited evidence therefore does not safely establish file-specific terms for `/4`. The Drive mirror was previously visually matched, but byte identity and permission chain were not established.
+**LICENSE/PERMISSION EVIDENCE:** Retrieved license box contains a media entry named `4` but links it to `/1`; the `/4` attachment therefore cannot safely inherit that entry. Drive mirror is visually matched but byte identity/permission chain is unproved.
 
-**ATTRIBUTION:** Unknown for the exact `/4` file until mapping is resolved.
+**ATTRIBUTION:** UNKNOWN for exact `/4` from current evidence.
 
-**UNKNOWN QUESTIONS:** Correct file-level creator/license for `/4`; whether the Drive mirror is byte-identical to the official attachment; mirror ownership/permission chain.
+**UNKNOWN QUESTIONS:** `/4` creator/license mapping; mirror byte identity and permission chain.
 
-**RECOMMENDED LEDGER UPDATE:** Keep Hole concept source-derived but mark `/4` attachment terms and Drive mirror as `UNKNOWN / REVIEW REQUIRED`; create explicit legal/evidence records `PROV-LEGAL-002` and `PROV-LEGAL-003`.
+**RECOMMENDED LEDGER UPDATE:** Keep concept source-derived; keep `/4` and mirror media `UNKNOWN / REVIEW REQUIRED`; see `PROV-LEGAL-002`/`003`.
 
-## CONCEPT: S-R1 Red Rooms
+## S-R1 Red Rooms
 
 **CONCEPT:** S-R1 Red Rooms
 
 **CLASSIFICATION:** `SOURCE-DERIVED`; `INTERPRETATION`; `PROJECT-NOCLIP-ORIGINAL`; `UNKNOWN / REVIEW REQUIRED`
 
-**EXTERNAL SOURCE FACT:** The audited Level 0 source describes rare red/crimson sections, sticky/coarse/thick carpet, distress and disconnected/closed-loop escape difficulty. The authoritative `/6` visual supports a deep-red Level 0-like corridor presentation. The separate Scutoidbox image only supports its visible red-corridor pixels; its parent/canon/authorship/license remain unverified.
+**EXTERNAL SOURCE FACT:** Source supports rare red/crimson Level 0 sections, coarse/sticky/thick carpet, distress and closed-loop/disconnected escape difficulty. The Scutoidbox image can support only its visible red-corridor cue until its source/canon is verified.
 
-**PROJECT ACCEPTED INTERPRETATION:** Project Noclip plans Red Rooms as a rare Level 0 Structure with crimson Materials/Conditions and intentionally designed deterministic Non-Euclidean closed-loop behavior. Exact topology is design-gated.
+**PROJECT ACCEPTED INTERPRETATION:** Planned rare Level 0 Structure with crimson Materials/Conditions and human-designed deterministic Non-Euclidean closed-loop behavior.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** S-R1 classification, deterministic future topology/persistence design, rarity/placement rules, implementation architecture and save-safe Non-Euclidean mechanics will be Project work when approved.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** S-R1 taxonomy plus future deterministic topology/persistence/placement implementation.
 
-**SOURCE URLS:** Level 0 page; official attachment `/6`; Drive mirror and Scutoidbox URLs recorded in `REF-L0-005` and `REF-L0-006`.
+**SOURCE URLS:** Level 0 page; official `/6`; Drive and Scutoidbox URLs in `REF-L0-005`/`006`.
 
-**REFERENCE PACK:** `REF-L0-005`, `REF-L0-006`.
+**REFERENCE PACK:** `REF-L0-005`, `REF-L0-006`
 
-**IMPLEMENTATION OWNER:** Design required; current registry references exist in `src/world/exits.ts`, but future Structure/topology ownership remains human-design-gated.
+**IMPLEMENTATION OWNER:** Design required; registry reference exists, future Structure/topology remains human-design-gated.
 
-**MEDIA COPIED INTO REPO?** No Red Rooms reference image found committed.
+**MEDIA COPIED INTO REPO?** NO Red Rooms reference image.
 
-**LICENSE/PERMISSION EVIDENCE:** No visible file-specific `/6` media entry was found in the current Level 0 license box. Drive mirror byte identity/permission chain is unresolved. Scutoidbox creator/canon/license is unresolved.
+**LICENSE/PERMISSION EVIDENCE:** No visible file-specific `/6` entry was found in the retrieved license box; Drive mirror identity/permission unresolved; Scutoidbox parent/creator/license unresolved.
 
-**ATTRIBUTION:** Unknown for `/6` and Scutoidbox media at file level from current evidence.
+**ATTRIBUTION:** UNKNOWN for `/6` and Scutoidbox at file level.
 
-**UNKNOWN QUESTIONS:** `/6` creator/license; Drive mirror byte identity and permission chain; Scutoidbox parent page, creator, source, license, canon standing; exact source scope for any future Red Rooms behavior beyond the authoritative Level 0 page.
+**UNKNOWN QUESTIONS:** `/6` creator/license; Drive byte identity; Scutoidbox creator/license/canon; exact future source scope.
 
-**RECOMMENDED LEDGER UPDATE:** Preserve authoritative Level 0 source facts separately from Scutoidbox evidence-only imagery; add unresolved media/legal records and do not promote unsupported mushrooms/radio claims.
+**RECOMMENDED LEDGER UPDATE:** Keep authoritative Level 0 evidence separate from Scutoidbox `EVIDENCE-ONLY`; see `PROV-LEGAL-002`/`003`/`004`.
 
-## CONCEPT: Registered / planned transitions
+## Registered / planned transitions
 
 **CONCEPT:** Current transition/destination registry
 
 **CLASSIFICATION:** `SOURCE-DERIVED`; `INTERPRETATION`; `PROJECT-NOCLIP-ORIGINAL`; `UNKNOWN / REVIEW REQUIRED`
 
-**EXTERNAL SOURCE FACT:** The audited current Level 0 page explicitly describes one Level 1 route through a flickering wall. This audit did not establish dedicated source provenance for every other currently registered Project destination/trigger.
+**EXTERNAL SOURCE FACT:** The audited Level 0 source explicitly supports a Level 1 route through a flickering wall. This audit did not establish dedicated source provenance for every other registered destination/trigger.
 
-**PROJECT ACCEPTED INTERPRETATION:** Project Noclip has a deterministic registry of destination IDs, labels, triggers, timeline/exposure gates and test cells. Registration does not mean destination playability or exact source canon acceptance.
+**PROJECT ACCEPTED INTERPRETATION:** Deterministic destination registry with labels, trigger kinds, timeline/exposure gates and fixed test cells; registration does not equal source canon or destination playability.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Registry schema, stable IDs, exact labels/gates, fixed test cells, timeline/exposure mechanics and deterministic generation integration.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Registry schema, stable IDs, exact labels/gates/test cells and deterministic integration.
 
-**SOURCE URLS:** Level 0 page for the verified Level 1 source claim; other destinations require their own exact source records or an explicit Project-original design classification.
+**SOURCE URLS:** Level 0 page for Level 1; others need exact sources or explicit Project-original design classification.
 
-**REFERENCE PACK:** No complete current transition provenance pack was found.
+**REFERENCE PACK:** No complete current transition provenance pack.
 
-**IMPLEMENTATION OWNER:** `src/world/exits.ts`, `src/world/generator.ts`, timeline/save systems.
+**IMPLEMENTATION OWNER:** `src/world/exits.ts`, generator/timeline/save systems.
 
-**MEDIA COPIED INTO REPO?** No transition media identified.
+**MEDIA COPIED INTO REPO?** NO.
 
-**LICENSE/PERMISSION EVIDENCE:** Not applicable to code; content provenance for individual destination names/routes remains concept-specific.
+**LICENSE/PERMISSION EVIDENCE:** Not a media question; concept provenance remains per destination.
 
-**ATTRIBUTION:** Requires per-source provenance when source-derived content is accepted.
+**ATTRIBUTION:** Per source where source-derived.
 
-**UNKNOWN QUESTIONS:** Source provenance for Level 2, Level 27, Level 483, Level 13, Level 14, Void, Level 0.22, Level 0.23, Level 0.99 and any Red Rooms transition framing; whether each trigger label is source-derived, Project interpretation or wholly Project-original.
+**UNKNOWN QUESTIONS:** Provenance/classification of Level 2, 27, 483, 13, 14, Void, 0.22, 0.23, 0.99 and Red Rooms transition framing.
 
-**RECOMMENDED LEDGER UPDATE:** Add a transition-by-transition provenance ledger instead of treating registry presence as evidence that “the wiki says this exact route.” Do not remove or reclassify gameplay in this audit.
+**RECOMMENDED LEDGER UPDATE:** Add per-transition provenance; do not treat registry presence as “the wiki says this exact route.”
 
-## CONCEPT: Ambient / audio identity
+## Ambient / audio identity
 
 **CONCEPT:** Level 0 ambient/audio identity
 
 **CLASSIFICATION:** `SOURCE-DERIVED`; `INTERPRETATION`; `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** Fluorescent buzzing is directly source-supported; current Level 0 source text also mentions additional anomalous sounds. A still image never establishes audio.
+**EXTERNAL SOURCE FACT:** Fluorescent buzzing is directly source-supported; the source page also reports additional anomalous sounds.
 
-**PROJECT ACCEPTED INTERPRETATION:** Project Noclip accepts fluorescent room tone and Blackout silence/escape-buzz behavior. Other source-page anomalous sound claims are not automatically accepted merely because they are present on the source page.
+**PROJECT ACCEPTED INTERPRETATION:** Fluorescent room tone and Blackout silence/escape-buzz are accepted; other reported sounds are not automatically adopted.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Current `src/audio/Ambience.ts` synthesizes hum harmonics, flicker snaps, steps and distant impacts with Web Audio; no external recording is required for the current implementation.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Web Audio hum harmonics, flicker snaps, steps, distant impacts, lifecycle and light-field coupling.
 
 **SOURCE URLS:** Level 0 page.
 
-**REFERENCE PACK:** `REF-L0-001`, `REF-L0-004`; other reference entries explicitly state where stills have no audio evidence.
+**REFERENCE PACK:** `REF-L0-001`, `REF-L0-004`; still-image references explicitly do not establish audio.
 
 **IMPLEMENTATION OWNER:** `src/audio/Ambience.ts`, `src/world/lighting.ts`.
 
-**MEDIA COPIED INTO REPO?** No source audio files found.
+**MEDIA COPIED INTO REPO?** NO source audio files.
 
-**LICENSE/PERMISSION EVIDENCE:** No copied audio media to license in the current tree.
+**LICENSE/PERMISSION EVIDENCE:** No copied recording exists in the audited tree.
 
-**ATTRIBUTION:** Source-derived identity should remain linked to the source page; generated audio implementation is Project code.
+**ATTRIBUTION:** Source identity separately; generated implementation is Project code.
 
-**UNKNOWN QUESTIONS:** Future recorded ambience/spatial audio must undergo separate per-file provenance intake.
+**UNKNOWN QUESTIONS:** Future recorded ambience/spatial audio requires new per-file provenance.
 
-**RECOMMENDED LEDGER UPDATE:** Add explicit “procedurally synthesized; no external recording committed” status to current audio provenance.
+**RECOMMENDED LEDGER UPDATE:** Add “procedurally synthesized; no external recording committed.”
 
-## CONCEPT: Player / character visual identity
+## Player / character content identity
 
 **CONCEPT:** Player Character Profile appearance content
 
 **CLASSIFICATION:** `REAL-WORLD-INSPIRATION`; `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** No audited Backrooms source was found to prescribe the current body-frame, skin-tone, hair, clothing-color or profile-identity schema.
+**EXTERNAL SOURCE FACT:** No audited Backrooms source prescribes the current body-frame, skin-tone, hair, clothing-color or profile schema.
 
-**PROJECT ACCEPTED INTERPRETATION:** The creator uses ordinary human appearance categories and neutral clothing slots without claiming Backrooms-source ownership.
+**PROJECT ACCEPTED INTERPRETATION:** Ordinary human appearance categories and neutral clothing slots.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Profile schema, `CharacterProfileId`, profile persistence, profile/avatar identity boundary, semantic mapping and future avatar representation contract.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Profile schema, `CharacterProfileId`, profile persistence, avatar mapping/boundary and semantic asset slots.
 
-**SOURCE URLS:** None required for current generic human appearance categories.
+**SOURCE URLS:** None required for generic appearance categories.
 
 **REFERENCE PACK:** None.
 
-**IMPLEMENTATION OWNER:** `src/player-character/profile.ts`, `src/player-character/profileStore.ts`, `src/player-character/avatar.ts`, creator UI.
+**IMPLEMENTATION OWNER:** `src/player-character/profile.ts`, `profileStore.ts`, `avatar.ts`, Character Creator UI.
 
-**MEDIA COPIED INTO REPO?** No avatar meshes/textures were found.
+**MEDIA COPIED INTO REPO?** NO avatar meshes/textures.
 
-**LICENSE/PERMISSION EVIDENCE:** No external character media currently committed.
+**LICENSE/PERMISSION EVIDENCE:** No external character media committed.
 
-**ATTRIBUTION:** None identified for current generic appearance schema.
+**ATTRIBUTION:** None identified for generic schema.
 
-**UNKNOWN QUESTIONS:** Future avatar meshes/materials/animations require independent asset provenance.
+**UNKNOWN QUESTIONS:** Future avatar meshes/materials/animations need independent provenance.
 
-**RECOMMENDED LEDGER UPDATE:** Add Character Profile/Avatar representation architecture as Project-original and generic appearance categories as real-world inspiration.
+**RECOMMENDED LEDGER UPDATE:** Record generic appearance as real-world inspiration and identity/representation architecture as Project-original.
 
-## CONCEPT: Item content names / identities
+## Item names / visual identities
 
 **CONCEPT:** Current item-definition content vocabulary
 
 **CLASSIFICATION:** `SOURCE-DERIVED`; `REAL-WORLD-INSPIRATION`; `INTERPRETATION`; `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** `Almond Water` is an externally established Backrooms object/name; the current Backrooms Wiki Object 1 page identifies “Object 1 — Almond Water” and describes the liquid. Flashlight, battery, marker, paper note, glow stick, string spool, empty can and pry tool are generic real-world object identities rather than source-specific concepts on current evidence.
+**EXTERNAL SOURCE FACT:** `Almond Water` is an externally established Backrooms object/name. Flashlight, battery, marker, paper note, glow stick, string spool, empty can and pry tool are generic real-world identities on current evidence.
 
-**PROJECT ACCEPTED INTERPRETATION:** Project Noclip uses its own concise item descriptions, rarity/weight/value/trade properties and presentation labels. The current Almond Water “sealed bottle / faintly sweet” presentation is a Project implementation choice unless separately sourced.
+**PROJECT ACCEPTED INTERPRETATION:** Project descriptions, weights, rarity/value/trade properties and presentation are separate choices unless individually sourced.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Item-definition IDs, exact stats/weights, starter/world weighting, presentation metadata, deterministic placement, Item Instance creation and inventory integration.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Item IDs/stats, placement/starter weighting, factories, persistent instances and inventory integration.
 
-**SOURCE URLS:** `https://backrooms-wiki.wikidot.com/object-1` for Almond Water; generic real-world items require no Backrooms source claim.
+**SOURCE URLS:** `https://backrooms-wiki.wikidot.com/object-1` for Almond Water.
 
-**REFERENCE PACK:** No dedicated current Almond Water/item provenance pack found.
+**REFERENCE PACK:** No dedicated current item provenance pack.
 
-**IMPLEMENTATION OWNER:** `src/items/definitions.ts`, `src/items/factory.ts`, `src/items/starterRoll.ts`.
+**IMPLEMENTATION OWNER:** `src/items/definitions.ts`, `factory.ts`, `starterRoll.ts`.
 
-**MEDIA COPIED INTO REPO?** No item media assets found.
+**MEDIA COPIED INTO REPO?** NO item media assets.
 
-**LICENSE/PERMISSION EVIDENCE:** Content-name/source provenance must be documented separately from code. No external item media exists in the current tree.
+**LICENSE/PERMISSION EVIDENCE:** No external item media committed; name/content provenance remains separate from code.
 
-**ATTRIBUTION:** Almond Water source attribution should be recorded if the canonical ledger treats the name/concept as source-derived.
+**ATTRIBUTION:** Almond Water source should be recorded if canonically treated as source-derived.
 
-**UNKNOWN QUESTIONS:** Whether any other current item name/description was intentionally adopted from a Backrooms source; no evidence found in this audit.
+**UNKNOWN QUESTIONS:** Whether any other current item wording was intentionally copied/adapted from an external source; no evidence found.
 
-**RECOMMENDED LEDGER UPDATE:** Add a dedicated Almond Water concept entry; classify other generic items as `REAL-WORLD-INSPIRATION` unless a specific external source is later identified.
+**RECOMMENDED LEDGER UPDATE:** Add explicit Almond Water entry; classify generic items as `REAL-WORLD-INSPIRATION` unless later evidence says otherwise.
 
-## CONCEPT: Generation 3 architecture
+## Generation 3 architecture
 
 **CONCEPT:** Generation 3 world architecture
 
 **CLASSIFICATION:** `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** Backrooms source content motivates a large, strange, changing environment but does not prescribe Project Noclip's Generation 3 software architecture.
+**EXTERNAL SOURCE FACT:** External lore does not prescribe Project Noclip's Generation 3 software architecture.
 
-**PROJECT ACCEPTED INTERPRETATION:** Source/world goals are expressed through a deterministic, versioned, continuous procedural system rather than literal source mechanics.
+**PROJECT ACCEPTED INTERPRETATION:** Source/world goals are expressed through a deterministic, versioned, continuous procedural system rather than copied mechanics.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** `gen3-v1`; generation-version cutover; deterministic seed domains; connectivity substrate; local topology solver; continuous Regions/Conditions; Carvers/Structures/Features/Items/Transitions layering; Cell-as-cache law; stable world addresses and old-save compatibility.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** `gen3-v1`, version cutover, connectivity substrate, topology solver, continuous layers, stable addresses, Cell-as-cache law and old-save compatibility.
 
-**SOURCE URLS:** None required to establish software originality; world/source references remain content inputs only.
+**SOURCE URLS:** None for implementation ownership.
 
-**REFERENCE PACK:** Not an external-content reference target.
+**REFERENCE PACK:** Not applicable.
 
-**IMPLEMENTATION OWNER:** `src/world/gen3.ts`, `src/world/gen3Architecture*.ts`, `src/world/gen3SpaceTopology*.ts`, `src/world/generator.ts`, ADR 0001.
+**IMPLEMENTATION OWNER:** `src/world/gen3.ts`, `gen3Architecture*.ts`, `gen3SpaceTopology*.ts`, `generator.ts`, ADR 0001.
 
-**MEDIA COPIED INTO REPO?** No.
+**MEDIA COPIED INTO REPO?** NO.
 
-**LICENSE/PERMISSION EVIDENCE:** Not a copied media asset.
+**LICENSE/PERMISSION EVIDENCE:** Not media.
 
-**ATTRIBUTION:** Software dependencies retain their own package licenses; external world content remains separately attributed/provenanced.
+**ATTRIBUTION:** External content remains separately attributed; software dependencies keep their own licenses.
 
-**UNKNOWN QUESTIONS:** None identified for provenance classification itself.
+**UNKNOWN QUESTIONS:** None identified for provenance classification.
 
-**RECOMMENDED LEDGER UPDATE:** Add/strengthen an originality-map entry explicitly separating Generation 3 architecture from source-derived world concepts.
+**RECOMMENDED LEDGER UPDATE:** Explicit originality-map entry.
 
-## CONCEPT: Deterministic Fields
+## Deterministic Fields
 
 **CONCEPT:** Continuous deterministic Field / affinity system
 
 **CLASSIFICATION:** `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** No audited source defines Project Noclip's scalar Field implementation, wavelength choices, seed domains or affinity math.
+**EXTERNAL SOURCE FACT:** No audited source defines the Project field math, wavelength choices or seed domains.
 
-**PROJECT ACCEPTED INTERPRETATION:** Fields are Project Noclip's method for converting broad environmental/source direction into continuous geography and Conditions without hard districts.
+**PROJECT ACCEPTED INTERPRETATION:** Fields turn broad environmental direction into continuous geography/Conditions without hard districts.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Field vocabulary, sampling, bounded values, Region/Condition affinities, deterministic seed separation and world-space continuity.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Field vocabulary/sampling, bounded values, seed separation and Region/Condition affinities.
 
-**SOURCE URLS:** None for implementation.
+**SOURCE URLS:** None.
 
 **REFERENCE PACK:** Not applicable.
 
 **IMPLEMENTATION OWNER:** `src/world/fields.ts`, `src/world/gen3.ts`.
 
-**MEDIA COPIED INTO REPO?** No.
+**MEDIA COPIED INTO REPO?** NO.
 
-**LICENSE/PERMISSION EVIDENCE:** Not applicable to content media.
+**LICENSE/PERMISSION EVIDENCE:** Not applicable.
 
-**ATTRIBUTION:** None for the Project algorithm itself.
+**ATTRIBUTION:** None for Project algorithm.
 
 **UNKNOWN QUESTIONS:** None identified.
 
 **RECOMMENDED LEDGER UPDATE:** Explicit Project-original entry.
 
-## CONCEPT: Region system
+## Region system
 
-**CONCEPT:** Region / Region affinity ownership model
+**CONCEPT:** Region / Region-affinity ownership model
 
 **CLASSIFICATION:** `INTERPRETATION`; `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** External sources describe variations/areas such as Pillar and Arch, not Project Noclip's exact Region taxonomy or continuous-affinity architecture.
+**EXTERNAL SOURCE FACT:** External sources describe areas/variations, not Project Noclip's Region taxonomy or continuous-affinity architecture.
 
-**PROJECT ACCEPTED INTERPRETATION:** Project Noclip groups accepted continuous geography under stable Region identities and treats Ordinary, Pillar Field and Arch Rooms as modifiers of one Level 0 substrate.
+**PROJECT ACCEPTED INTERPRETATION:** Ordinary, Pillar Field and Arch Rooms are stable semantic Regions/modifiers of one Level.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Region stable IDs, continuous affinity/depth, hierarchy under Level, Cell independence, semantic ownership and renderer/presentation routing.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Stable Region IDs, affinity/depth, hierarchy, Cell independence and ownership routing.
 
-**SOURCE URLS:** Source pages only for the underlying variation identities.
+**SOURCE URLS:** Source pages only for underlying content identities.
 
-**REFERENCE PACK:** Level 0 pack for content direction.
+**REFERENCE PACK:** Level 0 pack.
 
-**IMPLEMENTATION OWNER:** `src/world/fields.ts`, `src/world/gen3.ts`, terminology/world types.
+**IMPLEMENTATION OWNER:** world fields/gen3/types/terminology.
 
-**MEDIA COPIED INTO REPO?** No.
+**MEDIA COPIED INTO REPO?** NO.
 
-**LICENSE/PERMISSION EVIDENCE:** Not a media asset.
+**LICENSE/PERMISSION EVIDENCE:** Not media.
 
-**ATTRIBUTION:** Underlying source-derived content remains separately attributed.
+**ATTRIBUTION:** Underlying source content separately.
 
-**UNKNOWN QUESTIONS:** None identified for the software architecture.
+**UNKNOWN QUESTIONS:** None identified.
 
-**RECOMMENDED LEDGER UPDATE:** Distinguish source “variation” facts from Project-original Region taxonomy and continuity law.
+**RECOMMENDED LEDGER UPDATE:** Distinguish source “variation” facts from Project Region architecture.
 
-## CONCEPT: Visibility architecture
+## Visibility architecture
 
 **CONCEPT:** Visibility Snapshot / live render participation
 
 **CLASSIFICATION:** `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** No audited Backrooms source defines Project Noclip's topology-aware render-participation architecture.
+**EXTERNAL SOURCE FACT:** No audited lore/source defines this renderer architecture.
 
-**PROJECT ACCEPTED INTERPRETATION:** Environmental occlusion/topology is used as a performance input while preserving conservative safety/fallback behavior.
+**PROJECT ACCEPTED INTERPRETATION:** Topology/occlusion becomes conservative performance input without changing semantic world truth.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Topology adapter, snapshot propagation, participation reasons, safety core, hysteresis, predictive integration, distance fallback, runtime adapter and diagnostics.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Topology adapter, snapshot, propagation, safety core, hysteresis/predictive logic, participation reasons, runtime adapter and diagnostics.
 
 **SOURCE URLS:** None.
 
@@ -674,147 +659,147 @@ The principal model weakness is completeness, not taxonomy. Current content and 
 
 **IMPLEMENTATION OWNER:** `src/renderer/visibility/*`.
 
-**MEDIA COPIED INTO REPO?** No.
+**MEDIA COPIED INTO REPO?** NO.
 
 **LICENSE/PERMISSION EVIDENCE:** Not applicable.
 
-**ATTRIBUTION:** None for this Project architecture.
+**ATTRIBUTION:** None for Project architecture.
 
 **UNKNOWN QUESTIONS:** None identified.
 
-**RECOMMENDED LEDGER UPDATE:** Add to originality map; do not conflate visibility engineering with any lore statement about sight/perception.
+**RECOMMENDED LEDGER UPDATE:** Add to originality map; do not conflate with source perception/sight lore.
 
-## CONCEPT: Carver architecture
+## Carver architecture
 
 **CONCEPT:** General Carver architecture
 
 **CLASSIFICATION:** `INTERPRETATION`; `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** Source content may establish subtractive phenomena such as floor holes; it does not define Project Noclip's Carver software category/pass.
+**EXTERNAL SOURCE FACT:** A source can establish subtractive phenomena such as Holes; it does not define the Project Carver software pass.
 
-**PROJECT ACCEPTED INTERPRETATION:** Subtractive world changes are expressed after base Region architecture through a named Carver stage.
+**PROJECT ACCEPTED INTERPRETATION:** Subtractive world changes run after base Region architecture under named Carver ownership.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Carver world category, deterministic pass ordering, stable identity, ownership separation from Regions/materials and current CV-H1 implementation.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Carver category/pass ordering, stable IDs, deterministic application and Region/material separation.
 
-**SOURCE URLS:** Source-specific only for individual Carver content such as Holes.
+**SOURCE URLS:** Source-specific only for individual Carvers.
 
-**REFERENCE PACK:** Individual content packs only.
+**REFERENCE PACK:** Individual content references.
 
-**IMPLEMENTATION OWNER:** `src/world/gen3.ts`, generator/renderer owners.
+**IMPLEMENTATION OWNER:** Gen3/generator/renderer.
 
-**MEDIA COPIED INTO REPO?** No.
+**MEDIA COPIED INTO REPO?** NO.
 
-**LICENSE/PERMISSION EVIDENCE:** Not applicable to architecture.
+**LICENSE/PERMISSION EVIDENCE:** Not architecture media.
 
-**ATTRIBUTION:** Underlying source-derived content only.
+**ATTRIBUTION:** Individual source content only.
 
 **UNKNOWN QUESTIONS:** None identified.
 
-**RECOMMENDED LEDGER UPDATE:** Add general Carver architecture as Project-original while keeping individual content provenance separate.
+**RECOMMENDED LEDGER UPDATE:** Add general Carver architecture as Project-original; keep CV-H1 content provenance separate.
 
-## CONCEPT: Studio / NAL
+## Studio / NAL
 
 **CONCEPT:** Noclip Studio + Noclip Asset Library
 
 **CLASSIFICATION:** `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** No audited Backrooms source defines Project Noclip's authoring/asset architecture.
+**EXTERNAL SOURCE FACT:** No audited Backrooms source defines this authoring/asset architecture.
 
-**PROJECT ACCEPTED INTERPRETATION:** External/user-provided content may enter only through explicit provenance-aware source/definition/build boundaries rather than being silently embedded into world generation.
+**PROJECT ACCEPTED INTERPRETATION:** Human/external assets enter through explicit source/definition/build/runtime boundaries rather than silently owning world semantics.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** PAU representation architecture, typed Asset slots, NAL Asset IDs/content hashes/profiles, source-vs-runtime separation, generated registry, Studio structured authoring, DevelopmentContext/ChangeReceipt and production security boundary.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** PAU, typed Asset slots, NAL Asset IDs/profiles/content hashes, source-runtime split, registry, Studio structured authoring, DevelopmentContext/ChangeReceipt and production security boundary.
 
 **SOURCE URLS:** None for engineering ownership.
 
 **REFERENCE PACK:** Not applicable.
 
-**IMPLEMENTATION OWNER:** `src/presentation/*`, `assets/*`, `scripts/build-assets.mjs`, `tools/studio/*`, `docs/PRESENTATION_ARCHITECTURE.md`, `docs/NOCLIP_STUDIO.md`.
+**IMPLEMENTATION OWNER:** `src/presentation/*`, `assets/*`, `scripts/build-assets.mjs`, `tools/studio/*`.
 
-**MEDIA COPIED INTO REPO?** The architecture contains three current wallpaper source files; those file rights remain separately unresolved.
+**MEDIA COPIED INTO REPO?** The pipeline currently contains the three A/B/C source images; their rights remain separately unresolved.
 
-**LICENSE/PERMISSION EVIDENCE:** NAL metadata can record provenance but current schema/entries do not yet prove the A/B/C underlying rights chain.
+**LICENSE/PERMISSION EVIDENCE:** Technical NAL metadata does not by itself prove rights/attribution.
 
-**ATTRIBUTION:** Asset-specific, not implied by NAL membership.
+**ATTRIBUTION:** Per asset.
 
-**UNKNOWN QUESTIONS:** Future intake must decide how provenance evidence is stored/validated before import.
+**UNKNOWN QUESTIONS:** How future provenance evidence should be enforced/stored before promotion.
 
-**RECOMMENDED LEDGER UPDATE:** Add Studio/NAL as Project-original engineering and strengthen asset-intake requirements without treating pipeline validation as rights validation.
+**RECOMMENDED LEDGER UPDATE:** Add Studio/NAL originality entry and strengthen intake evidence requirements.
 
-## CONCEPT: Character identity architecture
+## Character identity architecture
 
-**CONCEPT:** PlayerCharacterProfile / CharacterProfileId / AvatarDefinition identity architecture
+**CONCEPT:** PlayerCharacterProfile / CharacterProfileId / AvatarDefinition architecture
 
 **CLASSIFICATION:** `PROJECT-NOCLIP-ORIGINAL`
 
 **EXTERNAL SOURCE FACT:** No audited Backrooms source defines this identity model.
 
-**PROJECT ACCEPTED INTERPRETATION:** Human character identity is kept separate from Journey/world-seed identity and from item identity.
+**PROJECT ACCEPTED INTERPRETATION:** Character identity remains separate from Journey/world seed and Item Instance identity.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Profile schema, stable profile ID, local profile persistence, pure avatar mapping, semantic asset-slot contract, humanoid rig vocabulary and first/third/cinematic/remote visibility rules.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Profile schema/ID, local persistence, pure avatar mapping, asset-slot contract, rig/animation vocabulary and visibility rules.
 
 **SOURCE URLS:** None.
 
 **REFERENCE PACK:** None.
 
-**IMPLEMENTATION OWNER:** `src/player-character/profile.ts`, `src/player-character/profileStore.ts`, `src/player-character/avatar.ts`, identity/avatar docs.
+**IMPLEMENTATION OWNER:** `src/player-character/profile.ts`, `profileStore.ts`, `avatar.ts`, identity/avatar docs.
 
-**MEDIA COPIED INTO REPO?** No avatar media currently committed.
+**MEDIA COPIED INTO REPO?** NO avatar media.
 
-**LICENSE/PERMISSION EVIDENCE:** Not applicable to current code-only contract.
+**LICENSE/PERMISSION EVIDENCE:** Code-only contract at this base.
 
 **ATTRIBUTION:** None for Project architecture.
 
-**UNKNOWN QUESTIONS:** Future imported avatar assets require separate per-file provenance.
+**UNKNOWN QUESTIONS:** Future avatar assets require per-file provenance.
 
-**RECOMMENDED LEDGER UPDATE:** Add explicit Project-original identity-architecture entry.
+**RECOMMENDED LEDGER UPDATE:** Explicit Project-original entry.
 
-## CONCEPT: Persistent Journey architecture
+## Journey architecture
 
-**CONCEPT:** Journey / generation-version / save identity
+**CONCEPT:** Persistent Journey / generation-version identity
 
 **CLASSIFICATION:** `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** External Backrooms content does not define Project Noclip's save/persistence identity model.
+**EXTERNAL SOURCE FACT:** External content does not define the Project save identity model.
 
-**PROJECT ACCEPTED INTERPRETATION:** A Journey is one deterministic world experience whose geography is stable for its generation version.
+**PROJECT ACCEPTED INTERPRETATION:** A Journey is one deterministic world experience pinned to generation rules.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Save schema, journey identity, generation-version pinning, old-save Gen2 compatibility, stable world addresses and mutation/delta persistence.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Save schema, journey identity, generation-version compatibility, stable addresses and deltas.
 
 **SOURCE URLS:** None.
 
 **REFERENCE PACK:** Not applicable.
 
-**IMPLEMENTATION OWNER:** `src/persistence/*`, `src/app/ProjectNoclipGame.ts`, world identity types, ADR 0001.
+**IMPLEMENTATION OWNER:** `src/persistence/*`, app/world identity owners, ADR 0001.
 
-**MEDIA COPIED INTO REPO?** No.
+**MEDIA COPIED INTO REPO?** NO.
 
 **LICENSE/PERMISSION EVIDENCE:** Not applicable.
 
-**ATTRIBUTION:** None for the Project architecture.
+**ATTRIBUTION:** None for architecture.
 
 **UNKNOWN QUESTIONS:** None identified.
 
-**RECOMMENDED LEDGER UPDATE:** Include in originality map because it is foundational to how source-derived geography is implemented without copying source mechanics.
+**RECOMMENDED LEDGER UPDATE:** Add to originality map.
 
-## CONCEPT: Item Instance architecture
+## Item Instance architecture
 
-**CONCEPT:** Item Definition / Item Instance stable identity
+**CONCEPT:** Item Definition / Item Instance identity
 
 **CLASSIFICATION:** `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** A source may define an item concept such as Almond Water; it does not define Project Noclip's persistent instance identity model.
+**EXTERNAL SOURCE FACT:** External content may define an item concept; it does not define Project persistent instance identity.
 
-**PROJECT ACCEPTED INTERPRETATION:** Item content identity is separated from a particular persistent object instance.
+**PROJECT ACCEPTED INTERPRETATION:** Item content definition remains separate from one concrete persistent object.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** `instanceId`, deterministic factory/origin/revision state, Definition/Instance separation, stable persistence and ownership semantics.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** `instanceId`, deterministic factory/origin/revision state and persistence semantics.
 
-**SOURCE URLS:** Content-specific sources only; none for instance architecture.
+**SOURCE URLS:** Content-specific only.
 
 **REFERENCE PACK:** Not applicable.
 
-**IMPLEMENTATION OWNER:** `src/items/types.ts`, `src/items/factory.ts`, persistence.
+**IMPLEMENTATION OWNER:** item types/factory and persistence.
 
-**MEDIA COPIED INTO REPO?** No.
+**MEDIA COPIED INTO REPO?** NO.
 
 **LICENSE/PERMISSION EVIDENCE:** Not applicable.
 
@@ -822,29 +807,29 @@ The principal model weakness is completeness, not taxonomy. Current content and 
 
 **UNKNOWN QUESTIONS:** None identified.
 
-**RECOMMENDED LEDGER UPDATE:** Add as Project-original architecture separate from source-derived item names/concepts.
+**RECOMMENDED LEDGER UPDATE:** Add as Project-original separate from item-content provenance.
 
-## CONCEPT: Inventory architecture
+## Inventory architecture
 
 **CONCEPT:** Inventory domain / UI identity preservation
 
 **CLASSIFICATION:** `PROJECT-NOCLIP-ORIGINAL`
 
-**EXTERNAL SOURCE FACT:** No audited Backrooms source defines Project Noclip's container ordering, selection persistence or UI contract.
+**EXTERNAL SOURCE FACT:** No audited Backrooms source defines Project container ordering, selection persistence or UI contract.
 
-**PROJECT ACCEPTED INTERPRETATION:** Inventory displays source-inspired or real-world item concepts without changing their persistent object identity.
+**PROJECT ACCEPTED INTERPRETATION:** Inventory presents source-derived or real-world item concepts without changing persistent object identity.
 
-**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Inventory operations, selection/reorder by `instanceId`, UI projection, six-slot presentation, persistence integration and accessibility interaction contract.
+**PROJECT-NOCLIP-ORIGINAL ELEMENTS:** Inventory operations, reorder/selection by `instanceId`, six-slot projection, persistence and accessibility interaction behavior.
 
 **SOURCE URLS:** None for architecture.
 
 **REFERENCE PACK:** Not applicable.
 
-**IMPLEMENTATION OWNER:** `src/inventory/inventory.ts`, `src/ui/inventoryPresentation.ts`, `src/ui/InventorySurface.ts`, `src/ui/GameUI.ts`, persistence/runtime adapter.
+**IMPLEMENTATION OWNER:** `src/inventory/inventory.ts`, `src/ui/inventoryPresentation.ts`, `InventorySurface.ts`, `GameUI.ts`.
 
-**MEDIA COPIED INTO REPO?** No dedicated inventory/item media assets found.
+**MEDIA COPIED INTO REPO?** NO dedicated inventory/item media.
 
-**LICENSE/PERMISSION EVIDENCE:** Not applicable to current code-only UI.
+**LICENSE/PERMISSION EVIDENCE:** Not applicable to code-only UI.
 
 **ATTRIBUTION:** Content-specific only.
 
@@ -854,307 +839,274 @@ The principal model weakness is completeness, not taxonomy. Current content and 
 
 # External Source Facts
 
-The following facts are source facts only. They do not become Project Noclip runtime truth merely because the external source states them.
+The audit re-verified only already-recorded/relevant sources rather than expanding canon.
 
-- The current Backrooms Wiki Level 0 page credits the original concept to 4chan and identifies later page adaptation/rewrite contributors. The exact current page revision inspected during this audit was revision 48, last edited 15 August 2026.
-- Ordinary Level 0 source identity includes yellow/pale patterned wall treatment, moist carpet, suspended ceiling, fluorescent fixtures and buzzing.
-- The page lists Arch, Pillar, Hole, Blackout and Red Rooms variations/areas and provides source-specific behavioral/material descriptions for them.
-- The page also contains claims that Project Noclip has not necessarily adopted, including broader shifting/perceptual behavior, an “Isolation Effect,” additional anomalous sounds and source-specific exit behavior.
-- The current source page explicitly describes a Level 1 exit through a flickering wall. This does not validate every destination/trigger currently present in Project Noclip's registry.
-- The current Object 1 page identifies `Almond Water` as an externally established Backrooms object/name.
-
-For provenance purposes, each source statement should be recorded against its exact page/source rather than against a generic claim that “Backrooms lore says X.” Different sources/canons may disagree.
+- The Backrooms Wiki Level 0 page credits an original 4chan concept and identifies later adaptation/rewrite contributors.
+- It describes Ordinary Level 0 plus Arches, Pillars, Holes, Blackout Zones and Red Rooms.
+- It describes fluorescent buzzing, carpet characteristics, shifting/perceptual behavior, an Isolation Effect and an explicit Level 1 exit route.
+- These are source claims. Only what Project Noclip deliberately accepts in `WORLD.md`/governance is Project world truth.
+- The Backrooms Wiki Object 1 page supports the `Almond Water` name/concept.
+- Source-page retrieval snapshots can drift. Provenance promotion should record access date/revision instead of assuming the page remains unchanged.
 
 # Project Noclip Interpretations
 
-Project Noclip currently makes several deliberate interpretation choices that must remain visibly separate from external facts:
-
-- Ordinary, Pillar Field and Arch Rooms are continuous Regions of one Level 0 substrate rather than Cell-sized districts or literal copies of source page section names.
-- Pillar source instability/path-shift language is not currently implemented as arbitrary live geometry mutation. Current Generation 3 remains deterministic and Euclidean unless a human-approved Non-Euclidean design says otherwise.
-- Arch evidence is interpreted as a continuous divider/wall grammar. The project explicitly corrected an earlier label-driven freestanding-arch reading.
-- Blackout is a Condition layered over recognizable geometry, with deterministic continuous light/audio boundary behavior.
-- Holes are implemented as a subtractive Carver; the source does not define Project Noclip's Carver taxonomy, exact lattice solver, floor reconstruction or collision law.
-- Red Rooms are treated as a planned Structure with design-gated deterministic closed-loop Non-Euclidean behavior. The source establishes the content direction, not the exact topology implementation.
-- Fluorescent buzz is accepted as core audio identity, but current audio is procedurally synthesized and other source-page anomalous sounds are not automatically accepted.
-- Transition registry presence is implementation state, not proof of external canon. Each destination/trigger needs explicit provenance or an explicit Project-original design classification.
-- Generic human appearance and generic real-world objects are not transformed into source-derived content merely because they exist in a Backrooms game.
+- Ordinary, Pillar Field and Arch Rooms are continuous Regions of one Level 0 substrate rather than Cell-sized districts.
+- Pillar/path-shift language is not implemented as arbitrary live geometry mutation; current geometry remains deterministic/Euclidean unless a human-approved Non-Euclidean design says otherwise.
+- Arch evidence is interpreted as divider/wall grammar; earlier freestanding-arch inference was corrected.
+- Blackout is a Condition, not a separate Region/template.
+- Holes are a subtractive Carver; the source does not define Project Carver taxonomy or exact geometry/collision.
+- Red Rooms are planned as a rare Structure with design-gated deterministic Non-Euclidean behavior; the source does not define the exact topology algorithm.
+- Fluorescent buzz is accepted; anomalous voices/scratching reported by the source are not automatically accepted.
+- Transition registry presence is implementation state, not source/canon evidence.
+- Generic human appearance and real-world object identities are not source-derived merely because they appear in a Backrooms game.
 
 # Project-Noclip-Original Work
 
-The following systems/designs are strongly supported as Project-Noclip-original engineering or product architecture. This classification does not claim that underlying Backrooms concepts, names, photographs or externally sourced aesthetic facts are original.
+Strongly evidenced Project-original systems/designs:
 
-- Generation 3 versioned geography and the `gen3-v1` cutover.
-- Deterministic independent seed domains and stable world addresses.
-- Continuous scalar Fields, Region affinity/depth and Cell-independent semantic geography.
-- Connectivity-first semantic topology and world-space partition solving.
-- Region semantic taxonomy and Architecture Pattern IDs (`O-A1`, `P-A1`, `A-A1`).
+- Generation 3 versioned geography and `gen3-v1` cutover.
+- Deterministic seed domains and stable world addresses.
+- Continuous Fields and Region affinity/depth.
+- Connectivity-first semantic topology and partition solving.
+- Region taxonomy and Architecture Pattern IDs such as `O-A1`, `P-A1`, `A-A1`.
 - Deterministic Carver pass architecture and current CV-H1 realization.
-- Persistent Journey / generation-version compatibility architecture.
-- Wallpaper family resolver, world-space UV/phase handling, Asset-slot material pipeline and Region-aware presentation ownership.
-- M-F1 fixture ownership, deterministic light/pulse synchronization and renderer performance implementation.
-- Procedural Web Audio ambience generation and current audio/runtime lifecycle.
-- PAU representation architecture, LCG construction standard, NAL Asset IDs/profiles/content hashes/source-runtime split.
-- Noclip Studio structured authoring, DevelopmentContext and ChangeReceipt contracts.
-- Visibility Snapshot/topology adapter/propagation/live participation architecture.
-- Character Profile identity and `CharacterProfileId` actor-ownership architecture.
-- Avatar representation contract and semantic asset-slot mapping.
-- Item Definition versus persistent Item Instance identity architecture.
-- Inventory domain operations, stable instance-keyed UI projection and persistence behavior.
-- Current performance/streaming/render-participation mechanisms.
+- Journey/save/generation-version compatibility architecture.
+- Wallpaper family resolver, UV/phase rules, Region-aware material ownership and Asset-slot runtime.
+- M-F1 fixture/light synchronization and renderer performance implementation.
+- Procedural Web Audio ambience.
+- PAU/NAL source-definition-build-runtime architecture and Noclip Studio.
+- Visibility Snapshot/topology adapter/propagation/live participation.
+- Character Profile / `CharacterProfileId` and Avatar representation architecture.
+- Item Definition versus persistent Item Instance identity.
+- Inventory domain and instance-keyed UI projection.
+- Current streaming/render-performance mechanisms.
+
+These originality claims apply to implementation/system design, not to underlying Backrooms concepts, names, photographs or source-derived aesthetic facts.
 
 # Asset / Media Inventory
 
-Status vocabulary in this section is deliberately limited to `DOCUMENTED`, `UNKNOWN`, and `NEEDS REVIEW`. `DOCUMENTED` means provenance evidence was located and described; it does not mean “safe for commercial use.”
+`DOCUMENTED` means evidence was found and described. It does **not** mean “safe for commercial use.”
 
-| PATH / IDENTIFIER | SOURCE | CREATOR if known | HOW OBTAINED | USER-PROVIDED? | LICENSE / PERMISSION EVIDENCE | ATTRIBUTION REQUIREMENT | MODIFIED / DERIVATIVE? | REPOSITORY COPY? | SAFE STATUS |
+| PATH / IDENTIFIER | SOURCE | CREATOR | HOW OBTAINED | USER-PROVIDED? | LICENSE / PERMISSION EVIDENCE | ATTRIBUTION REQUIREMENT | MODIFIED / DERIVATIVE? | REPOSITORY COPY? | SAFE STATUS |
 |---|---|---|---|---|---|---|---|---|---|
-| `assets/source/images/level0-wallpaper-a-chevron.webp` | Underlying source not recorded | Unknown | User-provided source prepared as dev.9.1 game-ready derivative; history says supplied derivative | YES | Project metadata asserts project-use authorization; no underlying source/license/permission artifact | UNKNOWN | YES | YES | NEEDS REVIEW |
-| `assets/source/images/level0-wallpaper-b-dots.webp` | Underlying source not recorded | Unknown | Same as A; history explicitly restores supplied A/B source derivatives | YES | Same limitation as A | UNKNOWN | YES | YES | NEEDS REVIEW |
-| `assets/source/images/level0-wallpaper-c-lines.webp` | Underlying source not recorded | Unknown | User-provided source prepared as dev.9.1 game-ready derivative per metadata | YES | Project metadata asserts project-use authorization; no underlying chain | UNKNOWN | YES | YES | NEEDS REVIEW |
-| `REF-L0-001` baseline / `OGLevel0.jpg` | Backrooms Wiki Level 0; archive source in current license box | Bob Mazza | External reference URL | NO | Current media box states CC0 1.0 | No attribution requirement stated by CC0; source should still be documented | Source page image/reference, not Project derivative | NO | DOCUMENTED |
-| `REF-L0-007` Arch `/2` | Backrooms Wiki Level 0; archive source in current license box | Bob Mazza | External reference URL | NO | Current media box states CC0 1.0 | Same documentation note as baseline | No Project copy | NO | DOCUMENTED |
-| `REF-L0-002` Pillar `/3` | Backrooms Wiki Level 0 | Alfarex | External reference URL | NO | Current media box states CC BY-SA 4.0 | Attribution-bearing license stated by source | No Project copy | NO | DOCUMENTED |
-| `REF-L0-004` Blackout `/5` | Backrooms Wiki Level 0 | Alfarex | External reference URL | NO | Current media box states CC BY-SA 4.0 | Attribution-bearing license stated by source | No Project copy | NO | DOCUMENTED |
-| `REF-L0-003` Hole official `/4` | Backrooms Wiki Level 0 | UNKNOWN | External reference URL | NO | Current media-box mapping is internally mismatched (`Name: 4` points to `/1`), so `/4` file terms are not established | UNKNOWN | No Project copy | NO | NEEDS REVIEW |
-| `REF-L0-003` Hole Drive mirror | User-supplied public Drive mirror of visually matching source image | UNKNOWN | User-provided mirror link | YES | Visual/dimension match recorded; byte identity and permission chain not proved | UNKNOWN | UNKNOWN | NO | NEEDS REVIEW |
-| `REF-L0-005` Red Rooms official `/6` | Backrooms Wiki Level 0 | UNKNOWN from current file-level evidence | External reference URL | NO | No visible `/6` file-specific media entry found in current license box | UNKNOWN | No Project copy | NO | NEEDS REVIEW |
-| `REF-L0-005` Red Rooms Drive mirror | User-supplied public Drive mirror of visually matching source image | UNKNOWN | User-provided mirror link | YES | Visual/dimension match recorded; byte identity and permission chain not proved | UNKNOWN | UNKNOWN | NO | NEEDS REVIEW |
-| `REF-L0-006` Scutoidbox Red Rooms image | Scutoidbox Wikidot file host; parent/source unresolved | UNKNOWN | User-supplied external reference URL | YES | Parent page/canon/creator/license could not be verified | UNKNOWN | UNKNOWN | NO | NEEDS REVIEW |
-| `src/audio/Ambience.ts` current ambience | Project-generated Web Audio | Project Noclip | Procedural oscillators/gains at runtime | NO external recording | No copied recording; code-generated waveform | Not an external media attribution case | Generated, not derivative media on current evidence | Code only | DOCUMENTED |
+| `assets/source/images/level0-wallpaper-a-chevron.webp` | underlying source not recorded | UNKNOWN | user-provided, prepared as game-ready derivative | YES | project-use authorization asserted only; underlying chain absent | UNKNOWN | YES | YES | NEEDS REVIEW |
+| `assets/source/images/level0-wallpaper-b-dots.webp` | underlying source not recorded | UNKNOWN | user-provided; history calls A/B supplied derivatives | YES | same limitation | UNKNOWN | YES | YES | NEEDS REVIEW |
+| `assets/source/images/level0-wallpaper-c-lines.webp` | underlying source not recorded | UNKNOWN | user-provided, prepared as game-ready derivative | YES | project-use authorization asserted only; underlying chain absent | UNKNOWN | YES | YES | NEEDS REVIEW |
+| `REF-L0-001` baseline photo | Backrooms Wiki + Archive source | Bob Mazza | external reference | NO | retrieved media box: CC0 1.0 | no attribution requirement stated by CC0; retain source record | NO Project derivative | NO | DOCUMENTED |
+| `REF-L0-007` Arch `/2` | Backrooms Wiki + Archive source | Bob Mazza | external reference | NO | retrieved media box: CC0 1.0 | same documentation position | NO Project derivative | NO | DOCUMENTED |
+| `REF-L0-002` Pillar `/3` | Backrooms Wiki | Alfarex | external reference | NO | retrieved media box: CC BY-SA 4.0 | attribution-bearing terms stated | NO Project derivative | NO | DOCUMENTED |
+| `REF-L0-004` Blackout `/5` | Backrooms Wiki | Alfarex | external reference | NO | retrieved media box: CC BY-SA 4.0 | attribution-bearing terms stated | NO Project derivative | NO | DOCUMENTED |
+| `REF-L0-003` Hole `/4` | Backrooms Wiki | UNKNOWN for exact `/4` mapping | external reference | NO | media-box `Name: 4` links `/1`; `/4` terms not safely established | UNKNOWN | NO Project derivative | NO | NEEDS REVIEW |
+| Hole Drive mirror | user-supplied Drive mirror | UNKNOWN | user-provided mirror link | YES | visual/dimension match only; byte identity/permission unproved | UNKNOWN | UNKNOWN | NO | NEEDS REVIEW |
+| `REF-L0-005` Red `/6` | Backrooms Wiki | UNKNOWN from retrieved file-level evidence | external reference | NO | no visible file-specific `/6` entry found | UNKNOWN | NO Project derivative | NO | NEEDS REVIEW |
+| Red Drive mirror | user-supplied Drive mirror | UNKNOWN | user-provided mirror link | YES | visual/dimension match only; byte identity/permission unproved | UNKNOWN | UNKNOWN | NO | NEEDS REVIEW |
+| `REF-L0-006` Scutoidbox red image | Scutoidbox Wikidot file host | UNKNOWN | user-provided external reference | YES | parent/canon/creator/license unresolved | UNKNOWN | UNKNOWN | NO | NEEDS REVIEW |
+| current ambience (`src/audio/Ambience.ts`) | Project-generated Web Audio | Project Noclip | runtime synthesis | NO external recording | no copied recording | not an external-media attribution case | generated, not derivative media on current evidence | code only | DOCUMENTED |
 
-Repository-wide media-tree observations at the audited SHA:
+Tree-level inventory at the pinned base:
 
-- committed source images: exactly the three M-W1 A/B/C WebP files above;
-- committed source audio: none found;
-- committed source meshes/GLBs: none found;
-- committed project-specific fonts: none found;
-- committed video: none found;
-- committed reference screenshots/photos under reference packs: none found; references are URLs/text;
-- `public/assets` contains no generated runtime media payload at this base beyond documentation structure;
-- `assets/generated/registry.json` exists but does not itself resolve the missing underlying A/B/C rights chain.
+- source images committed: exactly the three M-W1 WebPs above;
+- source audio committed: none found;
+- source meshes/GLBs committed: none found;
+- project-specific font files committed: none found;
+- video committed: none found;
+- reference screenshots/photos copied under `docs/references`: none found; references are textual/URL records;
+- current NAL technical metadata does not resolve the missing A/B/C underlying rights chain.
 
 # Wiki / Canon Separation Findings
 
-## Finding 1 — Source page truth and Project world truth are different owners
+## Source claim is not Project acceptance
 
-The repo already states that reference packs promote evidence into `WORLD.md`, but synthesis should strengthen wording wherever a reader could infer:
+Repository language should never imply `the wiki says X -> Project Noclip contains X exactly this way`. Reference evidence, accepted world truth and implementation must remain separate owners.
 
-```text
-THE WIKI SAYS X
-therefore
-PROJECT NOCLIP MUST CONTAIN X EXACTLY THAT WAY
-```
+## Current Level 0 source includes claims not automatically adopted
 
-A source claim is evidence. Project acceptance is a separate decision. Implementation is a third layer.
+Examples include arbitrary shifting/Peripheral Shift, Isolation Effect, anomalous voices/scratching and source-specific traversal/exit behavior. These remain external facts unless deliberately accepted by Project world/product ownership.
 
-## Finding 2 — Current Level 0 source contains unaccepted claims
+## Multiple sources/canons must not inherit authority from each other
 
-The audited source page includes shifting/perceptual claims, an “Isolation Effect,” anomalous sound reports and exit details beyond the project's explicitly accepted fidelity contract. These should remain source facts unless `WORLD.md` or another accepted product owner deliberately adopts them.
+`REF-L0-006` is the clearest example. A Scutoidbox red-corridor image cannot inherit the authoritative Level 0 page's canon standing or media terms merely because the visual theme is similar.
 
-## Finding 3 — Multiple canons/sources must not be merged implicitly
+## Registry state is not canon evidence
 
-`REF-L0-006` demonstrates the risk: a Scutoidbox-hosted Red Rooms image was supplied alongside authoritative Level 0 material, but its parent page/canon/authorship/license could not be verified. Its lore authority must not be inherited from `REF-L0-005` merely because the images share a theme.
+The current transition registry contains multiple destinations and Project-specific triggers. Only the Level 1 route was re-verified against the audited Level 0 source. Every other source-derived transition claim needs its own evidence; alternatively it must be explicitly classified as Project interpretation/original design.
 
-## Finding 4 — Registry state is not canon evidence
+## Deterministic law can intentionally differ from source behavior
 
-The current transition registry contains multiple named destinations and Project-specific trigger labels. Only the Level 1 route was directly re-verified against the currently audited Level 0 source. Registry presence must not be rewritten as “the wiki says this exact transition exists” without a dedicated source record.
+Pillar/path shifting and broader Level 0 shifting are external source facts. Project Noclip's deterministic geometry is an explicit interpretation/engineering choice, not evidence that the external source lacks those claims.
 
-## Finding 5 — Source-described instability conflicts with current deterministic law unless explicitly designed
+## Page and attachment terms differ
 
-Pillar/path-shift and broader Level 0 shifting language are external facts. Current Generation 3 intentionally rejects arbitrary non-deterministic geometry mutation. This is a Project interpretation/engineering choice, not evidence that the source lacks shifting behavior.
-
-## Finding 6 — Source page media and page text can have different terms
-
-The current Level 0 page itself demonstrates file-specific media licenses that differ from the page-text license. A source being wiki-hosted cannot be treated as evidence that every attachment is governed by the page's generic terms.
+The retrieved Level 0 page itself lists file-specific media licenses that differ from page-text licensing. “Wiki-hosted” is not a sufficient file-level provenance statement.
 
 # Copied-Text Review
 
-The audit checked the current provenance ledger, Level 0 reference pack, `WORLD.md`, relevant implementation comments/metadata and representative exact source phrases.
+Audited surfaces included the current provenance ledger, Level 0 reference pack, `WORLD.md`, relevant source/asset metadata and relevant implementation/comments.
 
 No substantial copied external prose was identified.
 
-Observed repository practice is mostly concise factual paraphrase, for example descriptions of carpet being shallow/less moist, Red Rooms carpet being thick/sticky/coarse, or closed-loop escape difficulty. These are short evidence notes rather than copied source paragraphs on the audited surfaces.
-
-Two exact-phrase searches for distinctive source wording did not return current repository matches:
+Two representative exact-phrase searches for distinctive source wording returned no current repository match:
 
 - `tight-knit, Berber-style`
 - `thick, sticky, and very coarse`
 
-Potential copied-text concerns to keep under review are therefore process concerns rather than a currently identified copied passage:
+Current references mostly use concise factual paraphrases such as shallower/less-moist carpet, coarse/sticky Red Rooms carpet or escape difficulty. These should remain evidence notes rather than a precedent for importing source paragraphs.
 
-- future reference updates should continue using concise factual paraphrase rather than pasting source prose;
-- asset metadata should describe provenance facts and not embed copied lore text;
-- implementation comments should link to a reference/ledger owner instead of reproducing source paragraphs;
-- if a short direct quotation is genuinely required, record the exact source and keep the quote bounded to what is necessary.
-
-No text was deleted or rewritten in this audit.
+Future rule: prefer concise factual paraphrase + exact source URL/reference ID; keep direct quotation bounded and attributable when genuinely necessary. No text was deleted or rewritten during this audit.
 
 # Attribution / License Evidence
 
-## Backrooms Wiki Level 0 page text
+## Page text
 
-The current page license box states:
+The retrieved Level 0 license box states CC BY-SA 3.0 for the page and names DivineAtlas, DrAkimoto and RobertGoerman in its citation block; the page's credit section separately records the original 4chan concept and earlier adaptation/rewrite history. This audit records those source statements without deciding their project-wide legal scope.
 
-- page license: CC BY-SA 3.0;
-- page authors listed in the current box: DivineAtlas, DrAkimoto and RobertGoerman;
-- the page also credits earlier concept/adaptation contributors in its credit section.
+## File-specific media
 
-This is a source-site statement. This audit does not decide the legal scope of that license as applied to Project Noclip.
+Retrieved file-specific evidence:
 
-## File-specific media evidence currently visible on the Level 0 page
+- baseline “Backrooms” photo — Bob Mazza — CC0 1.0 — Archive source;
+- “Arches” photo — Bob Mazza — CC0 1.0 — Archive source;
+- media `3` / Pillar — Alfarex — CC BY-SA 4.0 — `/3` source;
+- media `5` / Blackout — Alfarex — CC BY-SA 4.0 — `/5` source.
 
-The current license box materially improves several media records:
+## Hole `/4`
 
-- baseline Backrooms photo: Bob Mazza — CC0 1.0;
-- Arch image (“Arches”): Bob Mazza — CC0 1.0;
-- Pillar image (`3`): Alfarex — CC BY-SA 4.0;
-- Blackout image (`5`): Alfarex — CC BY-SA 4.0.
+A visible media entry named `4` gives Alfarex/CC BY-SA 4.0 but links to `/1`, while the Hole reference uses `/4`. Because the mapping is inconsistent, this audit does not transfer that license entry to the `/4` file.
 
-The current source-site licensing guide explicitly explains that images may have separate license information and asks uploaders to record media author/source/license data. This supports the repository's separation law but does not resolve every historical attachment.
+## Red `/6`
 
-## Hole `/4` ambiguity
-
-The current Level 0 page displays a media entry named `4` with creator/license information, but its source link points to `/1`, while the current Hole reference is `/4`. Because the mapping is not clean, this audit does not transfer that license entry to `/4`.
-
-## Red Rooms `/6` ambiguity
-
-No visible file-specific `/6` media entry was found in the current Level 0 page license box during this audit. Page-level terms are not treated as automatic proof of `/6` file-level terms.
+No visible file-specific `/6` entry was found in the retrieved license box. Page-level terms are not treated as automatic proof of `/6` file-level terms.
 
 ## M-W1 A/B/C
 
-`assets/definitions/library.json` records user-provided/project-use authorization assertions, but the entries lack the underlying source, creator, original license/permission artifact and attribution terms. The evidence is not sufficient to upgrade these files beyond `UNKNOWN / REVIEW REQUIRED`.
+`assets/definitions/library.json` records a user-provided/project-use-authorization assertion but no underlying creator/source/license/permission artifact. That is not enough evidence to upgrade any A/B/C file beyond `UNKNOWN / REVIEW REQUIRED`.
 
 # Unknown / Review Required
 
 ## PROV-LEGAL-001
 
-**SUBJECT:** Underlying source/creator/license chain for M-W1 A/B/C committed wallpaper derivatives.
+**SUBJECT:** M-W1 A/B/C underlying source/creator/license chain.
 
-**KNOWN FACTS:** Three WebP files are committed. Project metadata calls them user-provided Level 0 wallpaper references prepared as game-ready derivatives. History independently describes A/B as supplied source derivatives. Metadata asserts project-use authorization from the development conversation.
+**KNOWN FACTS:** Three WebPs are committed; metadata calls them user-provided game-ready derivatives; history calls A/B supplied source derivatives; project-use authorization was asserted.
 
-**SOURCE:** `assets/source/images/*`, `assets/definitions/library.json`, Git history.
+**SOURCE:** `assets/source/images/*`, `assets/definitions/library.json`, repository history.
 
-**WHAT IS UNKNOWN:** Original source(s), creator(s), original bytes, transformation chain, permission/license text, redistribution scope, attribution requirements and whether one permission covers all three files.
+**WHAT IS UNKNOWN:** Original source(s)/bytes, creator(s), transformation chain, permission/license text, redistribution scope, attribution/notices and whether one authorization covers all files.
 
-**WHY IT MATTERS:** These are the only current committed source-media payloads and are directly used by M-W1 presentation.
+**WHY IT MATTERS:** They are the only committed source-media payloads and are used by M-W1.
 
-**WHAT EVIDENCE WOULD RESOLVE IT:** Original source URLs/files; creator identity; dated permission or license artifact; scope covering derivative creation and repository/runtime distribution; required attribution/notices; hashes tying the evidence to each source/derivative.
+**WHAT EVIDENCE WOULD RESOLVE IT:** Original files/URLs, creator identity, dated license/permission artifact, allowed use/distribution scope, required attribution/notices and hashes connecting source to derivatives.
 
-**CURRENT SAFE DOCUMENTATION POSITION:** `UNKNOWN / REVIEW REQUIRED`. Do not state commercial safety or infer that “user-provided” resolves the underlying chain.
+**CURRENT SAFE DOCUMENTATION POSITION:** `UNKNOWN / REVIEW REQUIRED`; do not infer commercial safety or treat “user-provided” as a complete rights chain.
 
 ## PROV-LEGAL-002
 
-**SUBJECT:** File-level attachment licensing for Level 0 Hole `/4` and Red Rooms `/6`.
+**SUBJECT:** Exact file-level terms for Hole `/4` and Red `/6`.
 
-**KNOWN FACTS:** The source page has page-level CC BY-SA 3.0 terms and separate file-level media entries. The Hole reference uses `/4`; the currently visible media entry named `4` points to `/1`. No visible `/6` file-specific entry was found.
+**KNOWN FACTS:** Page text has page-level terms and separate media entries. Hole uses `/4`, but displayed `Name: 4` links to `/1`. No visible `/6` entry was found.
 
-**SOURCE:** Current Backrooms Wiki Level 0 page/license box; `REF-L0-003`; `REF-L0-005`.
+**SOURCE:** Retrieved Level 0 license box; `REF-L0-003`; `REF-L0-005`.
 
-**WHAT IS UNKNOWN:** Correct creator/license/source mapping for `/4`; file-specific creator/license/source for `/6`.
+**WHAT IS UNKNOWN:** Correct creator/license/source mapping for `/4` and file-specific creator/license/source for `/6`.
 
-**WHY IT MATTERS:** File-level media terms can differ from page-level terms.
+**WHY IT MATTERS:** Attachment terms may differ from page terms.
 
-**WHAT EVIDENCE WOULD RESOLVE IT:** Authoritative attachment metadata/history or source-page revision showing exact `/4` and `/6` mappings; creator/source records; explicit file licenses.
+**WHAT EVIDENCE WOULD RESOLVE IT:** Authoritative attachment history/metadata tying exact file paths/hashes to creator/source/license.
 
-**CURRENT SAFE DOCUMENTATION POSITION:** Concept facts may remain source-derived, but the exact attachment terms stay `UNKNOWN / REVIEW REQUIRED`.
+**CURRENT SAFE DOCUMENTATION POSITION:** Content concepts remain source-derived; exact attachment status stays `UNKNOWN / REVIEW REQUIRED`.
 
 ## PROV-LEGAL-003
 
-**SUBJECT:** Hole and Red Rooms Google Drive mirror byte identity and permission chain.
+**SUBJECT:** Hole/Red Google Drive mirror byte identity and permission chain.
 
-**KNOWN FACTS:** The reference pack records public Drive mirrors whose visible content/dimensions matched official images. Direct byte equality was not established.
+**KNOWN FACTS:** Reference pack records public user-provided Drive mirrors that visually/dimensionally match official images.
 
 **SOURCE:** `REF-L0-003`, `REF-L0-005`.
 
-**WHAT IS UNKNOWN:** Whether each mirror is byte-identical to the official attachment; who uploaded/controls the mirror; whether mirroring was authorized; whether the mirror has been modified.
+**WHAT IS UNKNOWN:** Byte equality, mirror owner/uploader, authorization, modification history.
 
-**WHY IT MATTERS:** A visually matching mirror is not automatically the same file or a separate permission grant.
+**WHY IT MATTERS:** Visual match/public access does not prove identical bytes or reuse permission.
 
-**WHAT EVIDENCE WOULD RESOLVE IT:** Downloadable bytes from both official attachment and mirror; SHA-256 equality; mirror owner/source statement; permission/license chain.
+**WHAT EVIDENCE WOULD RESOLVE IT:** Official + mirror bytes, SHA-256 equality, mirror ownership/source statement and permission/license evidence.
 
-**CURRENT SAFE DOCUMENTATION POSITION:** Use the official source for factual provenance where possible; keep mirrors `UNKNOWN / REVIEW REQUIRED` and do not treat public Drive access as reuse permission.
+**CURRENT SAFE DOCUMENTATION POSITION:** Prefer official source for factual provenance; keep mirrors `UNKNOWN / REVIEW REQUIRED`.
 
 ## PROV-LEGAL-004
 
 **SUBJECT:** Scutoidbox Red Rooms image provenance/canon/media terms.
 
-**KNOWN FACTS:** The direct image was previously accessible/visually inspected and is hosted under a Scutoidbox Wikidot file path. The parent source/canon/creator/license could not be verified. It is already `EVIDENCE-ONLY` in the reference pack.
+**KNOWN FACTS:** A Scutoidbox-hosted red corridor image is recorded as `EVIDENCE-ONLY`; parent/canon/authorship/license could not be verified.
 
 **SOURCE:** `REF-L0-006`.
 
-**WHAT IS UNKNOWN:** Original creator, original source, parent-page authority/canon, license/permission, relationship to the authoritative Level 0 Red Rooms image/text.
+**WHAT IS UNKNOWN:** Original creator/source, parent-page canon/authority, license/permission and relationship to authoritative Level 0 material.
 
-**WHY IT MATTERS:** The image must not inherit authoritative Tier-A status or prose/license terms from a distinct source merely because it depicts a similar red corridor.
+**WHY IT MATTERS:** Similar imagery must not transfer canon authority or rights terms between sources.
 
-**WHAT EVIDENCE WOULD RESOLVE IT:** Accessible parent page/history/license metadata; creator/source link; permission/license evidence; independent evidence of canon/source standing.
+**WHAT EVIDENCE WOULD RESOLVE IT:** Accessible parent/history/license metadata, creator/source link and independent canon/source evidence.
 
-**CURRENT SAFE DOCUMENTATION POSITION:** `UNKNOWN / REVIEW REQUIRED`; visual corroboration only; do not use it to establish lore or media rights.
+**CURRENT SAFE DOCUMENTATION POSITION:** `UNKNOWN / REVIEW REQUIRED`; visual corroboration only.
 
 ## PROV-LEGAL-005
 
-**SUBJECT:** Scope/applicability of source-site share-alike/game guidance to Project Noclip's mixed source-derived content and Project-original software.
+**SUBJECT:** Scope/applicability of source-site share-alike/game guidance to Project Noclip's mixed source-derived content and original software.
 
-**KNOWN FACTS:** The current Level 0 page states CC BY-SA 3.0 for page text and separate licenses for some media. The source site's licensing guide contains guidance directed at games and derivatives. Project Noclip combines original software/engineering with source-derived content facts/interpretations and separately sourced media.
+**KNOWN FACTS:** Retrieved Level 0 page states CC BY-SA 3.0 for page text and separate terms for some media; the source site's licensing material includes game/derivative guidance; Project Noclip combines original engineering, adapted content facts/interpretations and separately sourced media.
 
-**SOURCE:** Backrooms Wiki Level 0 license box; Backrooms Wiki licensing guide.
+**SOURCE:** Backrooms Wiki Level 0 license box and licensing guidance.
 
-**WHAT IS UNKNOWN:** The legal scope and applicability of those source-site statements to the repository, compiled game, original code, adapted world content, separately licensed media and distribution model.
+**WHAT IS UNKNOWN:** Legal scope/applicability to repository code, compiled game, adapted world content, separately licensed media and distribution model.
 
-**WHY IT MATTERS:** The answer could affect notices, attribution, content licensing and distribution architecture, but it is a legal determination outside a provenance audit.
+**WHY IT MATTERS:** It may affect notices, attribution, content licensing and distribution, but requires legal analysis outside this audit.
 
-**WHAT EVIDENCE WOULD RESOLVE IT:** Qualified legal review of the actual source uses, repository/distribution structure, licenses, permissions and applicable jurisdiction; or a project-approved licensing policy grounded in such review.
+**WHAT EVIDENCE WOULD RESOLVE IT:** Qualified legal review of actual uses, licenses/permissions, repository/distribution structure and applicable jurisdiction; or a project-approved licensing policy grounded in such review.
 
-**CURRENT SAFE DOCUMENTATION POSITION:** Record source/license statements and attribution evidence accurately; do not state a project-wide legal/license conclusion in this audit.
+**CURRENT SAFE DOCUMENTATION POSITION:** Record source/license statements accurately; make no project-wide legal/license conclusion here.
 
 ## PROV-LEGAL-006
 
-**SUBJECT:** Future audio/texture/mesh/font/video import provenance rules.
+**SUBJECT:** Future audio/texture/mesh/font/video import rules.
 
-**KNOWN FACTS:** Current NAL provides technical source/definition/build validation, but the current tree has only three source image payloads and no external audio/mesh/font/video payloads.
+**KNOWN FACTS:** NAL validates technical source/definition/build constraints. Current source-media payloads are limited to the three wallpaper images.
 
-**SOURCE:** `assets/source/README.md`, `assets/definitions/library.json`, NAL implementation/governance.
+**SOURCE:** NAL/source-asset governance and current tree.
 
-**WHAT IS UNKNOWN:** Which future sources/creators/licenses/permissions will apply to imported content.
+**WHAT IS UNKNOWN:** Future creator/source/license/permission terms.
 
-**WHY IT MATTERS:** Technical validation and content hashing do not prove authorization or attribution compliance.
+**WHY IT MATTERS:** Technical validation/hashing does not prove authorization or attribution compliance.
 
-**WHAT EVIDENCE WOULD RESOLVE IT:** Per-file source URL/original file, creator, acquisition method, permission/license artifact, attribution text, modification history and immutable hash before acceptance.
+**WHAT EVIDENCE WOULD RESOLVE IT:** Per-file source URL/original, creator, acquisition method, permission/license artifact, attribution, modification history and immutable hashes before promotion.
 
-**CURRENT SAFE DOCUMENTATION POSITION:** Require provenance evidence before import/promotion; unresolved assets remain `UNKNOWN / REVIEW REQUIRED` and should not gain runtime trust merely by passing NAL technical validation.
+**CURRENT SAFE DOCUMENTATION POSITION:** Unresolved external assets remain `UNKNOWN / REVIEW REQUIRED`; NAL acceptance must not be treated as rights validation.
 
-## Additional provenance unknowns
+Additional unresolved provenance:
 
-- Source provenance for every current transition destination/trigger beyond the re-verified Level 1 source claim.
-- Whether any current item description besides the `Almond Water` concept intentionally derives from external Backrooms prose; no such evidence was found.
-- Exact provenance of any future avatar/body/clothing/animation Asset pack.
-- Whether historical source-page revisions used different media licenses/credits than the current page; synthesis should record access date/revision with newly verified evidence.
+- transition sources/classification beyond the re-verified Level 1 source claim;
+- any future avatar mesh/material/animation provenance;
+- whether any current item wording besides the Almond Water concept intentionally derives from external prose; no evidence found;
+- source-page revision drift: later ledger promotion should record exact evidence-capture date/revision.
 
 # Canonical Ledger Updates Recommended
 
-These are recommendations for the later centralized synthesis. This audit does not modify `docs/CONTENT_PROVENANCE.md`.
+For the later centralized synthesis only; this audit does not edit `docs/CONTENT_PROVENANCE.md`.
 
-1. **Level 0 baseline media:** add current file-specific Bob Mazza / CC0 1.0 evidence and archive source reference.
-2. **Arch `/2`:** add current file-specific Bob Mazza / CC0 1.0 evidence.
-3. **Pillar `/3`:** replace any ambiguous/general render-license wording with current exact media-box evidence: Alfarex / CC BY-SA 4.0 / `/3`.
-4. **Blackout `/5`:** add current exact media-box evidence: Alfarex / CC BY-SA 4.0 / `/5`.
-5. **Hole `/4`:** retain source-derived concept facts but explicitly mark file-level media terms unknown because of the current `Name: 4` -> `/1` mapping mismatch.
-6. **Red Rooms `/6`:** retain source-derived concept facts but explicitly mark file-level media terms unknown until `/6` creator/license mapping is verified.
-7. **Drive mirrors:** record byte-identity and permission-chain status separately from the official attachment source; do not treat public accessibility as authorization.
-8. **Scutoidbox:** preserve `EVIDENCE-ONLY`; make the unknown parent/canon/creator/license state prominent in the canonical ledger.
-9. **M-W1 A/B/C:** retain `UNKNOWN / REVIEW REQUIRED`; add per-file source/creator/license/permission/attribution/hash fields when evidence exists.
-10. **Audio:** add a current-status entry stating that fluorescent-buzz identity is source-derived but the current sound is procedurally synthesized with no external audio recording committed.
-11. **Almond Water:** add an explicit source-derived item-concept/name entry linked to the exact source page, while classifying Project stats/description/Item Instance behavior separately.
-12. **Generic items:** record current generic real-world item identities as `REAL-WORLD-INSPIRATION` unless a specific external source is later identified.
-13. **Transitions:** add per-destination provenance rather than allowing the implementation registry to stand in for canon/source evidence. Re-verified Level 1 source evidence can be recorded now; others remain unresolved until sourced or explicitly classified as Project-original interpretation/design.
-14. **Generation 3 originality:** explicitly map Gen3, deterministic Fields, Region system, topology, Carver architecture, persistence/versioning and visibility architecture as Project-original engineering.
-15. **Presentation/tooling originality:** explicitly map PAU/NAL/Studio, wallpaper resolver/UV implementation, procedural ambience and material/runtime systems as Project-original engineering.
-16. **Identity architecture originality:** add PlayerCharacterProfile/CharacterProfileId, AvatarDefinition, Journey identity, Item Instance and Inventory architecture as Project-original.
-17. **Source-page drift:** where practical record source page revision/access date alongside verified evidence so later edits do not silently rewrite historical provenance.
-18. **Copied text:** continue concise paraphrase practice; do not import source prose into WORLD/reference/code comments as a shortcut for evidence capture.
+1. Add file-specific Bob Mazza / CC0 1.0 evidence for baseline and Arch reference images.
+2. Record exact Alfarex / CC BY-SA 4.0 evidence for Pillar `/3` and Blackout `/5`.
+3. Keep Hole `/4` file terms unresolved because of the `Name: 4` -> `/1` mismatch.
+4. Keep Red `/6` file terms unresolved until exact creator/license mapping is verified.
+5. Track Drive mirrors separately from official attachments, including hashes and permission chain.
+6. Preserve Scutoidbox as `EVIDENCE-ONLY` / `UNKNOWN / REVIEW REQUIRED` until parent/canon/creator/license is verified.
+7. Keep A/B/C `UNKNOWN / REVIEW REQUIRED` and add per-file origin/creator/license/permission/attribution/hash fields when evidence exists.
+8. Add current audio status: source-derived fluorescent-buzz identity, Project-original procedural synthesis, no copied recording committed.
+9. Add an explicit Almond Water source-derived concept/name entry; keep Project stats/descriptions/instance behavior separate.
+10. Classify generic current item identities as `REAL-WORLD-INSPIRATION` unless specific external provenance is later found.
+11. Add per-transition provenance rather than treating registry state as canon evidence; the currently re-verified Level 1 route can be recorded separately from unresolved others.
+12. Expand the originality map for Generation 3, deterministic Fields, Region system, topology, Carver architecture, Journey persistence/versioning and visibility.
+13. Expand the originality map for PAU/NAL/Studio, procedural material/audio implementation, Character Profile/Avatar architecture, Item Instance and Inventory.
+14. Record exact external source access date/revision with promoted evidence so future wiki edits do not silently rewrite provenance history.
+15. Preserve concise paraphrase practice; do not use source prose as a substitute for a source record.
 
 # Future Content Intake Recommendations
-
-Future content intake should make provenance a prerequisite of promotion rather than a cleanup step after runtime integration.
 
 For every external or user-provided media file, capture before repository/runtime promotion:
 
@@ -1177,22 +1129,20 @@ REPOSITORY COPY? YES / NO
 STATUS: DOCUMENTED / UNKNOWN / NEEDS REVIEW
 ```
 
-Operational recommendations:
+Operational rules recommended for synthesis/governance:
 
-- Do not allow `assets:build` success to imply provenance/permission success. Technical validity and rights evidence are separate gates.
-- Require exact file-level media terms when a source site distinguishes page and attachment licensing.
-- Prefer the authoritative/original source URL over third-party mirrors. If a mirror is required, hash both files and record mirror ownership/permission separately.
-- Treat user-provided assets as a provenance category, not a rights conclusion. Store the creator/source/permission evidence behind the user's authorization assertion.
-- Record modifications without assuming they eliminate source obligations or uncertainty.
-- Keep source facts, Project acceptance and implementation notes in separate fields even when they refer to the same concept.
-- Do not promote an external concept into `WORLD.md` solely because it appears on a wiki page. Record the exact source/canon, then make the Project acceptance decision separately.
-- Do not let one canon/source transfer authority to another source with similar imagery or terminology.
-- For future audio, record whether it is an external recording, synthesized Project audio or a derivative mix. Current procedural Web Audio is a useful clean precedent.
-- For future meshes/avatars, record mesh creator, rig/animation creator, texture creators and licenses separately where different contributors/assets are combined.
-- For copied text, prefer concise factual paraphrase with source URL and reference ID. Use direct quotations only when necessary and bounded.
-- When genuine licensing uncertainty remains, use the `PROV-LEGAL-###` format and keep the status `UNKNOWN / REVIEW REQUIRED` until evidence is obtained. Do not invent a conclusion to unblock implementation.
-
-Audit completion position:
+- Technical NAL/build success must never imply provenance/permission success.
+- Require file-level terms where a source distinguishes page and attachment licensing.
+- Prefer authoritative/original URLs over mirrors; if a mirror is necessary, hash both and record mirror ownership/permission separately.
+- Treat “user-provided” as provenance information, not a rights conclusion.
+- Record modifications without assuming they remove source obligations or uncertainty.
+- Keep source fact, Project acceptance and implementation in separate fields.
+- Do not promote a wiki claim into `WORLD.md` solely because it exists on a source page.
+- Do not transfer authority/license between different canons/sources because imagery is similar.
+- For future audio, distinguish external recording, Project synthesis and derivative mix.
+- For future meshes/avatars, record mesh, rig/animation and texture creators/licenses separately where applicable.
+- Prefer concise factual paraphrase with exact source URL/reference ID; use bounded direct quotation only where necessary.
+- When genuine licensing uncertainty remains, use `PROV-LEGAL-###` and keep `UNKNOWN / REVIEW REQUIRED` until evidence resolves it.
 
 ```text
 PROVENANCE_IMPACT=REVIEWED
