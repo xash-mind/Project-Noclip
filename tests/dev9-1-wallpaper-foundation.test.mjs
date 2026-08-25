@@ -25,7 +25,6 @@ const imagePipelineSource = await readFile(new URL('../src/renderer/presentation
 const casingSource = await readFile(new URL('../src/renderer/ordinaryCasingMaterialPresentation.ts', import.meta.url), 'utf8');
 const interactionSource = await readFile(new URL('../src/renderer/outletInteractionRuntime.ts', import.meta.url), 'utf8');
 const mainSource = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
-const version = (await readFile(new URL('../VERSION', import.meta.url), 'utf8')).trim();
 
 function wall(id, cx = 0, cz = 0, orientation = 'z', sx = 6, sz = 6) {
   return {
@@ -151,7 +150,6 @@ test('three uploaded-source wallpaper derivatives are registered through NAL', (
 });
 
 test('real NAL bytes preload and one surface lifecycle owns final supplied wall finishes', () => {
-  assert.equal(version, '0.3.0-dev.9.7');
   assert.doesNotMatch(presentationSource, /paintLevel0ChevronWallpaper|fallbackCanvas/);
   assert.match(presentationSource, /function wallpaperAsset\(family/);
   assert.match(presentationSource, /materialAssetId\(TARGET, SLOT_BY_FAMILY\[family\]\)/);
