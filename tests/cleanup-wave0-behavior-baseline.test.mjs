@@ -5,7 +5,7 @@ const { resolveCircleAgainstAabbs } = await import('../.test-dist/src/physics/co
 const {
   archSemanticWallOwnsFinalCollision,
   archStructuralRole
-} = await import('../.test-dist/src/renderer/archDividerRuntimeCorrection.js');
+} = await import('../.test-dist/src/world/gen3ArchDividerSemantics.js');
 const { resolveCanonicalLevel0CarpetPresentation } = await import('../.test-dist/src/renderer/finalLevel0MaterialPresentation.js');
 const { FIXTURE_LIGHTING_PROFILE } = await import('../.test-dist/src/renderer/fixtureLighting.js');
 const {
