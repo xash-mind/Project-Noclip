@@ -1,3 +1,5 @@
+import { CELL_SIZE } from '../world/types.js';
+
 export interface SpatialIdentity {
   id: string;
 }
@@ -12,6 +14,37 @@ export interface SpatialBounds extends SpatialIdentity {
 export interface SpatialPoint extends SpatialIdentity {
   x: number;
   z: number;
+}
+
+export interface SpatialQueryBounds {
+  minX: number;
+  minZ: number;
+  maxX: number;
+  maxZ: number;
+}
+
+/**
+ * Canonical candidate envelope for indexed player collision.
+ *
+ * The collision resolver can move the player again during axis sweeps and
+ * repeated depenetration. Querying one neighboring Cell beyond the swept
+ * circle keeps those chained corrections local while preserving the same
+ * semantic collider set the production hot path is designed to cover.
+ */
+export function movementCollisionQueryBounds(
+  currentX: number,
+  currentZ: number,
+  nextX: number,
+  nextZ: number,
+  radius = 0.34
+): SpatialQueryBounds {
+  const margin = radius + CELL_SIZE;
+  return {
+    minX: Math.min(currentX, nextX) - margin,
+    minZ: Math.min(currentZ, nextZ) - margin,
+    maxX: Math.max(currentX, nextX) + margin,
+    maxZ: Math.max(currentZ, nextZ) + margin
+  };
 }
 
 interface IndexedEntry<T> {
