@@ -1,22 +1,26 @@
 import type { CellDescriptor } from '../world/types.js';
-import { applyArchDividerRuntimeCorrection, scheduleNearbyArchCollisionReconciliation } from './archDividerRuntimeCorrection.js';
+import { realizeNearbyArchCollision } from './archDividerCollision.js';
 import { applyFinalLevel0Materials, scheduleFinalLevel0MaterialsAfterArchReconstruction } from './finalLevel0MaterialPresentation.js';
 import { attachFixtureLights, detachCellFixtures } from './fixtureLighting.js';
 import { applyLevel0RegionPresentation, scheduleNearbyArchPresentation } from './level0RegionPresentation.js';
 import { applyLevel0SurfacePresentation } from './level0SurfacePresentation.js';
 import { applyOrdinaryCasingMaterialPresentation } from './ordinaryCasingMaterialPresentation.js';
-import { registerRuntimeCellState, unregisterRuntimeCellState } from './runtimePerformance.js';
+import {
+  refreshRuntimeCellCollisionState,
+  registerRuntimeCellState,
+  unregisterRuntimeCellState
+} from './runtimePerformance.js';
 import { markStaticWorldBatchingDirty } from './StaticWorldBatching.js';
 import { applyWallJunctionPresentation } from './wallJunctionPresentation.js';
 import { WorldRenderer } from './WorldRenderer.js';
 
 /**
- * Wave 1 composition owner for streamed Cell renderer lifecycle order.
+ * Single streamed Cell composition owner established by Cleanup Wave 1.
  *
- * The order below is intentionally the exact effective order of the former
- * prototype-wrapper stack. Semantic policy remains in each participant. The
- * Region/A-A1/final-material deferred boundaries are intentionally retained;
- * Wave 1 makes their ordering explicit but does not reinterpret their behavior.
+ * Wave 2 replaces the A-A1 correction/reconciliation pair with synchronous,
+ * descriptor-driven canonical collision realization. Neighbor-aware visible
+ * reconstruction and final-material convergence retain their accepted deferred
+ * boundaries; neither owns gameplay collision.
  */
 export const RENDERER_CELL_LOAD_ORDER = Object.freeze([
   'base-cell-realization',
@@ -25,8 +29,7 @@ export const RENDERER_CELL_LOAD_ORDER = Object.freeze([
   'level0-region-presentation',
   'schedule-nearby-arch-presentation',
   'wall-junction-presentation',
-  'arch-divider-runtime-correction',
-  'schedule-nearby-arch-collision-reconciliation',
+  'realize-canonical-arch-collision',
   'fixture-lighting-attach',
   'static-batching-dirty',
   'runtime-derived-state-register',
@@ -39,11 +42,23 @@ export const RENDERER_CELL_UNLOAD_ORDER = Object.freeze([
   'fixture-lighting-detach',
   'base-cell-destroy',
   'schedule-nearby-arch-presentation',
-  'schedule-nearby-arch-collision-reconciliation',
+  'realize-neighbor-arch-collision',
   'static-batching-dirty'
 ] as const);
 
 let installed = false;
+
+function syncAlreadyIndexedArchNeighbors(
+  renderer: WorldRenderer,
+  affectedCellIds: readonly string[],
+  currentCellId: string,
+  currentAlreadyIndexed: boolean
+): void {
+  for (const cellId of affectedCellIds) {
+    if (!currentAlreadyIndexed && cellId === currentCellId) continue;
+    refreshRuntimeCellCollisionState(renderer, cellId);
+  }
+}
 
 /**
  * Installs exactly one load/unload composition hook around WorldRenderer's
@@ -64,16 +79,16 @@ export function installRendererCellLifecycle(): void {
     const visual = this.loaded.get(descriptor.id);
     if (!visual) return;
 
-    // Preserve the former wrapper unwind order exactly. Several presentation
-    // stages intentionally still run on duplicate load requests because the
-    // old wrapper stack did so even when base loadCell returned early.
+    // Preserve accepted presentation order while moving A-A1 gameplay collision
+    // onto the canonical semantic path before derived-index registration.
     applyLevel0SurfacePresentation(this, visual);
     applyOrdinaryCasingMaterialPresentation(this, descriptor);
     if (!alreadyLoaded) applyLevel0RegionPresentation(this, visual);
     scheduleNearbyArchPresentation(this, descriptor);
     applyWallJunctionPresentation(visual);
-    applyArchDividerRuntimeCorrection(this, visual);
-    scheduleNearbyArchCollisionReconciliation(this, descriptor);
+
+    const affectedArchCells = realizeNearbyArchCollision(this, descriptor);
+    syncAlreadyIndexedArchNeighbors(this, affectedArchCells, descriptor.id, alreadyLoaded);
 
     if (!alreadyLoaded) {
       attachFixtureLights(this, visual);
@@ -93,15 +108,17 @@ export function installRendererCellLifecycle(): void {
     const visual = this.loaded.get(cellId);
     const descriptor = visual?.descriptor;
 
-    // Preserve pre-destroy ownership: derived indexes and fixture state must
-    // observe the still-live Cell before WorldRenderer destroys its entities.
+    // Derived indexes and fixture state observe the still-live Cell before base
+    // entity destruction. Neighbor A-A1 collision is then recomputed from the
+    // remaining deterministic descriptors and re-indexed synchronously.
     unregisterRuntimeCellState(this, cellId);
     detachCellFixtures(this, cellId, descriptor);
     baseUnloadCell.call(this, cellId);
 
     if (!descriptor) return;
     scheduleNearbyArchPresentation(this, descriptor);
-    scheduleNearbyArchCollisionReconciliation(this, descriptor);
+    const affectedArchCells = realizeNearbyArchCollision(this, descriptor);
+    for (const affectedCellId of affectedArchCells) refreshRuntimeCellCollisionState(this, affectedCellId);
     if (visual && !this.loaded.has(cellId)) markStaticWorldBatchingDirty();
   };
 }
