@@ -14,6 +14,7 @@ import { makeMaterial, type CellVisual } from './support.js';
 const FIXTURE_LIGHT_RANGE = 12.0;
 const FIXTURE_LIGHT_INTENSITY_MULTIPLIER = 2.0;
 const MAX_ACTIVE_FIXTURE_LIGHTS = 128;
+const FIXTURE_SELECTION_MOVEMENT_METERS = 0.25;
 const FIXTURE_PANEL_HALF_HEIGHT = 0.04;
 const FIXTURE_PANEL_LENGTH = 2.2;
 const FIXTURE_PANEL_WIDTH = 0.38;
@@ -48,6 +49,13 @@ interface FixtureRuntime {
 interface RendererFixtureState {
   fixtures: Map<string, FixtureRuntime>;
   materials: Map<string, pc.StandardMaterial>;
+  selectedIds: Set<string>;
+  fixtureVersion: number;
+  lastSelectionFixtureVersion: number;
+  lastSelectionPlayerX?: number;
+  lastSelectionPlayerZ?: number;
+  lastSelectionScopeSignature?: string;
+  lastSelectionCeiling?: number;
 }
 
 const states = new WeakMap<WorldRenderer, RendererFixtureState>();
@@ -60,6 +68,10 @@ export interface FixtureLightingDiagnostics {
   shadowDirtyMarks: number;
   shadowUpdateRequests: number;
   selectionChanges: number;
+  selectionRecomputes: number;
+  selectionRetainedUpdates: number;
+  selectionCandidateScans: number;
+  inactiveFixtureSkips: number;
   shadowResolutionChanges: number;
   panelMaterialWrites: number;
   intensityWrites: number;
@@ -76,6 +88,10 @@ const fixtureDiagnostics: FixtureLightingDiagnostics = {
   shadowDirtyMarks: 0,
   shadowUpdateRequests: 0,
   selectionChanges: 0,
+  selectionRecomputes: 0,
+  selectionRetainedUpdates: 0,
+  selectionCandidateScans: 0,
+  inactiveFixtureSkips: 0,
   shadowResolutionChanges: 0,
   panelMaterialWrites: 0,
   intensityWrites: 0,
@@ -89,11 +105,16 @@ export function fixtureLightingDiagnosticsSnapshot(): FixtureLightingDiagnostics
   return { ...fixtureDiagnostics };
 }
 
-
 function stateFor(renderer: WorldRenderer): RendererFixtureState {
   const existing = states.get(renderer);
   if (existing) return existing;
-  const created: RendererFixtureState = { fixtures: new Map(), materials: new Map() };
+  const created: RendererFixtureState = {
+    fixtures: new Map(),
+    materials: new Map(),
+    selectedIds: new Set(),
+    fixtureVersion: 0,
+    lastSelectionFixtureVersion: -1
+  };
   states.set(renderer, created);
   return created;
 }
@@ -242,7 +263,45 @@ function selectActiveFixtureIds(
     .map((runtime) => ({ runtime, distance: fixtureDistanceTo(runtime, playerX, playerZ) }))
     .sort((a, b) => a.distance - b.distance || a.runtime.id.localeCompare(b.runtime.id))
     .slice(0, maxActiveLights);
+  fixtureDiagnostics.selectionCandidateScans += state.fixtures.size;
   return new Set(candidates.map(({ runtime }) => runtime.id));
+}
+
+function activeScopeSignature(renderer: WorldRenderer): string {
+  const ids: string[] = [];
+  for (const visual of renderer.loaded.values()) {
+    if (cellIsInsideActiveRenderScope(renderer, visual.descriptor)) ids.push(visual.descriptor.id);
+  }
+  return ids.sort().join('|');
+}
+
+function selectedFixtureIds(
+  renderer: WorldRenderer,
+  state: RendererFixtureState,
+  playerX: number,
+  playerZ: number,
+  maxActiveLights: number
+): Set<string> {
+  const signature = activeScopeSignature(renderer);
+  const moved = state.lastSelectionPlayerX === undefined || state.lastSelectionPlayerZ === undefined
+    ? Number.POSITIVE_INFINITY
+    : Math.hypot(playerX - state.lastSelectionPlayerX, playerZ - state.lastSelectionPlayerZ);
+  const needsSelection = moved >= FIXTURE_SELECTION_MOVEMENT_METERS
+    || state.lastSelectionScopeSignature !== signature
+    || state.lastSelectionCeiling !== maxActiveLights
+    || state.lastSelectionFixtureVersion !== state.fixtureVersion;
+  if (!needsSelection) {
+    fixtureDiagnostics.selectionRetainedUpdates += 1;
+    return state.selectedIds;
+  }
+  state.selectedIds = selectActiveFixtureIds(renderer, state, playerX, playerZ, maxActiveLights);
+  state.lastSelectionPlayerX = playerX;
+  state.lastSelectionPlayerZ = playerZ;
+  state.lastSelectionScopeSignature = signature;
+  state.lastSelectionCeiling = maxActiveLights;
+  state.lastSelectionFixtureVersion = state.fixtureVersion;
+  fixtureDiagnostics.selectionRecomputes += 1;
+  return state.selectedIds;
 }
 
 function fixtureRangeTouchesCell(runtime: FixtureRuntime, descriptor: CellDescriptor): boolean {
@@ -273,6 +332,7 @@ function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void 
   const state = stateFor(renderer);
   const descriptor = visual.descriptor;
   const panels = reconcileFixturePanels(state, visual);
+  let added = false;
   for (const group of descriptor.lightGroups) {
     group.fixtures.forEach((fixture, fixtureIndex) => {
       const id = `${group.id}:${fixtureIndex}`;
@@ -312,9 +372,11 @@ function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void 
         shadowDirty: true,
         selected: false
       });
+      added = true;
       fixtureDiagnostics.lightsCreated += 1;
     });
   }
+  if (added) state.fixtureVersion += 1;
   markFixtureShadowsDirtyNearCell(state, descriptor);
 }
 
@@ -322,11 +384,15 @@ function detachCellFixtures(renderer: WorldRenderer, cellId: string, descriptor?
   const state = states.get(renderer);
   if (!state) return;
   if (descriptor) markFixtureShadowsDirtyNearCell(state, descriptor);
+  let removed = false;
   for (const [id, runtime] of state.fixtures) {
     if (runtime.cellId !== cellId) continue;
     state.fixtures.delete(id);
+    state.selectedIds.delete(id);
+    removed = true;
     fixtureDiagnostics.lightsDestroyed += 1;
   }
+  if (removed) state.fixtureVersion += 1;
 }
 
 function updateFixtureLighting(
@@ -341,7 +407,7 @@ function updateFixtureLighting(
   const settings = getRenderSettings();
   const renderDistanceCeiling = renderDistanceProfile(settings).lightShadowSafetyCeiling;
   const maxActiveLights = Math.min(MAX_ACTIVE_FIXTURE_LIGHTS, renderDistanceCeiling);
-  const selectedIds = selectActiveFixtureIds(renderer, state, playerX, playerZ, maxActiveLights);
+  const selectedIds = selectedFixtureIds(renderer, state, playerX, playerZ, maxActiveLights);
   const groupPulses = new Map<string, number>();
 
   const pulseFor = (group: LightGroupSpec): number => {
@@ -353,8 +419,8 @@ function updateFixtureLighting(
   };
 
   for (const runtime of state.fixtures.values()) {
-    const pulse = pulseFor(runtime.group);
-    const selected = selectedIds.has(runtime.id);
+    const participates = cellIsInsideActiveRenderScope(renderer, runtime.descriptor);
+    const selected = participates && selectedIds.has(runtime.id);
     if (selected !== runtime.selected) {
       fixtureDiagnostics.selectionChanges += 1;
       if (selected && !runtime.shadowDirty) {
@@ -364,6 +430,21 @@ function updateFixtureLighting(
     }
     runtime.selected = selected;
 
+    const light = componentFor(runtime);
+    if (!participates) {
+      fixtureDiagnostics.inactiveFixtureSkips += 1;
+      if (light && Math.abs(light.intensity) > 0.000001) {
+        light.intensity = 0;
+        fixtureDiagnostics.intensityWrites += 1;
+      }
+      if (runtime.light.enabled) {
+        runtime.light.enabled = false;
+        fixtureDiagnostics.enabledWrites += 1;
+      }
+      continue;
+    }
+
+    const pulse = pulseFor(runtime.group);
     if (runtime.mesh?.render) {
       const material = fixtureMaterial(state, runtime.descriptor, runtime.group, pulse);
       if (runtime.mesh.render.material !== material) {
@@ -371,7 +452,6 @@ function updateFixtureLighting(
         fixtureDiagnostics.panelMaterialWrites += 1;
       }
     }
-    const light = componentFor(runtime);
     if (!light) continue;
     // Color/range/cast/bias/normal-offset are invariant for this runtime and
     // are set once at creation. Rewriting them for every fixture every frame
@@ -412,6 +492,7 @@ export const FIXTURE_LIGHTING_PROFILE = Object.freeze({
   range: FIXTURE_LIGHT_RANGE,
   intensityMultiplier: FIXTURE_LIGHT_INTENSITY_MULTIPLIER,
   maxActiveLights: MAX_ACTIVE_FIXTURE_LIGHTS,
+  selectionMovementMeters: FIXTURE_SELECTION_MOVEMENT_METERS,
   emitterDrop: FIXTURE_PANEL_HALF_HEIGHT + FIXTURE_EMITTER_CLEARANCE,
   fixturePanelCastsShadows: false,
   castShadows: true,

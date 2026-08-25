@@ -28,6 +28,7 @@
     "src/renderer/level0RegionPresentation.ts",
     "src/renderer/ordinaryWallpaperRules.ts",
     "src/renderer/renderSettings.ts",
+    "src/renderer/runtimeSpatialIndex.ts",
     "src/renderer/streamingPolicy.ts",
     "src/renderer/wallJunctionGeometry.ts",
     "src/renderer/visibility/**/*.ts"
