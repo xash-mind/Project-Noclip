@@ -7,7 +7,11 @@ const {
   predictiveVelocitySample,
   predictiveWarmCoordinates
 } = await import('../.test-dist/src/renderer/streamingPolicy.js');
-const { SpatialAabbIndex, SpatialPointIndex } = await import('../.test-dist/src/renderer/runtimeSpatialIndex.js');
+const {
+  movementCollisionQueryBounds,
+  SpatialAabbIndex,
+  SpatialPointIndex
+} = await import('../.test-dist/src/renderer/runtimeSpatialIndex.js');
 const { resolveCircleAgainstAabbs } = await import('../.test-dist/src/physics/collision.js');
 const schedulerSource = await readFile(new URL('../src/renderer/streamingScheduler.ts', import.meta.url), 'utf8');
 const runtimeSource = await readFile(new URL('../src/renderer/runtimePerformance.ts', import.meta.url), 'utf8');
@@ -66,12 +70,8 @@ function collider(id, minX, minZ, maxX, maxZ) {
 }
 
 function indexedResolve(index, all, currentX, currentZ, nextX, nextZ, radius = 0.34) {
-  const candidates = index.query(
-    Math.min(currentX, nextX) - radius - 0.001,
-    Math.min(currentZ, nextZ) - radius - 0.001,
-    Math.max(currentX, nextX) + radius + 0.001,
-    Math.max(currentZ, nextZ) + radius + 0.001
-  );
+  const bounds = movementCollisionQueryBounds(currentX, currentZ, nextX, nextZ, radius);
+  const candidates = index.query(bounds.minX, bounds.minZ, bounds.maxX, bounds.maxZ);
   return {
     candidates,
     indexed: resolveCircleAgainstAabbs(currentX, currentZ, nextX, nextZ, candidates, radius),
@@ -83,6 +83,17 @@ function assertSamePosition(left, right, tolerance = 1e-9) {
   assert.ok(Math.abs(left[0] - right[0]) <= tolerance, `x ${left[0]} != ${right[0]}`);
   assert.ok(Math.abs(left[1] - right[1]) <= tolerance, `z ${left[1]} != ${right[1]}`);
 }
+
+test('production and equivalence tests share one neighboring-Cell collision candidate contract', () => {
+  assert.deepEqual(movementCollisionQueryBounds(1, -2, 1.5, -1.5, 0.34), {
+    minX: -13.34,
+    minZ: -16.34,
+    maxX: 15.84,
+    maxZ: 12.84
+  });
+  assert.ok(runtimeSource.includes('movementCollisionQueryBounds(currentX, currentZ, nextX, nextZ, radius)'));
+  assert.equal(runtimeSource.includes('COLLISION_QUERY_NEIGHBOR_MARGIN'), false);
+});
 
 test('indexed collision preserves canonical wall impact, slide, corner, T-junction and narrow-connector results', () => {
   const walls = [
@@ -110,12 +121,37 @@ test('indexed collision preserves canonical wall impact, slide, corner, T-juncti
   }
 });
 
-test('indexed collision is equivalent to brute force across randomized generated-style samples', () => {
-  let state = 0x51f15e;
-  const random = () => {
+test('indexed collision preserves Cell-border, initial overlap, and chained depenetration cases', () => {
+  const walls = [
+    collider('overlap-a', -0.2, -2, 0.2, 2),
+    collider('overlap-b', 0.45, -2, 0.75, 2),
+    collider('cell-border', 13.9, -3, 14.1, 3),
+    collider('border-return', 14.6, 0.6, 15.0, 3),
+    collider('remote', 56, 56, 58, 58)
+  ];
+  const index = new SpatialAabbIndex(14);
+  walls.forEach((wall) => index.add(wall));
+  for (const motion of [
+    [0.1, 0, 0.1, 0],
+    [13.4, 0, 14.6, 0],
+    [13.7, 1.1, 14.8, 1.1],
+    [14.15, 1.2, 13.5, 1.2]
+  ]) {
+    const result = indexedResolve(index, walls, ...motion);
+    assertSamePosition(result.indexed, result.brute);
+    assert.ok(result.candidates.length < walls.length);
+  }
+});
+
+function randomForSeed(seed) {
+  let state = seed >>> 0;
+  return () => {
     state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
     return state / 0x100000000;
   };
+}
+
+function generatedStyleWalls(random) {
   const walls = [];
   for (let cellX = -4; cellX <= 4; cellX += 1) {
     for (let cellZ = -4; cellZ <= 4; cellZ += 1) {
@@ -128,16 +164,39 @@ test('indexed collision is equivalent to brute force across randomized generated
       }
     }
   }
-  const index = new SpatialAabbIndex(14);
-  walls.forEach((wall) => index.add(wall));
-  for (let sample = 0; sample < 1000; sample += 1) {
-    const currentX = (random() - 0.5) * 70;
-    const currentZ = (random() - 0.5) * 70;
-    const nextX = currentX + (random() - 0.5) * 1.2;
-    const nextZ = currentZ + (random() - 0.5) * 1.2;
-    const result = indexedResolve(index, walls, currentX, currentZ, nextX, nextZ);
-    assertSamePosition(result.indexed, result.brute, 1e-8);
+  return walls;
+}
+
+test('indexed collision is equivalent to brute force across deterministic randomized generated-style samples', () => {
+  const seeds = [0x51f15e, 0xc0ffee, 0x9e3779b9, 0x12345678];
+  const samplesPerSeed = 1000;
+  let candidateTotal = 0;
+  let globalTotal = 0;
+  let candidatePeak = 0;
+
+  for (const seed of seeds) {
+    const random = randomForSeed(seed);
+    const walls = generatedStyleWalls(random);
+    const index = new SpatialAabbIndex(14);
+    walls.forEach((wall) => index.add(wall));
+    for (let sample = 0; sample < samplesPerSeed; sample += 1) {
+      const currentX = (random() - 0.5) * 70;
+      const currentZ = (random() - 0.5) * 70;
+      const nextX = currentX + (random() - 0.5) * 1.2;
+      const nextZ = currentZ + (random() - 0.5) * 1.2;
+      const result = indexedResolve(index, walls, currentX, currentZ, nextX, nextZ);
+      assertSamePosition(result.indexed, result.brute, 1e-8);
+      candidateTotal += result.candidates.length;
+      globalTotal += walls.length;
+      candidatePeak = Math.max(candidatePeak, result.candidates.length);
+    }
   }
+
+  const sampleCount = seeds.length * samplesPerSeed;
+  const averageCandidates = candidateTotal / sampleCount;
+  const averageGlobal = globalTotal / sampleCount;
+  assert.ok(candidateTotal < globalTotal * 0.25, `indexed average ${averageCandidates} must remain materially below global ${averageGlobal}`);
+  assert.ok(candidatePeak < averageGlobal * 0.25, `indexed peak ${candidatePeak} must remain materially below global ${averageGlobal}`);
 });
 
 test('spatial indexes update cleanly for Cell refresh/unload semantics and nearby interaction queries', () => {
