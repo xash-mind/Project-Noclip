@@ -282,8 +282,7 @@ World Lab = runtime QA/forcing. Studio = local source-backed presentation author
 ## NAL Asset Library
 
 ```text
-assets/source/{images,audio,meshes}/
-  source content
+assets/source/{images,audio,meshes}/n  source content
 
 assets/definitions/*.json
   semantic Asset definitions
@@ -300,6 +299,31 @@ public/assets/runtime/
 ```
 
 Studio Asset Library import still lives in `tools/studio/server-core.mjs`. Structured Material Asset binding lives in `tools/studio/structured-authoring.mjs` and is validated against type/Profile/role/runtime readiness.
+
+## Player Character / Avatar representation
+
+```text
+PlayerCharacterProfile identity + creator choices
+  -> src/player-character/profile.ts
+local profile persistence
+  -> src/player-character/profileStore.ts
+New Game profile gate
+  -> src/player-character/newGameFlow.ts
+renderer-independent avatar contract
+  -> src/player-character/avatar.ts
+       AvatarAppearance mapping
+       AvatarDefinition / CharacterProfileId actor ownership
+       semantic Asset-slot requirements
+       humanoid rig contract
+       animation-state vocabulary
+       first/third/cinematic/remote visibility rules
+future live actor
+  -> AvatarRuntime [NOT IMPLEMENTED]
+```
+
+`CharacterProfileId` is the future actor identity. It is not the Journey-local `characterId`, world seed, or Item Instance identity. `avatar.ts` owns representation requirements only and must stay free of PlayCanvas entities, WorldRenderer participation, camera, movement, collision and streaming behavior. See `docs/PLAYER_CHARACTER_IDENTITY.md` and `docs/PLAYER_AVATAR_REPRESENTATION.md`.
+
+Current NAL v1 can satisfy mesh/image Avatar slots. Humanoid animation clips require a future NAL animation-asset extension; do not hard-code filenames or import placeholder web assets to bypass that boundary.
 
 ## CV-H1
 
@@ -370,6 +394,22 @@ PlayCanvas frustum culling remains enabled and owns lower-level camera-facing cu
 Visibility-specific diagnostics are published as `window.__noclipVisibilityParticipationDiagnostics`. Verification must report `RESIDENT_CELLS`, `VISIBILITY_CELLS` and `RENDER_PARTICIPATING_CELLS` separately.
 
 These systems remain outside Studio visual material authoring.
+
+## Item / Inventory presentation
+
+```text
+Item Definition metadata -> src/items/definitions.ts
+Item Instance identity    -> src/items/types.ts + src/items/factory.ts
+Inventory domain ops      -> src/inventory/inventory.ts
+Presentation projection   -> src/ui/inventoryPresentation.ts
+Inventory dialog/actions  -> src/ui/InventorySurface.ts + src/ui/inventory.css
+HUD integration           -> src/ui/GameUI.ts
+Save/runtime adapter      -> src/app/ProjectNoclipGame.ts
+Persistence               -> src/persistence/*
+Contract notes            -> docs/INVENTORY_UI.md
+```
+
+UI keys and selection use `ItemInstance.instanceId`; Definition presentation data never replaces persistent object identity. Reorder dispatches the canonical `moveInstance()` operation rather than implementing container logic in UI code.
 
 ## Saves / stable identity
 
