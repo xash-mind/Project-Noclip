@@ -353,3 +353,78 @@ Reason: <short factual reason>
 ```
 
 A content-related change that cannot establish the required provenance/source boundary must not silently ship by omitting this line.
+
+---
+
+# Cleanup provenance audit evidence update — 2026-08-25
+
+This section records only stronger factual evidence established by `docs/audits/cleanup-content-provenance.md` at audit head `2069d0b8961449a15a32beb34ce6b5b3bbfda85f`. It does not alter `WORLD.md`, accepted product behavior, source media, or any project-wide legal conclusion. Where an earlier initial-ledger attribution/license field is narrower or unresolved, this section supersedes that factual field **only for the exact media identified below**.
+
+## Evidence capture and mutable-source rule
+
+- **Evidence access date:** 2026-08-25.
+- **Source page:** `https://backrooms-wiki.wikidot.com/level-0` plus the exact attachment paths recorded below.
+- The retrieved Level 0 page states **CC BY-SA 3.0 for page text** in its license box. Page-text terms are not treated as automatic attachment terms.
+- Separate retrieval snapshots exposed changing external page metadata. A source revision/version must be recorded when reliably obtainable, but this synthesis does **not** invent or promote a stable revision identifier that the audit could not reliably establish.
+- Future promoted evidence should record URL, access date, source revision/version when reliable, creator, and file-specific terms where available. A mutable live page is not immutable proof.
+
+## Stronger file-specific media evidence
+
+- **Ordinary baseline / `OGLevel0.jpg` (`REF-L0-001`):** the retrieved file-specific media evidence identifies **Bob Mazza** and states **CC0 1.0**, with an Archive source. This is a recorded source statement, not a new legal opinion.
+- **Arch `/2` (`REF-L0-007`):** the retrieved file-specific media evidence identifies **Bob Mazza** and states **CC0 1.0**, with an Archive source.
+- **Pillar `/3` (`REF-L0-002`):** the retrieved file-specific media evidence identifies **Alfarex** and states **CC BY-SA 4.0**. This supersedes the initial ledger's earlier page-level-only uncertainty for the exact `/3` media mapping.
+- **Blackout `/5` (`REF-L0-004`):** the retrieved file-specific media evidence identifies **Alfarex** and states **CC BY-SA 4.0**. This supersedes the initial ledger's earlier attachment-specific uncertainty for the exact `/5` media mapping.
+
+## Unresolved media remains unresolved
+
+- **Hole `/4` (`REF-L0-003`):** `UNKNOWN / REVIEW REQUIRED`. The retrieved media box displayed an entry named `4` but linked it to `/1`; that inconsistent mapping is not transferred to the `/4` attachment.
+- **Red `/6` (`REF-L0-005`):** `UNKNOWN / REVIEW REQUIRED`. No reliable file-specific `/6` entry was visible in the retrieved license box.
+- **Hole/Red Drive mirrors:** visual/dimension matching does not prove byte identity, mirror ownership, modification history, or permission chain. Keep `UNKNOWN / REVIEW REQUIRED` unless hashes and source/permission evidence resolve those questions.
+- **Scutoidbox Red Rooms image (`REF-L0-006`):** remains `EVIDENCE-ONLY` and `UNKNOWN / REVIEW REQUIRED` for parent/canon/creator/license.
+- **M-W1 A/B/C committed WebPs:** remain `UNKNOWN / REVIEW REQUIRED`. Repository metadata/history establishes user-provided game-ready derivatives and an asserted project-use authorization, but not the underlying source(s), creator(s), original license/permission chain, redistribution scope, attribution/notices, or hashes connecting originals to derivatives. Do not infer commercial-use or ownership clearance.
+
+## Audio evidence boundary
+
+Current Level 0 ambience in `src/audio/Ambience.ts` is procedurally synthesized with Web Audio. Fluorescent-buzz **identity** is source-derived, while the current waveform/tuning/runtime implementation is `PROJECT-NOCLIP-ORIGINAL`. The audited tree contains no committed external source audio recording.
+
+Future recorded ambience requires per-file source, creator, acquisition, license/permission, attribution, modification and hash evidence before promotion.
+
+## Item provenance clarification
+
+- **Almond Water:** the name/concept is `SOURCE-DERIVED` from the repository-recorded `https://backrooms-wiki.wikidot.com/object-1` source.
+- Project Noclip's exact item ID, stats, description choices, placement/starter weighting, persistent Item Instance identity and inventory behavior remain separate `PROJECT-NOCLIP-ORIGINAL` implementation/design unless independently sourced.
+- Flashlight, Battery, Permanent Marker, Paper Note, Glow Stick, String Spool, Empty Can and Pry Tool are ordinary real-world object identities on current evidence and should be treated as `REAL-WORLD-INSPIRATION` unless later provenance establishes a more specific external source.
+
+## Expanded originality map
+
+The provenance audit establishes the following as Project Noclip engineering/system design rather than external Backrooms source material, while the content they present may remain source-derived:
+
+- Generation 3 and the `gen3-v1` cutover architecture;
+- deterministic Fields, seed domains, Region affinity/depth and stable world addresses;
+- connectivity-first semantic topology and Project Architecture Pattern taxonomy/IDs;
+- general Carver pass architecture and deterministic realization;
+- Journey persistence/generation-version compatibility architecture;
+- Visibility Snapshot/topology adapter/live participation architecture;
+- PAU/NAL/Studio source-definition-build-runtime architecture;
+- M-W1 family resolver, UV/phase and runtime material system;
+- procedural audio implementation;
+- Player Character Profile / CharacterProfileId / Avatar representation architecture;
+- Item Definition versus persistent Item Instance identity;
+- Inventory domain and instance-keyed UI behavior;
+- current renderer/runtime performance mechanisms.
+
+These originality statements do not transfer originality to underlying Level 0, Pillar, Arch, Hole, Blackout, Red Rooms, Almond Water, photographs, wallpaper-source bytes, or other external content.
+
+## Additional unresolved provenance from the audit
+
+The following remain review items rather than implementation directives:
+
+- per-transition source/classification beyond the re-verified Level 1 route claim;
+- future avatar mesh/material/animation file provenance;
+- whether any current item wording beyond the Almond Water concept intentionally derives from external prose; no evidence was found;
+- project-wide legal scope/applicability of source-site share-alike/game guidance to mixed source-derived content and original software;
+- future audio/texture/mesh/font/video intake evidence.
+
+`PROVENANCE_IMPACT=UPDATED`
+
+Reason: the canonical ledger gained stronger file-specific media creator/license statements, explicit page-text-versus-media separation, mutable-source evidence rules, current synthesized-audio status, an Almond Water concept boundary, and an expanded Project-original architecture map while preserving all unresolved media/asset questions.
