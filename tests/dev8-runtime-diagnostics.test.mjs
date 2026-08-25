@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const fixtureSource = await readFile(new URL('../src/renderer/fixtureLighting.ts', import.meta.url), 'utf8');
 const batchingSource = await readFile(new URL('../src/renderer/StaticWorldBatching.ts', import.meta.url), 'utf8');
+const lifecycleSource = await readFile(new URL('../src/renderer/rendererCellLifecycle.ts', import.meta.url), 'utf8');
 const diagnosticsSource = await readFile(new URL('../src/renderer/rendererRuntimeDiagnostics.ts', import.meta.url), 'utf8');
 const mainSource = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
 
@@ -22,15 +23,17 @@ test('fixture runtime preserves light/shadow semantics without static per-frame 
   assert.match(updateBody, /fixtureDiagnostics\.maxUpdateMs/);
 });
 
-test('static batching exposes per-Cell allocation, removal and dirty-call evidence', () => {
+test('static batching exposes per-Cell allocation, removal and explicit lifecycle dirty-call evidence', () => {
   assert.match(batchingSource, /batchingDiagnostics\.allocations \+= 1/);
   assert.match(batchingSource, /batchingDiagnostics\.removals \+= 1/);
   assert.match(batchingSource, /batchingDiagnostics\.dirtyCalls \+= 1/);
   assert.match(batchingSource, /activeGroups/);
   assert.match(batchingSource, /if \(!dirty\)/);
   assert.match(batchingSource, /skippedCleanPasses/);
-  assert.match(batchingSource, /WorldRenderer\.prototype\.loadCell/);
-  assert.match(batchingSource, /WorldRenderer\.prototype\.unloadCell/);
+  assert.match(batchingSource, /export function markStaticWorldBatchingDirty\(\)/);
+  assert.doesNotMatch(batchingSource, /WorldRenderer\.prototype\.loadCell/);
+  assert.doesNotMatch(batchingSource, /WorldRenderer\.prototype\.unloadCell/);
+  assert.match(lifecycleSource, /markStaticWorldBatchingDirty\(\)/);
   assert.match(batchingSource, /maxReconcileMs/);
 });
 

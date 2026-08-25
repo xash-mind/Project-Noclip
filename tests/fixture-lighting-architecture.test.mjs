@@ -5,6 +5,7 @@ import test from 'node:test';
 const appSource = await readFile(new URL('../src/app/ProjectNoclipGame.ts', import.meta.url), 'utf8');
 const fixtureLightingSource = await readFile(new URL('../src/renderer/fixtureLighting.ts', import.meta.url), 'utf8');
 const batchingSource = await readFile(new URL('../src/renderer/StaticWorldBatching.ts', import.meta.url), 'utf8');
+const lifecycleSource = await readFile(new URL('../src/renderer/rendererCellLifecycle.ts', import.meta.url), 'utf8');
 const runtimeSource = await readFile(new URL('../src/renderer/renderSettingsRuntime.ts', import.meta.url), 'utf8');
 
 const { generateCell } = await import('../.test-dist/src/world/generator.js');
@@ -57,7 +58,11 @@ test('every active M-F1 Omni retains its own shadow while its luminous diffuser 
   assert.ok(fixtureLightingSource.includes('FIXTURE_EMITTER_CLEARANCE'));
   assert.ok(fixtureLightingSource.includes('markFixtureShadowsDirtyNearCell'));
   assert.equal(fixtureLightingSource.includes('markFixtureShadowsDirty(state)'), false);
-  assert.ok(batchingSource.includes('installFixtureLighting()'));
+  assert.ok(lifecycleSource.includes('attachFixtureLights(this, visual)'));
+  assert.ok(lifecycleSource.includes('detachCellFixtures(this, cellId, descriptor)'));
+  assert.equal(fixtureLightingSource.includes('WorldRenderer.prototype.loadCell'), false);
+  assert.equal(fixtureLightingSource.includes('WorldRenderer.prototype.unloadCell'), false);
+  assert.equal(batchingSource.includes('installFixtureLighting'), false);
 });
 
 test('M-F1 panel ownership resolves the real visible panel and keeps it out of the static batch', () => {

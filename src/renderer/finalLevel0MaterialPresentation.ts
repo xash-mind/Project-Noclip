@@ -9,7 +9,6 @@ interface RendererAccess { app: pc.Application; }
 interface FinalMaterialCache { app: pc.Application; materials: Map<string, pc.StandardMaterial>; }
 interface RenderWithMeshInstances { material: pc.StandardMaterial; meshInstances?: Array<{ material: pc.StandardMaterial }>; }
 const caches = new WeakMap<WorldRenderer, FinalMaterialCache>();
-let installed = false;
 const ARCH_TARGET = 'material.arch-pale-wallpaper';
 const CARPET_TARGET = 'material.level-0-carpet';
 const HOLE_TARGET = 'carver.floor-hole-cluster';
@@ -178,7 +177,7 @@ function holeMaterial(cache: FinalMaterialCache, key: 'upper'|'middle'|'deep'|'v
   return cachedMaterial(cache, signature, () => { const value = makeMaterial(color); value.gloss = 0; value.update(); return value; });
 }
 
-function applyFinalMaterials(renderer: WorldRenderer, visual: CellVisual): void {
+export function applyFinalLevel0Materials(renderer: WorldRenderer, visual: CellVisual): void {
   if (visual.descriptor.world.generationVersion !== 'gen3-v1') return;
   const cache = cacheFor(renderer);
   for (const entity of childrenOf(visual.root)) {
@@ -194,20 +193,10 @@ function applyFinalMaterials(renderer: WorldRenderer, visual: CellVisual): void 
   }
 }
 
-function applyAfterArchReconstruction(renderer: WorldRenderer, descriptor: CellDescriptor): void {
+export function scheduleFinalLevel0MaterialsAfterArchReconstruction(renderer: WorldRenderer, descriptor: CellDescriptor): void {
   queueMicrotask(() => queueMicrotask(() => {
     for (const visual of renderer.loaded.values()) {
-      if (Math.abs(visual.descriptor.address.cellX - descriptor.address.cellX) <= 1 && Math.abs(visual.descriptor.address.cellZ - descriptor.address.cellZ) <= 1) applyFinalMaterials(renderer, visual);
+      if (Math.abs(visual.descriptor.address.cellX - descriptor.address.cellX) <= 1 && Math.abs(visual.descriptor.address.cellZ - descriptor.address.cellZ) <= 1) applyFinalLevel0Materials(renderer, visual);
     }
   }));
-}
-
-export function installFinalLevel0MaterialPresentation(): void {
-  if (installed) return; installed = true;
-  const originalLoadCell = WorldRenderer.prototype.loadCell;
-  WorldRenderer.prototype.loadCell = function finalMaterialLoad(this: WorldRenderer, descriptor: CellDescriptor): void {
-    originalLoadCell.call(this, descriptor);
-    const visual = this.loaded.get(descriptor.id); if (visual) applyFinalMaterials(this, visual);
-    applyAfterArchReconstruction(this, descriptor);
-  };
 }

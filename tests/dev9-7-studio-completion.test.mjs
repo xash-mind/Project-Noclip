@@ -11,6 +11,8 @@ const bridgeClient = readFileSync('src/dev/studioBridgeClient.ts', 'utf8');
 const fixtureLighting = readFileSync('src/renderer/fixtureLighting.ts', 'utf8');
 const surfacePresentation = readFileSync('src/renderer/level0SurfacePresentation.ts', 'utf8');
 const finalPresentation = readFileSync('src/renderer/finalLevel0MaterialPresentation.ts', 'utf8');
+const rendererLifecycle = readFileSync('src/renderer/rendererCellLifecycle.ts', 'utf8');
+const mainSource = readFileSync('src/main.ts', 'utf8');
 
 const { STUDIO_TARGETS } = await import('../.test-dist/src/presentation/studioTargets.js');
 
@@ -77,8 +79,12 @@ test('runtime preview refreshes already-loaded presentation cells rather than wa
   for (const command of ['preview-parameters', 'preview-assets', 'clear-preview', 'clear-all-previews', 'refresh-presentation']) {
     assert.match(bridgeClient, new RegExp(`case'${command}'.*?refresh\\(\\)`, 's'), `${command} forces a loaded-cell presentation refresh`);
   }
-  assert.match(surfacePresentation, /installLevel0SurfacePresentation/);
-  assert.match(finalPresentation, /installFinalLevel0MaterialPresentation/);
+  assert.match(surfacePresentation, /export function applyLevel0SurfacePresentation/);
+  assert.match(finalPresentation, /export function applyFinalLevel0Materials/);
+  assert.match(rendererLifecycle, /applyLevel0SurfacePresentation\(this, visual\)/);
+  assert.match(rendererLifecycle, /applyFinalLevel0Materials\(this, visual\)/);
+  assert.match(rendererLifecycle, /scheduleFinalLevel0MaterialsAfterArchReconstruction\(this, descriptor\)/);
+  assert.match(mainSource, /installRendererCellLifecycle\(\)/);
 });
 
 test('M-F1 Studio values now own steady panel presentation without changing physical Omni law', () => {

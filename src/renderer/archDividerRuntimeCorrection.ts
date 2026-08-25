@@ -13,7 +13,6 @@ const ARCH_LOWER_PANEL_PREFIX = 'arch-frame:lower-panel:';
 const caches = new WeakMap<WorldRenderer, ArchCorrectionCache>();
 const pendingCollisionCells = new WeakMap<WorldRenderer, Set<string>>();
 const scheduledCollisionFlush = new WeakSet<WorldRenderer>();
-let installed = false;
 
 function wallMinY(wall: WallSpec): number { return wall.cy - wall.sy / 2; }
 function wallMaxY(wall: WallSpec): number { return wall.cy + wall.sy / 2; }
@@ -38,7 +37,7 @@ function materialForRole(cache: ArchCorrectionCache, role: ArchStructuralRole): 
   const existing = cache.materials.get(key); if (existing) return existing;
   const value = makeMaterial(color); value.gloss = gloss; value.update(); cache.materials.set(key, value); return value;
 }
-function applyArchDividerRuntimeCorrection(renderer: WorldRenderer, visual: CellVisual): void {
+export function applyArchDividerRuntimeCorrection(renderer: WorldRenderer, visual: CellVisual): void {
   if (visual.descriptor.world.generationVersion !== 'gen3-v1') return; const cache = cacheFor(renderer); const wallById = new Map(visual.descriptor.walls.map((wall) => [wall.id, wall]));
   for (const wall of visual.descriptor.walls) { const role = archStructuralRole(wall); if (!role) continue; const entity = entityByName(visual.root, wall.id); if (entity?.render) entity.render.material = materialForRole(cache, role); }
   visual.colliders = visual.colliders.filter((collider) => { const wall = wallById.get(collider.id); if (!wall || archSemanticWallOwnsFinalCollision(wall)) return true; renderer.walls.delete(collider.id); return false; });
@@ -53,15 +52,9 @@ function reconcileVisibleLowerPanelCollision(renderer: WorldRenderer, visual: Ce
   visual.colliders = visual.colliders.filter((collider) => { if (!collider.id.startsWith(ARCH_VISIBLE_LOWER_COLLIDER_PREFIX)) return true; renderer.walls.delete(collider.id); return false; });
   for (const child of childrenOf(visual.root)) { const orientation = lowerPanelOrientation(child.name); if (!orientation || !child.enabled || !child.render || child.render.enabled === false) continue; const collider = lowerPanelCollider(visual, child, orientation); visual.colliders.push(collider); renderer.walls.set(collider.id, collider); }
 }
-function markNearbyCollisionCells(renderer: WorldRenderer, descriptor: CellDescriptor): void {
+export function scheduleNearbyArchCollisionReconciliation(renderer: WorldRenderer, descriptor: CellDescriptor): void {
   const pending = pendingCollisionCells.get(renderer) ?? new Set<string>();
   for (const visual of renderer.loaded.values()) if (Math.abs(visual.descriptor.address.cellX-descriptor.address.cellX) <= 1 && Math.abs(visual.descriptor.address.cellZ-descriptor.address.cellZ) <= 1) pending.add(visual.descriptor.id);
   pendingCollisionCells.set(renderer, pending); if (scheduledCollisionFlush.has(renderer)) return; scheduledCollisionFlush.add(renderer);
   queueMicrotask(() => { scheduledCollisionFlush.delete(renderer); const targets = pendingCollisionCells.get(renderer); if (!targets || targets.size === 0) return; pendingCollisionCells.set(renderer, new Set()); for (const cellId of targets) { const visual = renderer.loaded.get(cellId); if (visual) reconcileVisibleLowerPanelCollision(renderer, visual); } });
-}
-export function installArchDividerRuntimeCorrection(): void {
-  if (installed) return; installed = true; const originalLoadCell = WorldRenderer.prototype.loadCell;
-  WorldRenderer.prototype.loadCell = function patchedArchCorrectionLoad(this: WorldRenderer, descriptor: CellDescriptor): void { originalLoadCell.call(this, descriptor); const visual = this.loaded.get(descriptor.id); if (visual) applyArchDividerRuntimeCorrection(this, visual); markNearbyCollisionCells(this, descriptor); };
-  const originalUnloadCell = WorldRenderer.prototype.unloadCell;
-  WorldRenderer.prototype.unloadCell = function patchedArchCorrectionUnload(this: WorldRenderer, cellId: string): void { const descriptor = this.loaded.get(cellId)?.descriptor; originalUnloadCell.call(this, cellId); if (descriptor) markNearbyCollisionCells(this, descriptor); };
 }

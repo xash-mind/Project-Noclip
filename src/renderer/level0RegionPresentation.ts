@@ -63,7 +63,6 @@ export interface HoleDepthBand {
 
 const caches = new WeakMap<WorldRenderer, RegionPresentationCache>();
 const carpetClones = new WeakMap<pc.StandardMaterial, Map<string, pc.StandardMaterial>>();
-let installed = false;
 const CARPET_REPEAT_METERS = CELL_SIZE / 5;
 const ARCH_CURVE_SEGMENTS = 18;
 const ARCH_UPPER_BOTTOM = 1.92;
@@ -800,17 +799,13 @@ function renderArchFrames(renderer: WorldRenderer, targetCellIds?: ReadonlySet<s
   archPresentationDiagnostics.maxReconstructionMs = Math.max(archPresentationDiagnostics.maxReconstructionMs, reconstructionMs);
 }
 
-function applyRegionPresentation(renderer: WorldRenderer, visual: CellVisual): void {
+/** Apply the existing synchronous Region presentation work for one newly resident Cell. */
+export function applyLevel0RegionPresentation(renderer: WorldRenderer, visual: CellVisual): void {
   if (visual.descriptor.world.generationVersion !== 'gen3-v1') return;
   replaceHoleDepth(renderer, visual);
   applyCarpetPresentation(visual);
 }
 
-/**
- * Installs renderer-only Level 0 Region presentation. World descriptors retain
- * topology/collision ownership; A-A1 is reconstructed from those world-space
- * divider runs so streaming Cells only clip one continuous heavy frame.
- */
 export interface ArchPresentationDiagnostics {
   reconstructionCalls: number;
   reconstructedCells: number;
@@ -832,7 +827,11 @@ export function archPresentationDiagnosticsSnapshot(): ArchPresentationDiagnosti
 const pendingArchCells = new WeakMap<WorldRenderer, Set<string>>();
 const scheduledArchFlush = new WeakSet<WorldRenderer>();
 
-function markNearbyArchCells(renderer: WorldRenderer, descriptor: CellDescriptor): void {
+/**
+ * Preserve the accepted neighbor-aware Arch reconstruction microtask boundary.
+ * Wave 1 centralizes when this is scheduled; Wave 2 owns any semantic redesign.
+ */
+export function scheduleNearbyArchPresentation(renderer: WorldRenderer, descriptor: CellDescriptor): void {
   const pending = pendingArchCells.get(renderer) ?? new Set<string>();
   for (const visual of renderer.loaded.values()) {
     if (Math.abs(visual.descriptor.address.cellX - descriptor.address.cellX) <= 1
@@ -848,24 +847,4 @@ function markNearbyArchCells(renderer: WorldRenderer, descriptor: CellDescriptor
     pendingArchCells.set(renderer, new Set());
     renderArchFrames(renderer, targets);
   });
-}
-
-export function installLevel0RegionPresentation(): void {
-  if (installed) return;
-  installed = true;
-  const originalLoadCell = WorldRenderer.prototype.loadCell;
-  WorldRenderer.prototype.loadCell = function patchedRegionPresentationLoad(this: WorldRenderer, descriptor: CellDescriptor): void {
-    const alreadyLoaded = this.loaded.has(descriptor.id);
-    originalLoadCell.call(this, descriptor);
-    const visual = this.loaded.get(descriptor.id);
-    if (visual && !alreadyLoaded) applyRegionPresentation(this, visual);
-    markNearbyArchCells(this, descriptor);
-  };
-
-  const originalUnloadCell = WorldRenderer.prototype.unloadCell;
-  WorldRenderer.prototype.unloadCell = function patchedRegionPresentationUnload(this: WorldRenderer, cellId: string): void {
-    const descriptor = this.loaded.get(cellId)?.descriptor;
-    originalUnloadCell.call(this, cellId);
-    if (descriptor) markNearbyArchCells(this, descriptor);
-  };
 }

@@ -328,7 +328,7 @@ function componentFor(runtime: FixtureRuntime): FixtureLightComponent | undefine
   return runtime.light.light as unknown as FixtureLightComponent | undefined;
 }
 
-function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void {
+export function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void {
   const state = stateFor(renderer);
   const descriptor = visual.descriptor;
   const panels = reconcileFixturePanels(state, visual);
@@ -380,7 +380,7 @@ function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void 
   markFixtureShadowsDirtyNearCell(state, descriptor);
 }
 
-function detachCellFixtures(renderer: WorldRenderer, cellId: string, descriptor?: CellDescriptor): void {
+export function detachCellFixtures(renderer: WorldRenderer, cellId: string, descriptor?: CellDescriptor): void {
   const state = states.get(renderer);
   if (!state) return;
   if (descriptor) markFixtureShadowsDirtyNearCell(state, descriptor);
@@ -518,25 +518,10 @@ declare module './WorldRenderer.js' {
   }
 }
 
+/** Installs only the steady-state fixture runtime API; Cell attach/detach is owned by rendererCellLifecycle. */
 export function installFixtureLighting(): void {
   if (installed) return;
   installed = true;
-
-  const originalLoadCell = WorldRenderer.prototype.loadCell;
-  WorldRenderer.prototype.loadCell = function patchedFixtureLoad(this: WorldRenderer, descriptor: CellDescriptor): void {
-    const alreadyLoaded = this.loaded.has(descriptor.id);
-    originalLoadCell.call(this, descriptor);
-    if (alreadyLoaded) return;
-    const visual = this.loaded.get(descriptor.id);
-    if (visual) attachFixtureLights(this, visual);
-  };
-
-  const originalUnloadCell = WorldRenderer.prototype.unloadCell;
-  WorldRenderer.prototype.unloadCell = function patchedFixtureUnload(this: WorldRenderer, cellId: string): void {
-    const descriptor = this.loaded.get(cellId)?.descriptor;
-    detachCellFixtures(this, cellId, descriptor);
-    originalUnloadCell.call(this, cellId);
-  };
 
   WorldRenderer.prototype.updateFixtureLighting = function patchedFixtureUpdate(
     this: WorldRenderer,

@@ -11,7 +11,6 @@ import { paintLevel0ChevronWallpaper, shouldGen3WallCollide, wallpaperUvForWall 
 interface RendererAccess { app: pc.Application; }
 interface SurfacePresentationCache { app: pc.Application; wallpaper: pc.Texture; carpet: pc.Texture; ceiling: pc.Texture; materials: Map<string, pc.StandardMaterial>; }
 const caches = new WeakMap<WorldRenderer, SurfacePresentationCache>();
-let installed = false;
 
 const ARCH_TARGET = 'material.arch-pale-wallpaper';
 const CARPET_TARGET = 'material.level-0-carpet';
@@ -88,7 +87,7 @@ function setSurfaceMaterial(root: pc.Entity, kind: 'floor'|'ceiling', value: pc.
   setMaterial(entityByName(root, 'floor'), value); for (const child of childrenOf(root)) if (child.name.startsWith('floor-piece:')) setMaterial(child, value);
 }
 
-function applyGen3SurfacePresentation(renderer: WorldRenderer, visual: CellVisual): void {
+export function applyLevel0SurfacePresentation(renderer: WorldRenderer, visual: CellVisual): void {
   const descriptor = visual.descriptor; if (descriptor.world.generationVersion !== 'gen3-v1') return; const cache = cacheFor(renderer); const root = visual.root;
   const wallSpecs = new Map(descriptor.walls.map((wall) => [wall.id, wall]));
   visual.colliders = visual.colliders.filter((collider) => { const wall = wallSpecs.get(collider.id); if (!wall || shouldGen3WallCollide(wall)) return true; renderer.walls.delete(collider.id); return false; });
@@ -98,9 +97,4 @@ function applyGen3SurfacePresentation(renderer: WorldRenderer, visual: CellVisua
   for (const prop of descriptor.props) if (prop.kind === 'column' && prop.materialId === 'level-0-wallpaper') preparePillarPresentation(root, prop);
   for (const group of descriptor.lightGroups) { const pulse = group.state === 'off' ? 0 : 1; const value = fixtureMaterial(cache, descriptor, group.state, pulse); group.fixtures.forEach((_position, index) => setMaterial(entityByName(root, `${group.id}:fixture:${index}`), value)); }
   applyLevel0WallpaperPresentation(renderer, visual);
-}
-
-export function installLevel0SurfacePresentation(): void {
-  if (installed) return; installed = true; const originalLoadCell = WorldRenderer.prototype.loadCell;
-  WorldRenderer.prototype.loadCell = function patchedSurfaceLoad(this: WorldRenderer, descriptor: CellDescriptor): void { originalLoadCell.call(this, descriptor); const visual = this.loaded.get(descriptor.id); if (visual) applyGen3SurfacePresentation(this, visual); };
 }
