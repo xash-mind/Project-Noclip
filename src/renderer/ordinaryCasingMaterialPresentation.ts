@@ -19,7 +19,6 @@ interface RendererAccess { app: pc.Application; save: { seed: string }; }
 type NamedMaterial = pc.StandardMaterial & { name?: string };
 export interface OrdinaryCasingPresentationDiagnostics { runs: number; strips: number; terminatingEnds: number; junctionEnds: number; setbackFraction: number; }
 const caches = new WeakMap<WorldRenderer, CasingPresentationCache>();
-let installed = false;
 let latestRenderer: WorldRenderer | undefined;
 
 function childrenOf(entity: pc.Entity): pc.Entity[] { return [...(entity as pc.Entity & { children: readonly pc.Entity[] }).children]; }
@@ -60,7 +59,7 @@ function addFaceStrip(root: pc.Entity, wall: WallSpec, startU: number, endU: num
   const scale: [number,number,number] = wall.orientation === 'z' ? [length, ORDINARY_CASING_HEIGHT_METERS, ORDINARY_CASING_DEPTH_METERS] : [ORDINARY_CASING_DEPTH_METERS, ORDINARY_CASING_HEIGHT_METERS, length];
   box(`${wall.id}:casing:${faceSign > 0 ? 'positive' : 'negative'}`, root, position, scale, material);
 }
-function applyCasingPresentation(renderer: WorldRenderer, descriptor: CellDescriptor): void {
+export function applyOrdinaryCasingMaterialPresentation(renderer: WorldRenderer, descriptor: CellDescriptor): void {
   if (descriptor.world.generationVersion !== 'gen3-v1' || descriptor.world.regionId !== 'ordinary-level-0') return; const visual = renderer.loaded.get(descriptor.id); if (!visual) return; const seed = (renderer as unknown as RendererAccess).save.seed; const value = casingMaterial(renderer);
   for (const wall of descriptor.walls) { if (!wall.drawable || !ordinaryCasingEnabled(seed, descriptor.address.cellX, descriptor.address.cellZ, wall) || !hasPresentedWall(visual.root, wall)) continue; const span = ordinaryCasingSpan(descriptor.walls, wall); addFaceStrip(visual.root, wall, span.startU, span.endU, -1, value); addFaceStrip(visual.root, wall, span.startU, span.endU, 1, value); }
 }
@@ -69,8 +68,4 @@ export function ordinaryCasingPresentationDiagnostics(renderer: WorldRenderer | 
   const seed = (renderer as unknown as RendererAccess).save.seed; let runs=0,strips=0,terminatingEnds=0,junctionEnds=0;
   for (const visual of renderer.loaded.values()) { const descriptor = visual.descriptor; if (descriptor.world.regionId !== 'ordinary-level-0') continue; for (const wall of descriptor.walls) { if (!wall.drawable || !ordinaryCasingEnabled(seed, descriptor.address.cellX, descriptor.address.cellZ, wall)) continue; const wallStrips = childrenOf(visual.root).filter((child) => child.name.startsWith(`${wall.id}:casing:`)); if (wallStrips.length === 0) continue; runs += 1; strips += wallStrips.length; const span = ordinaryCasingSpan(descriptor.walls, wall); terminatingEnds += Number(!span.startConnected)+Number(!span.endConnected); junctionEnds += Number(span.startConnected)+Number(span.endConnected); } }
   return { runs,strips,terminatingEnds,junctionEnds,setbackFraction:ORDINARY_CASING_TERMINATION_SETBACK_FRACTION };
-}
-export function installOrdinaryCasingMaterialPresentation(): void {
-  if (installed) return; installed = true; const originalLoadCell = WorldRenderer.prototype.loadCell;
-  WorldRenderer.prototype.loadCell = function ordinaryCasingPresentationLoad(this: WorldRenderer, descriptor: CellDescriptor): void { originalLoadCell.call(this, descriptor); applyCasingPresentation(this, descriptor); };
 }
