@@ -20,12 +20,14 @@ import {
 const { sampleLightField } = await import('../.test-dist/src/world/lighting.js');
 const { routeReservationEnvelopesForCell } = await import('../.test-dist/src/world/gen3SpaceTopologyBuild.js');
 const {
-  archCurveSegmentsForCell,
   archFrameBaysForDescriptors,
+  archSemanticWallOwnsFinalCollision
+} = await import('../.test-dist/src/world/gen3ArchDividerSemantics.js');
+const {
+  archCurveSegmentsForCell,
   carpetProfileForCell,
   holeDepthBands
 } = await import('../.test-dist/src/renderer/level0RegionPresentation.js');
-const { shouldGen3WallCollide } = await import('../.test-dist/src/renderer/level0Wallpaper.js');
 
 function overlaps(left, right) {
   return left.maxX > right.minX
@@ -168,12 +170,14 @@ test('A-A1 frame reconstruction is stable when neighboring loaded Cells expand a
   assert.ok(small.every((key) => large.has(key)), 'interior divider reconstruction changed when neighboring Cells were loaded');
 });
 
-test('A-A1 pier collision follows the visible floor-to-ceiling frame while header/curve geometry stays non-colliding', () => {
+test('A-A1 canonical collision keeps piers solid, upper/header semantic geometry non-colliding, and lower-panel gameplay collision presentation-independent', () => {
   const tuning = clean('arch-rooms');
+  const descriptors = cellWindow('arch-collision', 0, 0, 4, tuning);
+  const finalLowerPanels = archFrameBaysForDescriptors(descriptors).filter((bay) => !bay.route);
   let headers = 0;
   let midPiers = 0;
-  let lowerPanels = 0;
-  for (const descriptor of cellWindow('arch-collision', 0, 0, 4, tuning)) {
+  let semanticLowers = 0;
+  for (const descriptor of descriptors) {
     for (const wall of descriptor.walls.filter((candidate) => candidate.materialId === 'arch-pale-wallpaper')) {
       const minY = wall.cy - wall.sy / 2;
       const maxY = wall.cy + wall.sy / 2;
@@ -182,18 +186,19 @@ test('A-A1 pier collision follows the visible floor-to-ceiling frame while heade
       const pier = minY > 0.04 && wall.sy > 1.35 && maxY >= WALL_HEIGHT - 0.485;
       if (header) {
         headers += 1;
-        assert.equal(shouldGen3WallCollide(wall), false, `header ${wall.id} gained floor collision`);
+        assert.equal(archSemanticWallOwnsFinalCollision(wall), false, `header ${wall.id} gained floor collision`);
       } else if (lower) {
-        lowerPanels += 1;
-        assert.equal(shouldGen3WallCollide(wall), true, `lower panel ${wall.id} lost collision`);
+        semanticLowers += 1;
+        assert.equal(archSemanticWallOwnsFinalCollision(wall), false, `semantic lower ${wall.id} incorrectly remained final collision`);
       } else if (pier) {
         midPiers += 1;
-        assert.equal(shouldGen3WallCollide(wall), true, `frame pier ${wall.id} is visually floor-reaching but not colliding`);
+        assert.equal(archSemanticWallOwnsFinalCollision(wall), true, `frame pier ${wall.id} is visually floor-reaching but not colliding`);
       }
     }
   }
   assert.ok(headers > 20, `only ${headers} headers`);
-  assert.ok(lowerPanels > 20, `only ${lowerPanels} lower pieces`);
+  assert.ok(semanticLowers > 20, `only ${semanticLowers} semantic lower pieces`);
+  assert.ok(finalLowerPanels.length > 20, `only ${finalLowerPanels.length} canonical visible/gameplay lower panels`);
   assert.ok(midPiers > 20, `only ${midPiers} mid-pier pieces`);
 });
 
