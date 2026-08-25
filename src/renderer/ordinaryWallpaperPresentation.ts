@@ -1,7 +1,7 @@
 import * as pc from 'playcanvas';
 import { materialAssetId, materialBoolean, materialColor, materialNumber } from '../presentation/materialRuntime.js';
+import { archStructuralRole } from '../world/gen3ArchDividerSemantics.js';
 import { CELL_SIZE, type CellDescriptor, type PropSpec, type WallSpec } from '../world/types.js';
-import { archStructuralRole } from './archDividerRuntimeCorrection.js';
 import { ordinaryCasingPresentationDiagnostics } from './ordinaryCasingMaterialPresentation.js';
 import { noteOrdinaryWallpaperFallback, ordinaryWallpaperAssetDiagnostics } from './ordinaryWallpaperAssets.js';
 import {
