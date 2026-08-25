@@ -282,7 +282,8 @@ World Lab = runtime QA/forcing. Studio = local source-backed presentation author
 ## NAL Asset Library
 
 ```text
-assets/source/{images,audio,meshes}/n  source content
+assets/source/{images,audio,meshes}/
+  source content
 
 assets/definitions/*.json
   semantic Asset definitions
