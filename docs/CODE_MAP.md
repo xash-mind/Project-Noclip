@@ -49,10 +49,40 @@ npm run studio
 
 Studio privileged code is not a production runtime path.
 
+## Governance / provenance navigation
+
+```text
+work request
+  -> AGENTS.md
+       mandatory entrypoint + dynamic reading router
+  -> docs/WORK_RULES.md
+       engineering purity / semantic ownership / cleanup / decision challenges
+  -> docs/CODE_MAP.md + docs/TERMINOLOGY.md
+       implementation navigation + vocabulary
+
+content / source / fidelity change
+  -> docs/CONTENT_PROVENANCE.md
+       concept-level source / interpretation / originality ledger
+  -> docs/references/README.md
+       evidence and fidelity method
+  -> relevant docs/references/** pack
+       raw source evidence / provenance history
+  -> WORLD.md
+       accepted Project Noclip world truth
+  -> docs/VISION.md when design interpretation matters
+```
+
+`docs/CONTENT_PROVENANCE.md` does not replace reference packs, and reference packs do not own accepted world truth. `docs/WORK_RULES.md` does not replace target-specific architecture documents or ADRs; it governs how those owners are changed.
+
 ## Canonical truth
 
 ```text
+AGENTS.md                        mandatory work-routing entrypoint
+docs/WORK_RULES.md               engineering governance / cleanup law
+docs/CONTENT_PROVENANCE.md       concept-level provenance ledger
+docs/references/**               source evidence + fidelity extraction
 WORLD.md                         accepted world laws/content
+docs/VISION.md                   creative/product direction
 PROJECT.md                       product/architecture invariants
 src/world/types.ts               generated-data shapes and runtime IDs
 src/world/terminology.ts         short human addresses
@@ -63,7 +93,10 @@ docs/PRESENTATION_ARCHITECTURE.md
 docs/NOCLIP_STUDIO.md
   Studio workflow, security, structured visual-authoring boundary
 
-docs/CODE_MAP.md                 navigation only
+docs/VERIFICATION.md
+  verification architecture / evidence ownership
+
+docs/CODE_MAP.md                 implementation ownership/navigation only
 ```
 
 ## O-A1 / Ordinary Level 0
