@@ -194,7 +194,7 @@ test('wallpaper finish keeps unsplit geometry and delegates the entire A-A1 divi
   assert.match(unsplitSource, /setMaterial\(entityByName\(root, wall\.id\)/);
   assert.doesNotMatch(unsplitSource, /\.destroy\(\)|box\(/);
 
-  assert.match(presentationSource, /import \{ archStructuralRole \} from '\.\/archDividerRuntimeCorrection\.js'/);
+  assert.match(presentationSource, /import \{ archStructuralRole \} from '\.\.\/world\/gen3ArchDividerSemantics\.js'/);
   assert.match(presentationSource, /descriptor\.world\.regionId === 'arch-rooms' && archStructuralRole\(wall\)/);
   assert.doesNotMatch(presentationSource, /isOwnedArchDividerSurface|applyArchFrameWallpaper|scheduleArchFrameWallpaper|scheduledArchWallpaperFinish/);
   assert.doesNotMatch(presentationSource, /queueMicrotask/);
