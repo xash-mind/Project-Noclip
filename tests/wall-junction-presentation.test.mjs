@@ -48,13 +48,16 @@ test('cross intersections and L corners keep their original presentation spans',
   });
 });
 
-test('wall junction cleanup is wired as presentation-only Gen3 runtime work', async () => {
+test('wall junction cleanup is wired as presentation-only Gen3 lifecycle work', async () => {
   const presentationSource = await readFile(new URL('../src/renderer/wallJunctionPresentation.ts', import.meta.url), 'utf8');
   const batchingSource = await readFile(new URL('../src/renderer/StaticWorldBatching.ts', import.meta.url), 'utf8');
+  const lifecycleSource = await readFile(new URL('../src/renderer/rendererCellLifecycle.ts', import.meta.url), 'utf8');
 
   assert.ok(presentationSource.includes("generationVersion !== 'gen3-v1'"));
   assert.ok(presentationSource.includes('wallPresentationBoxAtTJunction'));
   assert.ok(presentationSource.includes('entity.setLocalScale'));
   assert.equal(presentationSource.includes('renderer.walls'), false);
-  assert.ok(batchingSource.includes('installWallJunctionPresentation();'));
+  assert.ok(lifecycleSource.includes('applyWallJunctionPresentation(visual)'));
+  assert.equal(presentationSource.includes('WorldRenderer.prototype.loadCell'), false);
+  assert.equal(batchingSource.includes('installWallJunctionPresentation'), false);
 });
