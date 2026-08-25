@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const correctionSource = await readFile(new URL('../src/renderer/archDividerRuntimeCorrection.ts', import.meta.url), 'utf8');
 const batchingSource = await readFile(new URL('../src/renderer/StaticWorldBatching.ts', import.meta.url), 'utf8');
+const lifecycleSource = await readFile(new URL('../src/renderer/rendererCellLifecycle.ts', import.meta.url), 'utf8');
 
 test('A-A1 final renderer pass keeps structural fallback presentation-owned and removes hidden lower-panel collision tails', () => {
   assert.ok(correctionSource.includes("type ArchStructuralRole = 'pier' | 'upper' | 'lower-panel'"));
@@ -25,8 +26,9 @@ test('A-A1 final renderer pass keeps structural fallback presentation-owned and 
   assert.equal(correctionSource.includes('wallpaperUvForWall'), false);
   assert.equal(correctionSource.includes('paintLevel0ChevronWallpaper'), false);
 
-  const regionIndex = batchingSource.indexOf('installLevel0RegionPresentation()');
-  const correctionIndex = batchingSource.indexOf('installArchDividerRuntimeCorrection()');
-  const fixtureIndex = batchingSource.indexOf('installFixtureLighting()');
-  assert.ok(regionIndex >= 0 && correctionIndex > regionIndex && fixtureIndex > correctionIndex);
+  assert.ok(lifecycleSource.includes('applyArchDividerRuntimeCorrection(this, visual)'));
+  assert.ok(lifecycleSource.includes('scheduleNearbyArchCollisionReconciliation(this, descriptor)'));
+  assert.equal(correctionSource.includes('WorldRenderer.prototype.loadCell'), false);
+  assert.equal(correctionSource.includes('WorldRenderer.prototype.unloadCell'), false);
+  assert.equal(batchingSource.includes('installArchDividerRuntimeCorrection'), false);
 });
