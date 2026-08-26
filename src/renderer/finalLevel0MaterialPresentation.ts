@@ -1,10 +1,8 @@
 import * as pc from 'playcanvas';
 import type { CellDescriptor } from '../world/types.js';
 import {
-  canonicalLevel0CarpetUv,
   resolveLevel0CarpetPresentation,
-  type CanonicalLevel0CarpetPresentation,
-  type Level0CarpetUvTransform
+  type CanonicalLevel0CarpetPresentation
 } from '../presentation/level0PresentationPolicy.js';
 import {
   applyLevel0CarpetMaterial,
@@ -67,6 +65,3 @@ export function scheduleFinalLevel0MaterialsAfterArchReconstruction(renderer: Wo
     }
   }));
 }
-
-void canonicalLevel0CarpetUv;
-void (undefined as unknown as Level0CarpetUvTransform);
