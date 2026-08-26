@@ -8,7 +8,6 @@ const {
   realizeNearbyArchCollision
 } = await import('../.test-dist/src/renderer/archDividerCollision.js');
 const {
-  installRuntimePerformance,
   refreshRuntimeCellCollisionState,
   registerRuntimeCellState,
   runtimePerformanceDiagnosticsSnapshot,
@@ -283,7 +282,6 @@ test('indexed movement matches brute-force around lower faces/corners, piers, op
   const { descriptors, bays } = representativeArchWindow();
   const renderer = rendererFor(descriptors);
   canonicalizeAll(renderer, descriptors);
-  installRuntimePerformance();
   for (const descriptor of descriptors) registerRuntimeCellState(renderer, descriptor);
   assert.equal(runtimePerformanceDiagnosticsSnapshot(renderer).indexedColliders, renderer.walls.size);
 
@@ -343,7 +341,6 @@ test('neighbor unload/reload recomputes canonical A-A1 collision and keeps the d
   const { descriptors, bays } = representativeArchWindow();
   const renderer = rendererFor(descriptors);
   canonicalizeAll(renderer, descriptors);
-  installRuntimePerformance();
   for (const descriptor of descriptors) registerRuntimeCellState(renderer, descriptor);
 
   let targetDescriptor;
