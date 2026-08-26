@@ -197,17 +197,25 @@ test('explicit camera FOV can constrain the first opening while omitted FOV rema
   assert.deepEqual(eastFacing.visibleSpaces, ['A', 'east']);
 });
 
-test('live renderer and streaming owners remain unactivated by the snapshot foundation', () => {
-  const protectedFiles = [
+test('snapshot foundation stays pure while the application activates visibility through the explicit runtime owner', () => {
+  const foundationProtectedFiles = [
     'src/renderer/WorldRenderer.ts',
     'src/renderer/streamingScheduler.ts',
     'src/renderer/StaticWorldBatching.ts',
-    'src/renderer/fixtureLighting.ts',
-    'src/app/ProjectNoclipGame.ts'
+    'src/renderer/fixtureLighting.ts'
   ];
-  for (const path of protectedFiles) {
+  for (const path of foundationProtectedFiles) {
     const source = readFileSync(path, 'utf8');
-    assert.doesNotMatch(source, /VisibilitySnapshot|buildGen3VisibilityTopology|renderer\/visibility|visibility\/snapshot/,
-      `${path} unexpectedly activates the visibility foundation`);
+    assert.doesNotMatch(source, /VisibilitySnapshot|buildGen3VisibilityTopology|visibility\/snapshot/,
+      `${path} must not become a second visibility-topology owner`);
   }
+
+  const gameSource = readFileSync('src/app/ProjectNoclipGame.ts', 'utf8');
+  const runtimeSource = readFileSync('src/renderer/visibility/runtime.ts', 'utf8');
+  assert.match(gameSource, /import \{ updateVisibilityParticipation \} from '\.\.\/renderer\/visibility\/runtime\.js'/);
+  assert.match(gameSource, /updateVisibilityParticipation\(this, false\)/);
+  assert.match(gameSource, /updateVisibilityParticipation\(this, true\)/);
+  assert.match(runtimeSource, /buildGen3VisibilityTopology/);
+  assert.match(runtimeSource, /createVisibilitySnapshot/);
+  assert.doesNotMatch(runtimeSource, /\.loadCell\s*\(|\.unloadCell\s*\(|\.destroy\s*\(/);
 });
