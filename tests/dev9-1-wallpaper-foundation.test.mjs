@@ -24,6 +24,7 @@ const assetSource = await readFile(new URL('../src/renderer/ordinaryWallpaperAss
 const imagePipelineSource = await readFile(new URL('../src/renderer/presentationImageTextures.ts', import.meta.url), 'utf8');
 const casingSource = await readFile(new URL('../src/renderer/ordinaryCasingMaterialPresentation.ts', import.meta.url), 'utf8');
 const interactionSource = await readFile(new URL('../src/renderer/outletInteractionRuntime.ts', import.meta.url), 'utf8');
+const gameSource = await readFile(new URL('../src/app/ProjectNoclipGame.ts', import.meta.url), 'utf8');
 const lifecycleSource = await readFile(new URL('../src/renderer/rendererCellLifecycle.ts', import.meta.url), 'utf8');
 const mainSource = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
 
@@ -210,7 +211,9 @@ test('casing uses face-owned batched strips while outlets preserve the existing 
   assert.doesNotMatch(casingSource, /batchGroupId\s*=\s*-1/);
   assert.match(presentationSource, /ordinaryOutletFaceSign/);
   assert.match(presentationSource, /renderer\.interactions\.set\(id, boundary\)/);
-  assert.match(interactionSource, /\[E\] Inspect outlet/);
-  assert.match(interactionSource, /The outlet is inert\./);
-  assert.match(mainSource, /installOutletInteractionRuntime\(\)/);
+  assert.match(interactionSource, /export function isOutletInteraction/);
+  assert.doesNotMatch(interactionSource, /\[E\] Inspect outlet|The outlet is inert\.|ProjectNoclipGame\.prototype/);
+  assert.match(gameSource, /isOutletInteraction\(this\.interaction\).*this\.ui\.setInteraction\('\[E\] Inspect outlet'\)/s);
+  assert.match(gameSource, /isOutletInteraction\(this\.interaction\).*this\.ui\.toast\('The outlet is inert\.', 2800\)/s);
+  assert.doesNotMatch(mainSource, /installOutletInteractionRuntime/);
 });
