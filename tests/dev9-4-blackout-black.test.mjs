@@ -115,9 +115,11 @@ test('legitimate M-F1 lighting remains fixture-owned, shadowed and physically bo
 });
 
 test('flashlight remains an independent player-owned light in Blackout', async () => {
-  const source = await readFile(new URL('../src/app/ProjectNoclipGame.ts', import.meta.url), 'utf8');
-  assert.match(source, /new pc\.Entity\('flashlight'\)/);
-  assert.match(source, /type: 'spot'.*range: 22, intensity: 2\.4/s);
-  assert.match(source, /this\.flashlight\.enabled = !this\.flashlight\.enabled/);
-  assert.doesNotMatch(source, /blackoutStrength[^\n;]*flashlight\.enabled/);
+  const gameSource = await readFile(new URL('../src/app/ProjectNoclipGame.ts', import.meta.url), 'utf8');
+  const runtimeSource = await readFile(new URL('../src/renderer/renderSettingsRuntime.ts', import.meta.url), 'utf8');
+  assert.match(runtimeSource, /new pc\.Entity\('flashlight'\)/);
+  assert.match(runtimeSource, /type: 'spot'.*range: 22, intensity: 2\.4/s);
+  assert.match(gameSource, /this\.flashlight\.enabled = !this\.flashlight\.enabled/);
+  assert.doesNotMatch(gameSource, /blackoutStrength[^\n;]*flashlight\.enabled/);
+  assert.doesNotMatch(runtimeSource, /blackoutStrength[^\n;]*flashlight\.enabled/);
 });
