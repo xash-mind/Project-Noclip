@@ -180,7 +180,7 @@ renderer adapter
 
 ## Level 0 visual material authoring
 
-Canonical material source:
+Canonical material source and semantic resolver:
 
 ```text
 src/presentation/definitions/level0-materials.json
@@ -188,7 +188,11 @@ src/presentation/definitions/level0-materials.json
   -> src/presentation/generatedLevel0MaterialDefinitions.ts
   -> src/presentation/level0MaterialRepresentations.ts
   -> src/presentation/projectPresentationRegistry.ts
+  -> src/presentation/materialRuntime.ts
+  -> src/presentation/level0PresentationPolicy.ts
 ```
+
+`src/presentation/level0PresentationPolicy.ts` is the canonical composition owner for the Wave 3 migrated policies below. `src/renderer/level0PresentationMaterials.ts` is a cached PlayCanvas realization consumer; it does not define competing semantic values.
 
 Material target ownership:
 
@@ -196,18 +200,32 @@ Material target ownership:
 M-W1 wallpaper
   schema / Asset slots      -> level0-materials.json
   deterministic family law -> src/renderer/ordinaryWallpaperRules.ts
-  Asset preparation        -> src/renderer/ordinaryWallpaperAssets.ts
-  walls + columns          -> src/renderer/ordinaryWallpaperPresentation.ts
+  canonical material resolver / walls + columns
+                           -> src/renderer/ordinaryWallpaperPresentation.ts
+  semantic scope           -> shared Ordinary + Pillar/P-A1 + normal Arch walls
 
 M-A1 Arch structural finish
   schema                    -> level0-materials.json
-  semantic structural mesh -> src/renderer/level0SurfacePresentation.ts
-  reconstructed arch-frame -> src/renderer/finalLevel0MaterialPresentation.ts
+  canonical finish policy  -> src/presentation/level0PresentationPolicy.ts
+  A-A1 semantic roles      -> src/world/gen3ArchDividerSemantics.ts
+  cached material consumer -> src/renderer/level0PresentationMaterials.ts
+  visible geometry binding -> src/renderer/level0SurfacePresentation.ts
+                            + src/renderer/level0RegionPresentation.ts
+  deferred reapplication   -> src/renderer/finalLevel0MaterialPresentation.ts
 
 M-C1 carpet
   schema                    -> level0-materials.json
-  base floor                -> src/renderer/level0SurfacePresentation.ts
-  CV-H1/Region final finish -> src/renderer/finalLevel0MaterialPresentation.ts
+  base + Region + Condition -> src/presentation/level0PresentationPolicy.ts
+  world-phase / UV policy  -> src/presentation/level0PresentationPolicy.ts
+  cached material consumer -> src/renderer/level0PresentationMaterials.ts
+  synchronous application  -> src/renderer/level0SurfacePresentation.ts
+  deferred reapplication   -> src/renderer/finalLevel0MaterialPresentation.ts
+  CV-H1                     -> aperture removes floor only; surviving carpet remains M-C1
+
+M-C1 Condition contribution
+  current implemented IDs  -> damp-carpet / shallow-dry-carpet / deep-wet-carpet
+  current visual modifier  -> explicit no-op in src/presentation/level0PresentationPolicy.ts
+  PD-4                      -> frozen; no wet/dry/stain/gloss/color invention in Wave 3
 
 M-CE1 ceiling
   schema                    -> level0-materials.json
@@ -216,21 +234,32 @@ M-CE1 ceiling
 Casing appearance
   schema                    -> level0-materials.json
   renderer                  -> src/renderer/ordinaryCasingMaterialPresentation.ts
+  eligibility               -> current Ordinary-only behavior preserved pending PD-1
 
 Outlet appearance
   schema                    -> level0-materials.json
   renderer                  -> src/renderer/ordinaryWallpaperPresentation.ts
+  eligibility               -> current Ordinary-only behavior preserved pending PD-2
+  application dispatch      -> src/renderer/outletInteractionRuntime.ts (Wave 4/runtime owner)
 
 M-F1 visible panel material
   schema                    -> level0-materials.json
-  visible panel            -> src/renderer/level0SurfacePresentation.ts
-  physical Omni/shadows    -> src/renderer/fixtureLighting.ts + world lighting law (NOT Studio material authoring)
+  current visible owners    -> src/renderer/WorldRenderer.ts
+                            + src/renderer/level0SurfacePresentation.ts
+                            + src/renderer/fixtureLighting.ts
+  physical Omni/shadows     -> src/renderer/fixtureLighting.ts + world lighting law
+  Wave 3 status             -> consolidation BLOCKED by the explicit WorldRenderer write boundary;
+                               do not add another presentation adapter or change PD-3
 
 CV-H1 visible depth material
   schema                    -> level0-materials.json
-  semantic/Region geometry -> src/renderer/level0RegionPresentation.ts
-  final material           -> src/renderer/finalLevel0MaterialPresentation.ts
+  canonical palette policy -> src/presentation/level0PresentationPolicy.ts
+  cached material consumer -> src/renderer/level0PresentationMaterials.ts
+  depth geometry           -> src/renderer/level0RegionPresentation.ts
+  deferred reapplication   -> src/renderer/finalLevel0MaterialPresentation.ts
 ```
+
+`finalLevel0MaterialPresentation.ts` is retained as a narrow lifecycle consumer because neighbor-aware visible A-A1 reconstruction is still deferred. It must reapply the same canonical resolved policy; it is not a last-writer semantic correction layer.
 
 ## Image Asset treatment
 
@@ -285,6 +314,9 @@ src/presentation/previewOverrides.ts
 
 src/presentation/materialRuntime.ts
   renderer-facing resolved material helpers
+
+src/presentation/level0PresentationPolicy.ts
+  canonical Wave 3 Level 0 material composition from resolved canonical/preview values
 
 src/presentation/developmentContext.ts
   development-context-v1 including Asset-slot metadata/preview state
@@ -382,14 +414,17 @@ Current NAL v1 can satisfy mesh/image Avatar slots. Humanoid animation clips req
 ## CV-H1
 
 ```text
-Carver decision       -> src/world/gen3.ts / src/world/generator.ts
-Floor reconstruction -> src/renderer/WorldRenderer.ts
-Region/depth geometry -> src/renderer/level0RegionPresentation.ts
-Final visible material-> src/renderer/finalLevel0MaterialPresentation.ts
-Lifecycle ordering    -> src/renderer/rendererCellLifecycle.ts
+Carver decision         -> src/world/gen3.ts / src/world/generator.ts
+Floor reconstruction   -> src/renderer/WorldRenderer.ts
+M-C1 surviving carpet  -> src/presentation/level0PresentationPolicy.ts
+Depth palette policy   -> src/presentation/level0PresentationPolicy.ts
+Depth geometry         -> src/renderer/level0RegionPresentation.ts
+Cached material bridge -> src/renderer/level0PresentationMaterials.ts
+Deferred reapplication -> src/renderer/finalLevel0MaterialPresentation.ts
+Lifecycle ordering      -> src/renderer/rendererCellLifecycle.ts
 ```
 
-Studio edits only visible depth/material values. Hole geography, lattice/aperture law, collision and navigation stay world-owned.
+Studio edits only visible depth/material values. Hole geography, lattice/aperture law, collision and navigation stay world-owned. CV-H1 owns the aperture/void/depth, never the surviving M-C1 carpet.
 
 ## C-B1 Blackout
 
@@ -419,16 +454,16 @@ ONE Cell lifecycle ordering owner
 
 load order
   -> base Cell realization
-  -> Level 0 surface presentation
+  -> Level 0 surface presentation using canonical M-C1/M-A1 policy
   -> current Ordinary casing presentation
-  -> current Region presentation + queued neighbor-aware visible Arch reconstruction
+  -> current Region depth/A-A1 presentation + queued neighbor-aware visible Arch reconstruction
   -> wall-junction presentation
   -> synchronous canonical A-A1 collider realization from world semantics
   -> M-F1 fixture attach
   -> localized static-batching dirty signal
   -> derived collision/interaction index registration / neighbor collision refresh
-  -> immediate final Level 0 material pass
-  -> queued final material convergence
+  -> immediate canonical final Level 0 material reapplication
+  -> queued final material convergence using the same canonical policy
 
 unload order
   -> derived collision/interaction index unregister
@@ -453,7 +488,7 @@ participants
 
 `rendererCellLifecycle.ts` owns ordering only; it does not own the participants' semantic policy. `StaticWorldBatching.ts` owns batching only and is dirtied explicitly by the lifecycle. It no longer installs Region, wall-junction, A-A1, or fixture systems.
 
-Wave 2 removed the A-A1 lower-panel collision reconciliation microtask because collision no longer depends on presentation completion. The neighbor-aware visible Arch reconstruction microtask remains in `level0RegionPresentation.ts`, and final-material deferred convergence remains a separate later cleanup concern.
+Wave 2 removed the A-A1 lower-panel collision reconciliation microtask because collision no longer depends on presentation completion. Wave 3 keeps the neighbor-aware visible Arch reconstruction microtask and final-material deferred convergence because geometry still appears at that deferred boundary; both now consume the same canonical presentation policy rather than defining last-writer material values.
 
 Streaming owns Cell residency and unloading. A resident Cell is not automatically a render-participating Cell.
 
