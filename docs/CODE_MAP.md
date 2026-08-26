@@ -7,8 +7,14 @@ Phone-friendly plain-text ownership map. Use this to find the authoritative file
 ```text
 browser
   -> src/main.ts
+       composition entrypoint; initializes services and preserved out-of-scope installers
   -> src/app/ProjectNoclipGame.ts
-       runtime loop, player/camera, streaming, save/runtime coordination
+       application orchestration root
+       player/camera + save/runtime coordination
+       explicit render-settings setup/light-field invocation
+       explicit streaming reconcile/frame invocation
+       explicit visibility participation invocation
+       explicit interaction/outlet dispatch
 
 world request
   -> src/world/generator.ts
@@ -28,6 +34,9 @@ world request
        -> resolved presentation data + temporary Studio overrides
   -> src/renderer/WorldRenderer.ts + src/renderer/cellBuilder.ts
        base Cell realization / destruction
+       authoritative movement collision / nearest interaction / dynamic Item tick operations
+       -> src/renderer/runtimePerformance.ts + src/renderer/runtimeSpatialIndex.ts
+            reconstructible collision/interaction/ticking candidate state only
   -> src/renderer/rendererCellLifecycle.ts
        one explicit streamed Cell load/unload ordering owner
        -> Level 0 surface / casing / Region / wall-junction participants
@@ -397,20 +406,80 @@ Studio edits only visible depth/material values. Hole geography, lattice/apertur
 pressure/resolution -> src/world/fields.ts + src/world/gen3.ts
 fixture/world law   -> src/world/lighting.ts
 physical lights     -> src/renderer/fixtureLighting.ts
-runtime render      -> src/app/ProjectNoclipGame.ts + blackoutRendering.ts
+render settings     -> src/renderer/renderSettings.ts
+runtime application -> src/renderer/renderSettingsRuntime.ts
+orchestration       -> src/app/ProjectNoclipGame.ts
 ```
 
 C-B1 remains read-only in Studio. Dev.9.6 does not turn Blackout world law into material sliders.
+
+## Application / runtime / derived-index ownership
+
+```text
+application orchestration
+  -> src/app/ProjectNoclipGame.ts
+       owns when accepted runtime operations execute
+
+render-settings runtime
+  -> src/renderer/renderSettingsRuntime.ts
+       PlayCanvas setup + render-quality application + Level 0 atmosphere/light-field adapter
+  -> src/renderer/renderSettings.ts
+       settings/preset/Render Distance policy
+
+streaming residency
+  -> src/renderer/streamingScheduler.ts
+       reconcileStreaming()
+       beginStreamingFrame() / finishStreamingFrame()
+  -> src/renderer/streamingPolicy.ts
+       scheduler/prediction constants and pure policy
+
+visibility participation
+  -> src/renderer/visibility/runtime.ts
+       updateVisibilityParticipation()
+       consumes already-resident Cells; never owns residency
+
+movement collision operation
+  -> src/renderer/WorldRenderer.ts
+       movementCollisionQueryBounds()
+       -> derived collision candidates
+       -> resolveCircleAgainstAabbs() canonical semantic resolver
+
+nearest interaction operation
+  -> src/renderer/WorldRenderer.ts
+       derived nearby candidates
+       -> exact distance/facing/nearest selection
+
+dynamic Item ticking operation
+  -> src/renderer/WorldRenderer.ts
+       derived ticking candidates
+       -> exact Item update behavior
+
+derived collision / interaction / ticking state
+  -> src/renderer/runtimePerformance.ts
+  -> src/renderer/runtimeSpatialIndex.ts
+       reconstructible optimization state + diagnostics only
+       explicit canonical mutation registration/unregistration
+
+outlet application dispatch
+  -> src/app/ProjectNoclipGame.ts
+       existing outlet target prompt/action
+  -> src/renderer/outletInteractionRuntime.ts
+       narrow runtime target type/guard only
+```
+
+There is no Wave 4 prototype replacement installer. `WorldRenderer` remains the semantic owner of movement collision, nearest interaction and dynamic Item ticking; derived indexes only choose bounded candidates. `ProjectNoclipGame` explicitly invokes the accepted render-settings, streaming and visibility runtime operations. `src/main.ts` remains composition-only and does not encode Wave 4 semantic behavior through installer order.
 
 ## Cell streaming / renderer lifecycle
 
 ```text
 movement/boundaries
   -> src/app/ProjectNoclipGame.ts
+       explicitly calls reconcileStreaming()
 Render Distance
   -> src/renderer/renderSettingsRuntime.ts + src/renderer/renderSettings.ts
 predictive residency work
   -> src/renderer/streamingScheduler.ts / src/renderer/streamingPolicy.ts
+       explicitly bracketed by ProjectNoclipGame frame orchestration
 base Cell build/destroy
   -> src/renderer/WorldRenderer.ts + src/renderer/cellBuilder.ts
 
@@ -475,14 +544,10 @@ participation composition
        NON_PARTICIPATING
 live runtime adapter
   -> src/renderer/visibility/runtime.ts
-activation
-  -> src/main.ts
-       installRenderSettingsRuntime()
-       installFixtureLighting()
-       installStaticWorldBatching()
-       installRuntimePerformance()
-       installRendererCellLifecycle()
-       installVisibilityParticipationRuntime(ProjectNoclipGame.prototype)
+explicit activation
+  -> src/app/ProjectNoclipGame.ts
+       after reconcileStreaming(...): updateVisibilityParticipation(..., true)
+       after finishStreamingFrame(...): updateVisibilityParticipation(..., false)
 ```
 
 Phase 1 consumes the existing Generation 3 Visibility Snapshot and existing streaming predictor to decide which already-resident Cell roots participate in rendering. It does not own Cell destruction, cache eviction, generation identity, save identity, or a second prediction system.
