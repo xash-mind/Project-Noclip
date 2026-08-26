@@ -103,7 +103,10 @@ test('runtime activation stays renderer-participation-only and preserves PlayCan
   assert.match(settingsRuntime, /frustumCulling:\s*true/);
 });
 
-test('Phase-1 activation is installed after streaming and localized batching without owning release VERSION', () => {
+test('Phase-1 activation is explicitly invoked after streaming without becoming residency authority', () => {
   const main = readFileSync('src/main.ts', 'utf8');
-  assert.match(main, /installRenderSettingsRuntime\(\);[\s\S]*installStaticWorldBatching\(\);[\s\S]*installVisibilityParticipationRuntime\(ProjectNoclipGame\.prototype\);/);
+  const game = readFileSync('src/app/ProjectNoclipGame.ts', 'utf8');
+  assert.doesNotMatch(main, /installVisibilityParticipationRuntime/);
+  assert.match(game, /reconcileStreaming\(this, force, radiusOverride\);\s*updateVisibilityParticipation\(this, true\);/);
+  assert.match(game, /finishStreamingFrame\(this, dt\);\s*updateVisibilityParticipation\(this, false\);/);
 });

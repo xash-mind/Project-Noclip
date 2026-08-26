@@ -15,6 +15,7 @@ const {
 const { resolveCircleAgainstAabbs } = await import('../.test-dist/src/physics/collision.js');
 const schedulerSource = await readFile(new URL('../src/renderer/streamingScheduler.ts', import.meta.url), 'utf8');
 const runtimeSource = await readFile(new URL('../src/renderer/runtimePerformance.ts', import.meta.url), 'utf8');
+const rendererSource = await readFile(new URL('../src/renderer/WorldRenderer.ts', import.meta.url), 'utf8');
 const mainSource = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
 
 const RATES = [30, 60, 90, 120, 144, 240];
@@ -91,8 +92,10 @@ test('production and equivalence tests share one neighboring-Cell collision cand
     maxX: 15.84,
     maxZ: 12.84
   });
-  assert.ok(runtimeSource.includes('movementCollisionQueryBounds(currentX, currentZ, nextX, nextZ, radius)'));
-  assert.equal(runtimeSource.includes('COLLISION_QUERY_NEIGHBOR_MARGIN'), false);
+  assert.ok(rendererSource.includes('movementCollisionQueryBounds(currentX, currentZ, nextX, nextZ, radius)'));
+  assert.ok(rendererSource.includes('runtimeCollisionCandidates(this, bounds)'));
+  assert.ok(rendererSource.includes('resolveCircleAgainstAabbs(currentX, currentZ, nextX, nextZ, candidates, radius)'));
+  assert.equal(rendererSource.includes('COLLISION_QUERY_NEIGHBOR_MARGIN'), false);
 });
 
 test('indexed collision preserves canonical wall impact, slide, corner, T-junction and narrow-connector results', () => {
@@ -195,6 +198,7 @@ test('indexed collision is equivalent to brute force across deterministic random
   const sampleCount = seeds.length * samplesPerSeed;
   const averageCandidates = candidateTotal / sampleCount;
   const averageGlobal = globalTotal / sampleCount;
+  console.log(`collision candidate evidence avg=${averageCandidates.toFixed(2)} global=${averageGlobal.toFixed(2)} peak=${candidatePeak} mismatches=0`);
   assert.ok(candidateTotal < globalTotal * 0.25, `indexed average ${averageCandidates} must remain materially below global ${averageGlobal}`);
   assert.ok(candidatePeak < averageGlobal * 0.25, `indexed peak ${candidatePeak} must remain materially below global ${averageGlobal}`);
 });
@@ -217,12 +221,15 @@ test('spatial indexes update cleanly for Cell refresh/unload semantics and nearb
   assert.equal(points.queryRadius(0, 0, 2).length, 0);
 });
 
-test('production installs indexes over WorldRenderer hot paths without changing accepted quality controls', () => {
-  assert.ok(mainSource.includes('installRuntimePerformance();'));
+test('production hot paths own semantics directly while runtimePerformance owns only derived indexes', () => {
+  assert.equal(mainSource.includes('installRuntimePerformance'), false);
+  assert.ok(mainSource.includes('initializeRuntimePerformanceDiagnostics();'));
   assert.ok(runtimeSource.includes('SpatialAabbIndex<WorldWall>(CELL_SIZE)'));
   assert.ok(runtimeSource.includes('SpatialPointIndex<InteractionVisual>(CELL_SIZE)'));
-  assert.ok(runtimeSource.includes('state.dynamicItems.values()'));
-  assert.ok(runtimeSource.includes('resolveCircleAgainstAabbs(currentX, currentZ, nextX, nextZ, candidates, radius)'));
+  assert.ok(runtimeSource.includes('runtimeDynamicItemCandidates'));
+  assert.equal(runtimeSource.includes('WorldRenderer.prototype'), false);
+  assert.ok(rendererSource.includes('runtimeInteractionCandidates(this, x, z, maxDistance)'));
+  assert.ok(rendererSource.includes('runtimeDynamicItemCandidates(this)'));
   for (const forbidden of ['renderScale', 'postProcessing', 'MAX_ACTIVE_FIXTURE_LIGHTS', 'movement speed', 'generationVersion']) {
     assert.equal(runtimeSource.includes(forbidden), false, `performance index layer must not tune ${forbidden}`);
   }

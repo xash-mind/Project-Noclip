@@ -1,6 +1,5 @@
 import * as pc from 'playcanvas';
-import { CameraFrame } from 'playcanvas/build/playcanvas/src/extras/render-passes/camera-frame.js';
-import { LEVEL0_AMBIENT, LEVEL0_FOG_COLOR, resolveBlackoutRenderState } from './blackoutRendering.js';
+import type { CameraFrame } from 'playcanvas/build/playcanvas/src/extras/render-passes/camera-frame.js';
 import { ProceduralAmbience } from '../audio/Ambience.js';
 import { PlayerIntent } from '../input/PlayerIntent.js';
 import { addToInventory, INVENTORY_CAPACITY, moveInstance, removeFromInventory, updateInventoryItem } from '../inventory/inventory.js';
@@ -10,17 +9,19 @@ import { rollStarterDefinitions, simulateStarterRolls } from '../items/starterRo
 import type { ItemInstance } from '../items/types.js';
 import { IndexedDbSaveStore } from '../persistence/store.js';
 import type { DroppedItemState, SaveData, SurfaceMark } from '../persistence/types.js';
-import { WorldRenderer, type InteractionVisual, type WorldItemVisual } from '../renderer/WorldRenderer.js';
+import { isOutletInteraction, type RuntimeInteraction } from '../renderer/outletInteractionRuntime.js';
+import { refreshRenderSettingsLightField, setupRenderSettingsEngine } from '../renderer/renderSettingsRuntime.js';
+import { beginStreamingFrame, finishStreamingFrame, reconcileStreaming } from '../renderer/streamingScheduler.js';
+import { updateVisibilityParticipation } from '../renderer/visibility/runtime.js';
+import { WorldRenderer, type WorldItemVisual } from '../renderer/WorldRenderer.js';
 import { addStableTime, calculateExposureDay, calculateWorldDay, canonicalEdgeId, EMPTY_EXPOSURE, recordTraversal } from '../simulation/timeline.js';
-import { canShift, shouldShift } from '../simulation/shifting.js';
 import { GameUI } from '../ui/GameUI.js';
 import { estimateBlackoutExtent, estimateRegionExtent, locateNearestBlackout, locateNearestHoleCluster, locateNearestRegion, sampleGen3Environment, type RegionExtentEstimate } from '../world/gen3.js';
 import { formatFieldDiagnostics, formatGeographyDiagnostics } from '../world/fields.js';
-import { generateCell } from '../world/generator.js';
 import { stableId, unitFloat } from '../world/hash.js';
 import { LIGHT_FIELD_UPDATE_INTERVAL, type LightFieldSample } from '../world/lighting.js';
 import { manilaRoomCell } from '../world/structures.js';
-import { CELL_SIZE, DEFAULT_TUNING, LEVEL0_FOG_END, LEVEL0_FOG_START, type CellDescriptor, type RegionId, type WorldTuning } from '../world/types.js';
+import { CELL_SIZE, DEFAULT_TUNING, type CellDescriptor, type RegionId, type WorldTuning } from '../world/types.js';
 import { ZONE_PROFILES } from '../world/zones.js';
 
 const PLAYER_HEIGHT = 1.65;
@@ -75,7 +76,6 @@ export class ProjectNoclipGame {
   private app?: pc.Application;
   private camera?: pc.Entity;
   private cameraFrame?: CameraFrame;
-  private blackoutGuideLight?: pc.Entity;
   private flashlight?: pc.Entity;
   private renderer?: WorldRenderer;
   private save?: SaveData;
@@ -88,7 +88,7 @@ export class ProjectNoclipGame {
   private currentCellX = 0;
   private currentCellZ = 0;
   private currentCell?: CellDescriptor;
-  private interaction?: InteractionVisual;
+  private interaction?: RuntimeInteraction;
   private saveAccumulator = 0;
   private metricsAccumulator = 0;
   private hallucinationCooldown = 12;
@@ -167,33 +167,7 @@ export class ProjectNoclipGame {
   }
 
   private setupEngine(): void {
-    if (this.app) { for (const id of [...(this.renderer?.loaded.keys() ?? [])]) this.renderer?.unloadCell(id); return; }
-    const app = new pc.Application(this.canvas);
-    app.setCanvasResolution(pc.RESOLUTION_AUTO); app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
-    app.scene.ambientLight = new pc.Color(LEVEL0_AMBIENT.r, LEVEL0_AMBIENT.g, LEVEL0_AMBIENT.b); app.scene.exposure = BASE_SCENE_EXPOSURE; app.scene.skyboxIntensity = 0;
-    app.scene.fog = pc.FOG_LINEAR; app.scene.fogColor = new pc.Color(LEVEL0_FOG_COLOR.r, LEVEL0_FOG_COLOR.g, LEVEL0_FOG_COLOR.b); app.scene.fogStart = LEVEL0_FOG_START; app.scene.fogEnd = LEVEL0_FOG_END;
-    const camera = new pc.Entity('player-camera');
-    camera.addComponent('camera', { clearColor: new pc.Color(LEVEL0_FOG_COLOR.r, LEVEL0_FOG_COLOR.g, LEVEL0_FOG_COLOR.b), nearClip: 0.05, farClip: 125, fov: 73 }); app.root.addChild(camera);
-    const cameraComponent = (camera as unknown as { camera?: ConstructorParameters<typeof CameraFrame>[1] }).camera;
-    if (cameraComponent) {
-      const cameraFrame = new CameraFrame(app as unknown as ConstructorParameters<typeof CameraFrame>[0], cameraComponent);
-      cameraFrame.bloom.intensity = 0.024;
-      cameraFrame.bloom.blurLevel = 6;
-      cameraFrame.grading.enabled = true;
-      cameraFrame.grading.brightness = 1.06;
-      cameraFrame.grading.contrast = 0.96;
-      cameraFrame.grading.saturation = 0.9;
-      cameraFrame.update();
-      this.cameraFrame = cameraFrame;
-    }
-    const blackoutGuideLight = new pc.Entity('blackout-external-glimmer');
-    blackoutGuideLight.addComponent('light', { type: 'omni', color: new pc.Color(0.88, 0.84, 0.56), range: 22, intensity: 0, castShadows: false });
-    blackoutGuideLight.enabled = false; app.root.addChild(blackoutGuideLight);
-    const flashlight = new pc.Entity('flashlight');
-    flashlight.addComponent('light', { type: 'spot', color: new pc.Color(0.93, 0.91, 0.72), range: 22, intensity: 2.4, innerConeAngle: 20, outerConeAngle: 36, castShadows: false });
-    camera.addChild(flashlight); flashlight.setLocalPosition(0, -0.08, -0.2); flashlight.setLocalEulerAngles(90, 0, 0); flashlight.enabled = false;
-    this.app = app; this.camera = camera; this.blackoutGuideLight = blackoutGuideLight; this.flashlight = flashlight;
-    app.on('update', (dt) => this.update(Math.min(dt, 0.05))); app.start(); window.addEventListener('resize', () => app.resizeCanvas());
+    setupRenderSettingsEngine(this);
   }
 
   private installInput(): void {
@@ -327,7 +301,12 @@ export class ProjectNoclipGame {
   }
 
   private update(dt: number): void {
-    if (!this.started || !this.save || !this.camera || !this.renderer) return;
+    beginStreamingFrame(this);
+    if (!this.started || !this.save || !this.camera || !this.renderer) {
+      finishStreamingFrame(this, dt);
+      updateVisibilityParticipation(this, false);
+      return;
+    }
     const activeJourney = !this.paused && !this.ui.isLabOpen() && !this.ui.isNoteOpen() && document.hasFocus();
     if (!this.paused && !this.ui.isLabOpen() && !this.ui.isNoteOpen()) this.updateMovement(dt);
     if (activeJourney) {
@@ -345,6 +324,8 @@ export class ProjectNoclipGame {
     this.saveAccumulator += dt; this.metricsAccumulator += dt;
     if (this.saveAccumulator >= SAVE_INTERVAL) { this.saveAccumulator = 0; void this.persist(); }
     if (this.metricsAccumulator >= 0.25) { this.metricsAccumulator = 0; this.updateUI(); }
+    finishStreamingFrame(this, dt);
+    updateVisibilityParticipation(this, false);
   }
 
   private updateEyeAdaptation(dt: number): void {
@@ -387,26 +368,8 @@ export class ProjectNoclipGame {
   }
 
   private updateStreaming(force = false, radiusOverride?: number): void {
-    if (!this.save || !this.renderer) return;
-    if (radiusOverride === undefined) this.streamWarmupToken += 1;
-    const exposure = this.tuning.exposureOverride ?? calculateExposureDay(this.save.exposure); const worldDay = this.tuning.worldDayOverride ?? calculateWorldDay(Date.now()); const desired = new Set<string>(); const targetRadius = Math.max(1, Math.min(4, Math.round(this.tuning.activeRadius))); const radius = Math.max(1, Math.min(targetRadius, radiusOverride ?? targetRadius));
-    for (let x = this.currentCellX - radius; x <= this.currentCellX + radius; x += 1) for (let z = this.currentCellZ - radius; z <= this.currentCellZ + radius; z += 1) {
-      const id = `${x}:${z}`; desired.add(id); const descriptor = generateCell({ seed: this.save.seed, x, z, worldDay, exposure, shiftEpoch: this.save.shiftEpochs[id] ?? 0, tuning: this.tuning, generationVersion: this.save.generationVersion });
-      const existing = this.renderer.loaded.get(id)?.descriptor;
-      if (!existing) this.renderer.loadCell(descriptor); else if (force || existing.address.shiftEpoch !== descriptor.address.shiftEpoch || existing.address.zoneId !== descriptor.address.zoneId || existing.roomArchetype !== descriptor.roomArchetype) this.renderer.refreshCell(descriptor);
-      if (x === this.currentCellX && z === this.currentCellZ) this.currentCell = descriptor;
-    }
-    for (const [id, visual] of [...this.renderer.loaded.entries()]) {
-      if (desired.has(id)) continue;
-      const distance = Math.max(Math.abs(visual.descriptor.address.cellX - this.currentCellX), Math.abs(visual.descriptor.address.cellZ - this.currentCellZ)); const unloadCount = (this.save.unloadCounts[id] ?? 0) + 1; this.save.unloadCounts[id] = unloadCount;
-      if (this.save.generationVersion === 'gen2' && canShift({ occupied: false, observed: false, distanceInCells: distance, stability: visual.descriptor.stability, protectedInteraction: false, preservesPath: true }) && shouldShift(this.save.seed, id, unloadCount, this.tuning.shiftChance)) this.save.shiftEpochs[id] = (this.save.shiftEpochs[id] ?? 0) + 1;
-      this.renderer.unloadCell(id);
-    }
-    if (this.app) {
-      const rendering = renderControl(this.app);
-      if (!rendering.autoRender) rendering.renderNextFrame = true;
-    }
-    this.refreshRegionExtent(); this.refreshLightField(); this.notifyRegionEntry();
+    reconcileStreaming(this, force, radiusOverride);
+    updateVisibilityParticipation(this, true);
   }
 
   private scheduleStreamingWarmup(): void {
@@ -514,37 +477,14 @@ export class ProjectNoclipGame {
   }
 
   private refreshLightField(): void {
-    if (!this.save || !this.renderer || !this.camera || !this.currentCell || !this.app) return;
-    const position = this.camera.getPosition();
-    this.lightField = this.renderer.updateLightField(position.x, position.z, this.journeyElapsed, this.save.settings.reducedFlicker);
-    this.ambience.setLightField(this.lightField);
-    const worldDay = this.tuning.worldDayOverride ?? calculateWorldDay(Date.now());
-    const exposure = this.tuning.exposureOverride ?? calculateExposureDay(this.save.exposure);
-    const sampled = this.save.generationVersion === 'gen3-v1' ? sampleGen3Environment(this.save.seed, position.x, position.z, worldDay, exposure, this.tuning) : undefined;
-    const blackoutStrength = sampled?.blackoutStrength ?? this.currentCell.world.blackoutStrength;
-    const blackoutEscapeCue = sampled?.blackoutEscapeCue ?? this.currentCell.world.blackoutEscapeCue;
-    this.blackoutStrength = blackoutStrength;
-    this.ambience.setEnvironment(blackoutStrength, blackoutEscapeCue);
-
-    const renderState = resolveBlackoutRenderState(blackoutStrength, blackoutEscapeCue);
-    this.app.scene.ambientLight = new pc.Color(renderState.ambient.r, renderState.ambient.g, renderState.ambient.b);
-    this.app.scene.fogColor = new pc.Color(renderState.fog.r, renderState.fog.g, renderState.fog.b);
-    this.app.scene.fogStart = LEVEL0_FOG_START - blackoutStrength * (LEVEL0_FOG_START - 7);
-    this.app.scene.fogEnd = LEVEL0_FOG_END - blackoutStrength * (LEVEL0_FOG_END - 29);
-    const cameraComponent = (this.camera as unknown as { camera?: { clearColor: pc.Color } }).camera;
-    if (cameraComponent) cameraComponent.clearColor = new pc.Color(renderState.clear.r, renderState.clear.g, renderState.clear.b);
-
-    if (this.blackoutGuideLight?.light && sampled && renderState.guideLightEnabled) {
-      this.blackoutGuideLight.enabled = true;
-      this.blackoutGuideLight.setPosition(position.x + sampled.blackoutExitDirection.x * 18, 2.35, position.z + sampled.blackoutExitDirection.z * 18);
-      this.blackoutGuideLight.light.intensity = renderState.guideLightIntensity;
-    } else if (this.blackoutGuideLight) this.blackoutGuideLight.enabled = false;
+    refreshRenderSettingsLightField(this);
   }
 
   private updateInteraction(): void {
     if (!this.camera || !this.renderer) return; const position = this.camera.getPosition(); const forward = forwardFromAngles(this.yaw, this.pitch);
     this.interaction = this.renderer.closestInteraction(position.x, position.y, position.z, forward.x, forward.z);
     if (!this.interaction) this.ui.setInteraction();
+    else if (isOutletInteraction(this.interaction)) this.ui.setInteraction('[E] Inspect outlet');
     else if (this.interaction.kind === 'item') this.ui.setInteraction(`[E] Pick up ${ITEM_DEFINITIONS[this.interaction.item.definitionId].name}`);
     else if (this.interaction.kind === 'exit') this.ui.setInteraction(this.interaction.enabled ? `[E] Approach ${this.interaction.label}` : `${this.interaction.label} — requires World Day ${this.interaction.minimumWorldDay} / Exposure ${this.interaction.minimumExposure.toFixed(1)}`);
     else if (this.interaction.kind === 'note') this.ui.setInteraction(`[E] Read ${this.interaction.note.title}`); else this.ui.setInteraction('[E] Wait in the Manila Room');
@@ -552,6 +492,10 @@ export class ProjectNoclipGame {
 
   private interact(): void {
     if (!this.save || !this.renderer || !this.interaction) return;
+    if (isOutletInteraction(this.interaction)) {
+      this.ui.toast('The outlet is inert.', 2800);
+      return;
+    }
     if (this.interaction.kind === 'item') this.pickupItem(this.interaction);
     else if (this.interaction.kind === 'exit') {
       if (!this.interaction.enabled) { this.ui.toast(`The Transition remains inert. World Day ${this.interaction.minimumWorldDay} and Exposure ${this.interaction.minimumExposure.toFixed(1)} are required.`, 4800); return; }
