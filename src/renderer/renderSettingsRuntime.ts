@@ -1,12 +1,11 @@
 import * as pc from 'playcanvas';
 import { CameraFrame } from 'playcanvas/build/playcanvas/src/extras/render-passes/camera-frame.js';
-import { ProjectNoclipGame } from '../app/ProjectNoclipGame.js';
+import type { ProjectNoclipGame } from '../app/ProjectNoclipGame.js';
 import type { SaveData } from '../persistence/types.js';
 import { calculateExposureDay, calculateWorldDay } from '../simulation/timeline.js';
 import { sampleGen3Environment } from '../world/gen3.js';
 import type { LightFieldSample } from '../world/lighting.js';
 import type { CellDescriptor, WorldTuning } from '../world/types.js';
-import { installStreamingScheduler, reconcileStreaming } from './streamingScheduler.js';
 import type { WorldRenderer } from './WorldRenderer.js';
 import {
   getRenderSettings,
@@ -14,7 +13,6 @@ import {
   level0AmbientForBlackout,
   level0FogForSettings,
   renderDistanceProfile,
-  setRendererRenderScope,
   type RenderSettings
 } from './renderSettings.js';
 
@@ -54,29 +52,14 @@ interface GameRuntimeAccess {
   renderer?: WorldRenderer;
   save?: SaveData;
   tuning: WorldTuning;
-  currentCellX: number;
-  currentCellZ: number;
   currentCell?: CellDescriptor;
-  streamWarmupToken: number;
   journeyElapsed: number;
   lightField: LightFieldSample;
   blackoutStrength: number;
   ambience: AmbienceAccess;
   update(dt: number): void;
-  refreshRegionExtent(): void;
-  refreshLightField(): void;
-  notifyRegionEntry(): void;
   updateStreaming(force?: boolean, radiusOverride?: number): void;
 }
-
-type RuntimePrototype = {
-  setupEngine(this: ProjectNoclipGame): void;
-  update(this: ProjectNoclipGame, dt: number): void;
-  updateStreaming(this: ProjectNoclipGame, force?: boolean, radiusOverride?: number): void;
-  refreshLightField(this: ProjectNoclipGame): void;
-};
-
-let installed = false;
 
 function access(game: ProjectNoclipGame): GameRuntimeAccess {
   return game as unknown as GameRuntimeAccess;
@@ -147,14 +130,20 @@ function applyRenderQuality(game: ProjectNoclipGame, settings: RenderSettings): 
   applyPostProcessing(state.cameraFrame, settings);
 }
 
-function setupEngine(this: ProjectNoclipGame): void {
-  const state = access(this);
+/** Device-local render settings initialization. Installs no application methods. */
+export function initializeRenderSettingsRuntime(): void {
+  initializeRenderSettings();
+}
+
+/** Accepted modern PlayCanvas setup, explicitly invoked by ProjectNoclipGame. */
+export function setupRenderSettingsEngine(game: ProjectNoclipGame): void {
+  const state = access(game);
   const settings = getRenderSettings();
   state.tuning = { ...state.tuning, activeRadius: renderDistanceProfile(settings).loadRadius };
   if (state.app) {
     for (const id of [...(state.renderer?.loaded.keys() ?? [])]) state.renderer?.unloadCell(id);
-    applyLevel0Atmosphere(this, settings);
-    applyRenderQuality(this, settings);
+    applyLevel0Atmosphere(game, settings);
+    applyRenderQuality(game, settings);
     return;
   }
 
@@ -206,18 +195,15 @@ function setupEngine(this: ProjectNoclipGame): void {
   state.camera = camera;
   state.cameraFrame = cameraFrame;
   state.flashlight = flashlight;
-  applyRenderQuality(this, settings);
+  applyRenderQuality(game, settings);
   app.on('update', (dt) => state.update(Math.min(dt, 0.05)));
   app.start();
   window.addEventListener('resize', () => app.resizeCanvas());
 }
 
-function updateStreaming(this: ProjectNoclipGame, force = false, radiusOverride?: number): void {
-  reconcileStreaming(this, force, radiusOverride);
-}
-
-function refreshLightField(this: ProjectNoclipGame): void {
-  const state = access(this);
+/** Accepted light-field/Blackout atmosphere path, explicitly invoked by the app. */
+export function refreshRenderSettingsLightField(game: ProjectNoclipGame): void {
+  const state = access(game);
   if (!state.save || !state.renderer || !state.camera || !state.currentCell || !state.app) return;
   const position = state.camera.getPosition();
   state.lightField = state.renderer.updateLightField(position.x, position.z, state.journeyElapsed, state.save.settings.reducedFlicker);
@@ -231,7 +217,7 @@ function refreshLightField(this: ProjectNoclipGame): void {
   const blackoutEscapeCue = sampled?.blackoutEscapeCue ?? state.currentCell.world.blackoutEscapeCue;
   state.blackoutStrength = blackoutStrength;
   state.ambience.setEnvironment(blackoutStrength, blackoutEscapeCue);
-  applyLevel0Atmosphere(this, getRenderSettings());
+  applyLevel0Atmosphere(game, getRenderSettings());
 }
 
 export function applyRenderSettingsToGame(game: ProjectNoclipGame, settings = getRenderSettings()): void {
@@ -274,15 +260,4 @@ export function renderSettingsDiagnostics(game: ProjectNoclipGame): {
     ...(typeof drawCalls === 'number' ? { drawCalls } : {}),
     ...(fog ? { fogStart: fog.start, fogEnd: fog.end } : {})
   };
-}
-
-export function installRenderSettingsRuntime(): void {
-  if (installed) return;
-  installed = true;
-  initializeRenderSettings();
-  const prototype = ProjectNoclipGame.prototype as unknown as RuntimePrototype;
-  prototype.setupEngine = setupEngine;
-  prototype.updateStreaming = updateStreaming;
-  prototype.refreshLightField = refreshLightField;
-  installStreamingScheduler(prototype);
 }
