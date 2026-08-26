@@ -6,9 +6,14 @@ const {
   LEVEL0_SEPARATE_BASE_TRIM,
   LEVEL0_WALLPAPER_PALETTE,
   LEVEL0_WALLPAPER_TILE_METERS,
-  shouldGen3WallCollide,
   wallpaperUvForWall
 } = await import('../.test-dist/src/renderer/level0Wallpaper.js');
+const {
+  archFrameBaysForDescriptors,
+  archLowerPanelWorldVolumeForCell,
+  archSemanticWallOwnsFinalCollision,
+  archStructuralRole
+} = await import('../.test-dist/src/world/gen3ArchDividerSemantics.js');
 const { generateCell } = await import('../.test-dist/src/world/generator.js');
 const { CELL_SIZE, DEFAULT_TUNING } = await import('../.test-dist/src/world/types.js');
 
@@ -65,6 +70,27 @@ function worldWall(cell, wall) {
   };
 }
 
+function lowerPanelBounds(volume) {
+  if (volume.orientation === 'z') {
+    return {
+      orientation: volume.orientation,
+      fixed: volume.fixed,
+      minX: volume.start,
+      maxX: volume.end,
+      minZ: volume.fixed - volume.depth / 2,
+      maxZ: volume.fixed + volume.depth / 2
+    };
+  }
+  return {
+    orientation: volume.orientation,
+    fixed: volume.fixed,
+    minX: volume.fixed - volume.depth / 2,
+    maxX: volume.fixed + volume.depth / 2,
+    minZ: volume.start,
+    maxZ: volume.end
+  };
+}
+
 function propBounds(cell, prop) {
   const originX = cell.address.cellX * CELL_SIZE;
   const originZ = cell.address.cellZ * CELL_SIZE;
@@ -92,24 +118,49 @@ test('Arch route bays are floor-open in the 2D collider model while decorative l
   const cells = [];
   for (let x = -6; x <= 6; x += 1) for (let z = -6; z <= 6; z += 1) cells.push(generateCell(generationOptions(x, z, clean('arch-rooms'))));
   const walls = cells.flatMap((cell) => cell.walls.map((wall) => worldWall(cell, wall)));
-  const headers = walls.filter(({ wall, minY }) => wall.materialId === 'arch-pale-wallpaper' && minY > 2.68 && wall.sy > 0.34 && wall.sy < 0.55);
-  const lowerPanels = walls.filter(({ wall }) => wall.materialId === 'arch-pale-wallpaper' && wall.sy > 0.92 && wall.sy < 1.08 && wall.cy > 0.45 && wall.cy < 0.56);
-  assert.ok(headers.length > 8, `expected repeated Arch headers, got ${headers.length}`);
-  assert.ok(lowerPanels.length > 8, `expected decorative lower panels, got ${lowerPanels.length}`);
-  assert.ok(headers.every(({ wall }) => !shouldGen3WallCollide(wall)), 'overhead headers must not own floor collision');
-  assert.ok(lowerPanels.every(({ wall }) => shouldGen3WallCollide(wall)), 'decorative lower panels must remain solid');
+  const headers = walls.filter(({ wall }) => archStructuralRole(wall) === 'upper');
+  const semanticLowers = walls.filter(({ wall }) => archStructuralRole(wall) === 'lower-panel');
+  const bays = archFrameBaysForDescriptors(cells);
+  const routeBays = bays.filter((bay) => bay.route);
+  const decorativeBays = bays.filter((bay) => !bay.route);
+  const lowerPanelVolumes = cells.flatMap((cell) => decorativeBays
+    .map((bay) => archLowerPanelWorldVolumeForCell(cell, bay))
+    .filter(Boolean));
+  const lowerPanels = lowerPanelVolumes.map(lowerPanelBounds);
 
-  const floorWalls = walls.filter(({ wall }) => shouldGen3WallCollide(wall));
+  assert.ok(headers.length > 8, `expected repeated Arch headers, got ${headers.length}`);
+  assert.ok(semanticLowers.length > 8, `expected semantic lower-panel inputs, got ${semanticLowers.length}`);
+  assert.ok(routeBays.length > 8, `expected repeated route-bearing Arch bays, got ${routeBays.length}`);
+  assert.ok(decorativeBays.length > 8, `expected repeated decorative Arch bays, got ${decorativeBays.length}`);
+  assert.ok(lowerPanels.length > 8, `expected canonical decorative lower-panel colliders, got ${lowerPanels.length}`);
+  assert.ok(headers.every(({ wall }) => !archSemanticWallOwnsFinalCollision(wall)), 'overhead headers must not own floor collision');
+  assert.ok(semanticLowers.every(({ wall }) => !archSemanticWallOwnsFinalCollision(wall)), 'semantic lower WallSpecs must not duplicate canonical lower-panel collision');
+  assert.ok(routeBays.every((bay) => cells.every((cell) => archLowerPanelWorldVolumeForCell(cell, bay) === undefined)), 'route bays must not receive lower-panel collision');
+  assert.ok(lowerPanels.every((panel) => panel.maxX > panel.minX && panel.maxZ > panel.minZ), 'canonical lower-panel collision lost positive 2D volume');
+
+  let solidDecorativePanel = false;
+  for (const panel of lowerPanels) {
+    const centerX = (panel.minX + panel.maxX) / 2;
+    const centerZ = (panel.minZ + panel.maxZ) / 2;
+    const start = panel.orientation === 'z'
+      ? { x: centerX, z: panel.minZ - 0.7 }
+      : { x: panel.minX - 0.7, z: centerZ };
+    const end = panel.orientation === 'z'
+      ? { x: centerX, z: panel.maxZ + 0.7 }
+      : { x: panel.maxX + 0.7, z: centerZ };
+    if (!clearPath([panel], start, end)) { solidDecorativePanel = true; break; }
+  }
+  assert.ok(solidDecorativePanel, 'decorative lower panels no longer form solid canonical 2D obstacles');
+
+  const floorWalls = walls.filter(({ wall }) => archSemanticWallOwnsFinalCollision(wall));
   const props = cells.flatMap((cell) => cell.props.filter((prop) => prop.solid).map((prop) => propBounds(cell, prop)));
-  const obstacles = [...floorWalls, ...props];
+  const obstacles = [...floorWalls, ...lowerPanels, ...props];
   let traversableRoute = false;
-  for (const header of headers) {
-    for (let along = header.start + 1.05; along <= header.end - 1.05; along += 0.3) {
-      const start = header.orientation === 'z' ? { x: along, z: header.fixed - 1.7 } : { x: header.fixed - 1.7, z: along };
-      const end = header.orientation === 'z' ? { x: along, z: header.fixed + 1.7 } : { x: header.fixed + 1.7, z: along };
-      if (clearPath(obstacles, start, end)) { traversableRoute = true; break; }
-    }
-    if (traversableRoute) break;
+  for (const bay of routeBays) {
+    const along = (bay.start + bay.end) / 2;
+    const start = bay.orientation === 'z' ? { x: along, z: bay.fixed - 1.7 } : { x: bay.fixed - 1.7, z: along };
+    const end = bay.orientation === 'z' ? { x: along, z: bay.fixed + 1.7 } : { x: bay.fixed + 1.7, z: along };
+    if (clearPath(obstacles, start, end)) { traversableRoute = true; break; }
   }
   assert.ok(traversableRoute, 'no collider-clear route-bearing Arch bay was found');
 });

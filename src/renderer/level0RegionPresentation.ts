@@ -1,5 +1,21 @@
 import * as pc from 'playcanvas';
-import { ARCH_HEADER_HEIGHT, ARCH_LOWER_HEIGHT, ARCH_SHOULDER_SPAN_SCALE, preservedArchCurveWidth } from '../world/gen3ArchitectureCore.js';
+import { ARCH_SHOULDER_SPAN_SCALE } from '../world/gen3ArchitectureCore.js';
+import {
+  ARCH_FRAME_CELL_SEAM_HANDOFF,
+  ARCH_LOWER_PANEL_DEPTH,
+  ARCH_LOWER_PANEL_END_INSET,
+  ARCH_LOWER_PANEL_HEIGHT,
+  archCellOwnsLine as cellOwnsLine,
+  archDividerLinesForDescriptors as archLinesForDescriptors,
+  archFrameBaysForDescriptors as canonicalArchFrameBaysForDescriptors,
+  archFrameBaysForLine as frameBaysForLine,
+  archStructuralRole,
+  clipArchIntervalForCell as clippedInterval,
+  mergeArchIntervals as mergeIntervals,
+  type ArchFrameBay,
+  type ArchInterval as Interval,
+  type ArchSemanticLine as WorldArchLine
+} from '../world/gen3ArchDividerSemantics.js';
 import {
   CELL_SIZE,
   WALL_HEIGHT,
@@ -17,37 +33,8 @@ interface RegionPresentationCache { materials: Map<string, pc.StandardMaterial>;
 interface CarpetProfile { key: 'ordinary' | 'pillar' | 'arch'; tint: readonly [number, number, number]; gloss?: number; }
 type Vec3Tuple = readonly [number, number, number];
 type Vec2Tuple = readonly [number, number];
-type Interval = readonly [number, number];
 
-interface WorldArchWall {
-  id: string;
-  cellId: string;
-  orientation: WallSpec['orientation'];
-  fixed: number;
-  start: number;
-  end: number;
-  minY: number;
-  maxY: number;
-}
-interface WorldArchLine {
-  key: string;
-  orientation: WallSpec['orientation'];
-  fixed: number;
-  headers: WorldArchWall[];
-  lowers: WorldArchWall[];
-  solids: WorldArchWall[];
-}
-export interface ArchFrameBay {
-  id: string;
-  lineKey: string;
-  orientation: WallSpec['orientation'];
-  fixed: number;
-  start: number;
-  end: number;
-  curveStart: number;
-  curveEnd: number;
-  route: boolean;
-}
+export type { ArchFrameBay } from '../world/gen3ArchDividerSemantics.js';
 export interface ArchCurveSegment {
   id: string;
   sourceWallId: string;
@@ -68,11 +55,8 @@ const ARCH_CURVE_SEGMENTS = 18;
 const ARCH_UPPER_BOTTOM = 1.92;
 const ARCH_UPPER_TOP = WALL_HEIGHT - 0.24;
 const ARCH_CURVE_APEX = Math.min(ARCH_UPPER_TOP - 0.24, 2.46);
-const ARCH_CELL_SEAM_HANDOFF = 0.012;
 const ARCH_PIER_DEPTH = WALL_THICKNESS + 0.10;
 const ARCH_UPPER_DEPTH = WALL_THICKNESS + 0.16;
-const ARCH_LOWER_PANEL_DEPTH = Math.max(0.14, WALL_THICKNESS - 0.10);
-const ARCH_LOWER_PANEL_HEIGHT = Math.min(ARCH_LOWER_HEIGHT - 0.06, 0.94);
 const ARCH_FRAME_PREFIX = 'arch-frame:';
 const ARCH_PIER_TINT: readonly [number, number, number] = [0.76, 0.735, 0.665];
 const ARCH_UPPER_TINT: readonly [number, number, number] = [0.955, 0.945, 0.885];
@@ -233,152 +217,15 @@ function replaceHoleDepth(renderer: WorldRenderer, visual: CellVisual): void {
   }
 }
 
-function wallMinY(wall: WallSpec): number { return wall.cy - wall.sy / 2; }
-function wallMaxY(wall: WallSpec): number { return wall.cy + wall.sy / 2; }
-function longInterval(wall: WallSpec): Interval {
-  return wall.orientation === 'z'
-    ? [wall.cx - wall.sx / 2, wall.cx + wall.sx / 2]
-    : [wall.cz - wall.sz / 2, wall.cz + wall.sz / 2];
-}
-function fixedCoordinate(wall: WallSpec): number { return wall.orientation === 'z' ? wall.cz : wall.cx; }
-function isArchHeader(wall: WallSpec): boolean {
-  return wall.materialId === 'arch-pale-wallpaper'
-    && Math.abs(wall.sy - ARCH_HEADER_HEIGHT) < 0.055
-    && Math.abs(wallMaxY(wall) - WALL_HEIGHT) < 0.045;
-}
-function isArchLower(wall: WallSpec): boolean {
-  return wall.materialId === 'arch-pale-wallpaper'
-    && Math.abs(wall.sy - ARCH_LOWER_HEIGHT) < 0.065
-    && wallMinY(wall) <= 0.045;
-}
-function isArchPierSupport(wall: WallSpec): boolean {
-  const headerBottom = WALL_HEIGHT - ARCH_HEADER_HEIGHT;
-  return wall.materialId === 'arch-pale-wallpaper'
-    && wallMinY(wall) > 0.04
-    && wallMinY(wall) <= ARCH_LOWER_HEIGHT + 0.065
-    && wallMaxY(wall) >= headerBottom - 0.045
-    && wall.sy > 1.35;
-}
-
-function toWorldArchWall(descriptor: CellDescriptor, wall: WallSpec): WorldArchWall {
-  const baseX = descriptor.address.cellX * CELL_SIZE;
-  const baseZ = descriptor.address.cellZ * CELL_SIZE;
-  const interval = longInterval(wall);
-  return {
-    id: wall.id,
-    cellId: descriptor.id,
-    orientation: wall.orientation,
-    fixed: fixedCoordinate(wall) + (wall.orientation === 'z' ? baseZ : baseX),
-    start: interval[0] + (wall.orientation === 'z' ? baseX : baseZ),
-    end: interval[1] + (wall.orientation === 'z' ? baseX : baseZ),
-    minY: wallMinY(wall),
-    maxY: wallMaxY(wall)
-  };
-}
-
-function mergeIntervals(intervals: readonly Interval[]): Interval[] {
-  const sorted = [...intervals].sort((left, right) => left[0] - right[0]);
-  const merged: Array<[number, number]> = [];
-  for (const interval of sorted) {
-    const last = merged[merged.length - 1];
-    if (last && interval[0] <= last[1] + 0.03) last[1] = Math.max(last[1], interval[1]);
-    else merged.push([interval[0], interval[1]]);
-  }
-  return merged;
-}
-
-function overlapsInterval(left: Interval, right: Interval): boolean {
-  return left[1] > right[0] + 0.01 && left[0] < right[1] - 0.01;
-}
-
-function archLinesForDescriptors(descriptors: readonly CellDescriptor[]): Map<string, WorldArchLine> {
-  const lines = new Map<string, WorldArchLine>();
-  for (const descriptor of descriptors) {
-    if (descriptor.world.generationVersion !== 'gen3-v1') continue;
-    for (const wall of descriptor.walls) {
-      if (!isArchHeader(wall)) continue;
-      const world = toWorldArchWall(descriptor, wall);
-      const key = `${world.orientation}:${world.fixed.toFixed(3)}`;
-      const line = lines.get(key) ?? { key, orientation: world.orientation, fixed: world.fixed, headers: [], lowers: [], solids: [] };
-      line.headers.push(world);
-      lines.set(key, line);
-    }
-  }
-  for (const descriptor of descriptors) {
-    if (descriptor.world.generationVersion !== 'gen3-v1') continue;
-    for (const wall of descriptor.walls) {
-      if (!isArchLower(wall) && !isArchPierSupport(wall)) continue;
-      const world = toWorldArchWall(descriptor, wall);
-      const key = `${world.orientation}:${world.fixed.toFixed(3)}`;
-      const line = lines.get(key);
-      if (!line) continue;
-      const headerIntervals = mergeIntervals(line.headers.map((header) => [header.start, header.end] as const));
-      if (!headerIntervals.some((header) => overlapsInterval(header, [world.start, world.end]))) continue;
-      if (isArchLower(wall)) line.lowers.push(world);
-      if (isArchPierSupport(wall)) line.solids.push(world);
-    }
-  }
-  return lines;
-}
-
-function mergedHeaderRuns(line: WorldArchLine): Interval[] {
-  // Real Cell seams already meet within mergeIntervals' 3 cm continuity
-  // tolerance. Never bridge a larger semantic gap: route/termination cuts are
-  // world truth and must not be reinterpreted as an Arch header continuation.
-  return mergeIntervals(line.headers.map((header) => [header.start, header.end] as const));
-}
-
-function curveWidthForBay(width: number): number {
-  return preservedArchCurveWidth(width);
-}
-
 export function archFramePresentationProfile(): {
   upperBottom: number; upperTop: number; ceilingReveal: number; curveApex: number;
   curveJoinHandoff: number; cellSeamHandoff: number; pierDepth: number; upperDepth: number; shoulderSpanScale: number;
 } {
   return {
     upperBottom: ARCH_UPPER_BOTTOM, upperTop: ARCH_UPPER_TOP, ceilingReveal: WALL_HEIGHT - ARCH_UPPER_TOP, curveApex: ARCH_CURVE_APEX,
-    curveJoinHandoff: 0, cellSeamHandoff: ARCH_CELL_SEAM_HANDOFF, pierDepth: ARCH_PIER_DEPTH, upperDepth: ARCH_UPPER_DEPTH,
+    curveJoinHandoff: 0, cellSeamHandoff: ARCH_FRAME_CELL_SEAM_HANDOFF, pierDepth: ARCH_PIER_DEPTH, upperDepth: ARCH_UPPER_DEPTH,
     shoulderSpanScale: ARCH_SHOULDER_SPAN_SCALE
   };
-}
-
-function intervalContains(intervals: readonly Interval[], point: number, margin = 0.06): boolean {
-  return intervals.some(([start, end]) => point >= start + margin && point <= end - margin);
-}
-
-function frameBaysForLine(line: WorldArchLine): ArchFrameBay[] {
-  const headers = mergedHeaderRuns(line);
-  const solids = mergeIntervals(line.solids.map((wall) => [wall.start, wall.end] as const));
-  const lowers = mergeIntervals(line.lowers.map((wall) => [wall.start, wall.end] as const));
-  const bays: ArchFrameBay[] = [];
-  let bayIndex = 0;
-  for (const header of headers) {
-    const supports = solids.filter((solid) => overlapsInterval(solid, header));
-    for (let index = 1; index < supports.length; index += 1) {
-      const left = supports[index - 1];
-      const right = supports[index];
-      if (!left || !right) continue;
-      const start = left[1];
-      const end = right[0];
-      const width = end - start;
-      if (width < 1.7 || width > 6.4) continue;
-      const center = (start + end) / 2;
-      const curveWidth = curveWidthForBay(width);
-      bays.push({
-        id: `${line.key}:${bayIndex++}`,
-        lineKey: line.key,
-        orientation: line.orientation,
-        fixed: line.fixed,
-        start,
-        end,
-        curveStart: center - curveWidth / 2,
-        curveEnd: center + curveWidth / 2,
-        route: !intervalContains(lowers, center)
-      });
-    }
-  }
-  return bays;
 }
 
 function rectangularUpperRuns(bays: readonly ArchFrameBay[], supports: readonly Interval[]): Interval[] {
@@ -399,7 +246,7 @@ export interface ArchFrameVisibleVolume {
   maxY: number;
 }
 
-/** Pure geometry ownership view used by regression tests and diagnostics. */
+/** Pure presentation-geometry view used by regression tests and diagnostics. */
 export function archFrameVisibleVolumesForDescriptors(descriptors: readonly CellDescriptor[]): ArchFrameVisibleVolume[] {
   const volumes: ArchFrameVisibleVolume[] = [];
   for (const line of archLinesForDescriptors(descriptors).values()) {
@@ -432,7 +279,7 @@ export function archFrameVisibleVolumesForDescriptors(descriptors: readonly Cell
 }
 
 export function archFrameBaysForDescriptors(descriptors: readonly CellDescriptor[]): ArchFrameBay[] {
-  return [...archLinesForDescriptors(descriptors).values()].flatMap(frameBaysForLine);
+  return canonicalArchFrameBaysForDescriptors(descriptors);
 }
 
 function localArchLines(descriptor: CellDescriptor): Map<string, WorldArchLine> {
@@ -481,31 +328,6 @@ export function archHeaderBridgeSegmentsForCell(_descriptor: CellDescriptor): Ar
   return [];
 }
 
-function cellAlongBounds(descriptor: CellDescriptor, orientation: WallSpec['orientation']): Interval {
-  const center = orientation === 'z'
-    ? descriptor.address.cellX * CELL_SIZE
-    : descriptor.address.cellZ * CELL_SIZE;
-  return [center - CELL_SIZE / 2, center + CELL_SIZE / 2];
-}
-function perpendicularCellOwner(fixed: number): number {
-  return Math.floor((fixed + CELL_SIZE / 2) / CELL_SIZE);
-}
-function cellOwnsLine(descriptor: CellDescriptor, orientation: WallSpec['orientation'], fixed: number): boolean {
-  return orientation === 'z'
-    ? descriptor.address.cellZ === perpendicularCellOwner(fixed)
-    : descriptor.address.cellX === perpendicularCellOwner(fixed);
-}
-function clippedInterval(descriptor: CellDescriptor, orientation: WallSpec['orientation'], start: number, end: number): Interval | undefined {
-  const [cellStart, cellEnd] = cellAlongBounds(descriptor, orientation);
-  // One-sided Cell handoff: the preceding Cell carries the run through the small
-  // handoff distance and the following Cell begins at that same shifted world
-  // coordinate. The join moves off the Cell root boundary without duplicate faces.
-  const entersFromPreviousCell = start < cellStart - 0.0005;
-  const continuesIntoNextCell = end > cellEnd + 0.0005;
-  const clippedStart = Math.max(start, cellStart + (entersFromPreviousCell ? ARCH_CELL_SEAM_HANDOFF : 0));
-  const clippedEnd = Math.min(end, cellEnd + (continuesIntoNextCell ? ARCH_CELL_SEAM_HANDOFF : 0));
-  return clippedEnd - clippedStart > 0.015 ? [clippedStart, clippedEnd] : undefined;
-}
 function localBoxPosition(
   descriptor: CellDescriptor,
   orientation: WallSpec['orientation'],
@@ -612,7 +434,7 @@ function addCurveMeshClipped(
 ): void {
   const descriptor = visual.descriptor;
   if (!cellOwnsLine(descriptor, bay.orientation, bay.fixed)) return;
-  // The curve and its rectangular shoulders now share exact world-space boundary
+  // The curve and its rectangular shoulders share exact world-space boundary
   // coordinates. Neither side extends across the boundary, so there is no
   // coplanar seam patch or inset step to reveal while the camera moves.
   const clip = clippedInterval(descriptor, bay.orientation, bay.curveStart, bay.curveEnd);
@@ -686,8 +508,7 @@ function clearArchFrameVisuals(visual: CellVisual): void {
 
 function resetSemanticArchMeshes(visual: CellVisual): void {
   for (const wall of visual.descriptor.walls) {
-    if (wall.materialId !== 'arch-pale-wallpaper') continue;
-    if (!isArchHeader(wall) && !isArchLower(wall) && !isArchPierSupport(wall)) continue;
+    if (!archStructuralRole(wall)) continue;
     const source = entityByName(visual.root, wall.id);
     if (source?.render) source.render.enabled = true;
   }
@@ -729,8 +550,6 @@ function renderArchFrames(renderer: WorldRenderer, targetCellIds?: ReadonlySet<s
       if (visual.descriptor.world.generationVersion !== 'gen3-v1') continue;
       for (let index = 0; index < activeSupportIntervals.length; index += 1) {
         const support = activeSupportIntervals[index]!;
-        // The upper mass owns its full intersection volume. The visible pier is
-        // split only in presentation; semantic/collision ownership stays continuous.
         addWorldBoxClipped(
           visual,
           `pier-lower:${line.key}:${index}`,
@@ -781,8 +600,8 @@ function renderArchFrames(renderer: WorldRenderer, targetCellIds?: ReadonlySet<s
             `lower-panel:${bay.id}`,
             bay.orientation,
             bay.fixed,
-            bay.start + 0.02,
-            bay.end - 0.02,
+            bay.start + ARCH_LOWER_PANEL_END_INSET,
+            bay.end - ARCH_LOWER_PANEL_END_INSET,
             ARCH_LOWER_PANEL_HEIGHT / 2,
             ARCH_LOWER_PANEL_HEIGHT,
             ARCH_LOWER_PANEL_DEPTH,
@@ -827,10 +646,7 @@ export function archPresentationDiagnosticsSnapshot(): ArchPresentationDiagnosti
 const pendingArchCells = new WeakMap<WorldRenderer, Set<string>>();
 const scheduledArchFlush = new WeakSet<WorldRenderer>();
 
-/**
- * Preserve the accepted neighbor-aware Arch reconstruction microtask boundary.
- * Wave 1 centralizes when this is scheduled; Wave 2 owns any semantic redesign.
- */
+/** Preserve the accepted neighbor-aware visible Arch reconstruction boundary. */
 export function scheduleNearbyArchPresentation(renderer: WorldRenderer, descriptor: CellDescriptor): void {
   const pending = pendingArchCells.get(renderer) ?? new Set<string>();
   for (const visual of renderer.loaded.values()) {

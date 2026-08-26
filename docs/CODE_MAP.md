@@ -20,6 +20,7 @@ world request
        -> src/world/gen3SpaceTopologyBuild.ts
        -> src/world/gen3Architecture.ts
        -> src/world/gen3ArchitectureCore.ts
+       -> src/world/gen3ArchDividerSemantics.ts
   -> CellDescriptor / semantic world truth
   -> src/presentation/* for migrated PAU targets
        -> Representation Registry
@@ -30,9 +31,9 @@ world request
   -> src/renderer/rendererCellLifecycle.ts
        one explicit streamed Cell load/unload ordering owner
        -> Level 0 surface / casing / Region / wall-junction participants
-       -> existing A-A1 correction + deferred reconciliation
+       -> canonical descriptor-driven A-A1 collision realization
        -> M-F1 fixture attach/detach
-       -> runtime derived-index registration
+       -> runtime derived-index registration / refresh
        -> localized static-batching dirtiness
        -> final Level 0 material convergence
   -> src/renderer/visibility/runtime.ts (Generation 3 live render participation)
@@ -139,15 +140,25 @@ P-A1 geometry/placement remains read-only in Studio; its wallpaper-bearing prese
 ## A-A1 / Arch Rooms
 
 ```text
-Affinity                  -> src/world/fields.ts
-Shared dimensions         -> src/world/gen3ArchitectureCore.ts
-Divider/topology          -> src/world/gen3SpaceTopologyDomain.ts
-Semantic walls/routes     -> src/world/gen3SpaceTopologyBuild.ts
-Curve / visible rebuild   -> src/renderer/level0RegionPresentation.ts
-Semantic collision cleanup-> src/renderer/archDividerRuntimeCorrection.ts
-Final reconstructed finish-> src/renderer/finalLevel0MaterialPresentation.ts
-Lifecycle ordering        -> src/renderer/rendererCellLifecycle.ts
+Affinity                       -> src/world/fields.ts
+Shared dimensions              -> src/world/gen3ArchitectureCore.ts
+Divider/topology               -> src/world/gen3SpaceTopologyDomain.ts
+Semantic wall/route generation -> src/world/gen3SpaceTopologyBuild.ts
+Semantic roles + bay geometry  -> src/world/gen3ArchDividerSemantics.ts
+Canonical collision intent     -> src/world/gen3ArchDividerSemantics.ts
+Visible frame/curve realization-> src/renderer/level0RegionPresentation.ts
+Gameplay collider realization  -> src/renderer/archDividerCollision.ts
+Cell lifecycle ordering        -> src/renderer/rendererCellLifecycle.ts
+Derived collision indexing     -> src/renderer/runtimePerformance.ts
+                              + src/renderer/runtimeSpatialIndex.ts
+Final reconstructed finish     -> src/renderer/finalLevel0MaterialPresentation.ts
 ```
+
+`src/world/gen3ArchDividerSemantics.ts` is the one authoritative A-A1 structural-role/semantic-geometry owner. It consumes existing deterministic `WallSpec` descriptors without re-keying or mutating world identity. Presentation consumes those roles/bays to build the accepted visible frame; it does not define gameplay collision semantics.
+
+`src/renderer/archDividerCollision.ts` synchronously realizes the final semantic collider set from canonical descriptors/bays before normal derived-index registration. PlayCanvas `Entity` names, render transforms and material instances are **not gameplay collision truth**. `runtimePerformance.ts` / `runtimeSpatialIndex.ts` own reconstructible derived indexing only; they never define A-A1 collision policy.
+
+The historical `src/renderer/archDividerRuntimeCorrection.ts` correction layer is retired/deleted. Its renderer-name-derived lower-panel collision path and lower-panel collision reconciliation microtask no longer exist. Neighbor-aware **visible** Arch reconstruction remains intentionally deferred in `level0RegionPresentation.ts`.
 
 A-A1 structural geometry remains world/code-owned. Its pale non-wallpaper visual finish is M-A1 and is structured-editable in Studio. Normal Arch Room walls remain M-W1.
 
@@ -190,7 +201,7 @@ M-W1 wallpaper
 
 M-A1 Arch structural finish
   schema                    -> level0-materials.json
-  semantic pieces          -> src/renderer/archDividerRuntimeCorrection.ts
+  semantic structural mesh -> src/renderer/level0SurfacePresentation.ts
   reconstructed arch-frame -> src/renderer/finalLevel0MaterialPresentation.ts
 
 M-C1 carpet
@@ -410,12 +421,12 @@ load order
   -> base Cell realization
   -> Level 0 surface presentation
   -> current Ordinary casing presentation
-  -> current Region presentation + queued neighbor-aware Arch reconstruction
+  -> current Region presentation + queued neighbor-aware visible Arch reconstruction
   -> wall-junction presentation
-  -> current A-A1 correction + queued lower-panel collision reconciliation
+  -> synchronous canonical A-A1 collider realization from world semantics
   -> M-F1 fixture attach
   -> localized static-batching dirty signal
-  -> derived collision/interaction index registration
+  -> derived collision/interaction index registration / neighbor collision refresh
   -> immediate final Level 0 material pass
   -> queued final material convergence
 
@@ -423,8 +434,8 @@ unload order
   -> derived collision/interaction index unregister
   -> M-F1 fixture detach
   -> base Cell entity destroy
-  -> queued neighbor-aware Arch presentation reconciliation
-  -> queued A-A1 lower-panel collision reconciliation
+  -> queued neighbor-aware visible Arch presentation reconciliation
+  -> synchronous canonical neighbor A-A1 collision realization + derived-index refresh
   -> localized static-batching dirty signal
 
 participants
@@ -432,16 +443,17 @@ participants
   -> src/renderer/ordinaryCasingMaterialPresentation.ts
   -> src/renderer/level0RegionPresentation.ts
   -> src/renderer/wallJunctionPresentation.ts
-  -> src/renderer/archDividerRuntimeCorrection.ts
+  -> src/renderer/archDividerCollision.ts
   -> src/renderer/fixtureLighting.ts
   -> src/renderer/runtimePerformance.ts
+  -> src/renderer/runtimeSpatialIndex.ts
   -> src/renderer/StaticWorldBatching.ts
   -> src/renderer/finalLevel0MaterialPresentation.ts
 ```
 
 `rendererCellLifecycle.ts` owns ordering only; it does not own the participants' semantic policy. `StaticWorldBatching.ts` owns batching only and is dirtied explicitly by the lifecycle. It no longer installs Region, wall-junction, A-A1, or fixture systems.
 
-The existing Region/A-A1/final-material microtask boundaries remain intentional Wave 1 compatibility behavior. Their removal or semantic absorption belongs to later cleanup waves after equivalence is independently proven.
+Wave 2 removed the A-A1 lower-panel collision reconciliation microtask because collision no longer depends on presentation completion. The neighbor-aware visible Arch reconstruction microtask remains in `level0RegionPresentation.ts`, and final-material deferred convergence remains a separate later cleanup concern.
 
 Streaming owns Cell residency and unloading. A resident Cell is not automatically a render-participating Cell.
 

@@ -1,12 +1,12 @@
 import * as pc from 'playcanvas';
 import { materialAssetId, materialColor, materialNumber, materialString } from '../presentation/materialRuntime.js';
+import { archStructuralRole } from '../world/gen3ArchDividerSemantics.js';
 import { CELL_SIZE, type CellDescriptor, type LightState, type PropSpec, type WallSpec } from '../world/types.js';
-import { archStructuralRole } from './archDividerRuntimeCorrection.js';
 import { applyLevel0WallpaperPresentation } from './ordinaryWallpaperPresentation.js';
 import { derivedPresentationTexture } from './presentationImageTextures.js';
 import { WorldRenderer } from './WorldRenderer.js';
 import { canvasTexture, makeMaterial, type CellVisual } from './support.js';
-import { paintLevel0ChevronWallpaper, shouldGen3WallCollide, wallpaperUvForWall } from './level0Wallpaper.js';
+import { paintLevel0ChevronWallpaper, wallpaperUvForWall } from './level0Wallpaper.js';
 
 interface RendererAccess { app: pc.Application; }
 interface SurfacePresentationCache { app: pc.Application; wallpaper: pc.Texture; carpet: pc.Texture; ceiling: pc.Texture; materials: Map<string, pc.StandardMaterial>; }
@@ -89,8 +89,6 @@ function setSurfaceMaterial(root: pc.Entity, kind: 'floor'|'ceiling', value: pc.
 
 export function applyLevel0SurfacePresentation(renderer: WorldRenderer, visual: CellVisual): void {
   const descriptor = visual.descriptor; if (descriptor.world.generationVersion !== 'gen3-v1') return; const cache = cacheFor(renderer); const root = visual.root;
-  const wallSpecs = new Map(descriptor.walls.map((wall) => [wall.id, wall]));
-  visual.colliders = visual.colliders.filter((collider) => { const wall = wallSpecs.get(collider.id); if (!wall || shouldGen3WallCollide(wall)) return true; renderer.walls.delete(collider.id); return false; });
   for (const child of childrenOf(root)) if (child.name.endsWith(':skirting')) child.destroy();
   setSurfaceMaterial(root, 'floor', floorMaterial(cache, descriptor)); setSurfaceMaterial(root, 'ceiling', ceilingMaterial(cache, descriptor));
   for (const wall of descriptor.walls) setMaterial(entityByName(root, wall.id), wallMaterial(cache, descriptor, wall));

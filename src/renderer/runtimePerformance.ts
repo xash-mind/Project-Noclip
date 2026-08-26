@@ -7,6 +7,8 @@ import { WorldRenderer } from './WorldRenderer.js';
 
 interface RuntimeIndexState {
   collision: SpatialAabbIndex<WorldWall>;
+  collisionIdsByCell: Map<string, Set<string>>;
+  indexedColliderRefs: Map<string, WorldWall>;
   interactions: SpatialPointIndex<InteractionVisual>;
   dynamicItems: Map<string, WorldItemVisual>;
   diagnostics: RuntimePerformanceDiagnostics;
@@ -74,19 +76,79 @@ function isTickingItem(interaction: InteractionVisual): interaction is WorldItem
     && Boolean(interaction.activatedAt);
 }
 
+function rememberCollision(state: RuntimeIndexState, collider: WorldWall): void {
+  state.collision.add(collider);
+  state.indexedColliderRefs.set(collider.id, collider);
+  const ids = state.collisionIdsByCell.get(collider.cellId) ?? new Set<string>();
+  ids.add(collider.id);
+  state.collisionIdsByCell.set(collider.cellId, ids);
+}
+
+function removeCollision(state: RuntimeIndexState, id: string): void {
+  const previous = state.indexedColliderRefs.get(id);
+  state.collision.remove(id);
+  state.indexedColliderRefs.delete(id);
+  if (!previous) return;
+  const ids = state.collisionIdsByCell.get(previous.cellId);
+  ids?.delete(id);
+  if (ids?.size === 0) state.collisionIdsByCell.delete(previous.cellId);
+}
+
+function sameBounds(left: WorldWall, right: WorldWall): boolean {
+  return left.minX === right.minX
+    && left.maxX === right.maxX
+    && left.minY === right.minY
+    && left.maxY === right.maxY
+    && left.minZ === right.minZ
+    && left.maxZ === right.maxZ
+    && left.orientation === right.orientation
+    && left.drawable === right.drawable;
+}
+
+/**
+ * Reconcile one Cell's derived collision entries without perturbing unchanged
+ * insertion order. This keeps indexed collision equivalent to renderer.walls
+ * while allowing neighbor-aware A-A1 collider geometry to change in place.
+ */
+function syncCellColliders(state: RuntimeIndexState, cellId: string, colliders: readonly WorldWall[]): void {
+  const desired = new Map(colliders.map((collider) => [collider.id, collider]));
+  const existingIds = new Set(state.collisionIdsByCell.get(cellId) ?? []);
+
+  for (const id of existingIds) {
+    if (!desired.has(id)) removeCollision(state, id);
+  }
+
+  for (const collider of colliders) {
+    const previous = state.indexedColliderRefs.get(collider.id);
+    if (previous && previous === collider) continue;
+    if (previous && sameBounds(previous, collider)) {
+      state.indexedColliderRefs.set(collider.id, collider);
+      continue;
+    }
+    if (previous) removeCollision(state, collider.id);
+    rememberCollision(state, collider);
+  }
+
+  const ids = new Set(colliders.map((collider) => collider.id));
+  if (ids.size > 0) state.collisionIdsByCell.set(cellId, ids);
+  else state.collisionIdsByCell.delete(cellId);
+}
+
 function stateFor(renderer: WorldRenderer): RuntimeIndexState {
   latestRenderer = renderer;
   const existing = states.get(renderer);
   if (existing) return existing;
   const created: RuntimeIndexState = {
     collision: new SpatialAabbIndex<WorldWall>(CELL_SIZE),
+    collisionIdsByCell: new Map(),
+    indexedColliderRefs: new Map(),
     interactions: new SpatialPointIndex<InteractionVisual>(CELL_SIZE),
     dynamicItems: new Map(),
     diagnostics: emptyDiagnostics()
   };
   // The normal installation path runs before any WorldRenderer exists. This
   // reconstruction makes the derived index safe for tests/hot reload as well.
-  for (const wall of renderer.walls.values()) created.collision.add(wall);
+  for (const wall of renderer.walls.values()) rememberCollision(created, wall);
   for (const interaction of renderer.interactions.values()) {
     created.interactions.add(interaction);
     if (isTickingItem(interaction)) created.dynamicItems.set(interaction.id, interaction);
@@ -113,11 +175,18 @@ function removeInteraction(state: RuntimeIndexState, id: string): void {
   state.dynamicItems.delete(id);
 }
 
+export function refreshRuntimeCellCollisionState(renderer: WorldRenderer, cellId: string): void {
+  const state = stateFor(renderer);
+  const visual = renderer.loaded.get(cellId);
+  syncCellColliders(state, cellId, visual?.colliders ?? []);
+  refreshCounts(state);
+}
+
 export function registerRuntimeCellState(renderer: WorldRenderer, descriptor: CellDescriptor): void {
   const visual = renderer.loaded.get(descriptor.id);
   if (!visual) return;
   const state = stateFor(renderer);
-  for (const collider of visual.colliders) state.collision.add(collider);
+  syncCellColliders(state, descriptor.id, visual.colliders);
   for (const interaction of visual.interactions) addInteraction(state, interaction);
   refreshCounts(state);
 }
@@ -126,7 +195,7 @@ export function unregisterRuntimeCellState(renderer: WorldRenderer, cellId: stri
   const visual = renderer.loaded.get(cellId);
   if (!visual) return;
   const state = stateFor(renderer);
-  for (const collider of visual.colliders) state.collision.remove(collider.id);
+  for (const id of [...(state.collisionIdsByCell.get(cellId) ?? [])]) removeCollision(state, id);
   for (const interaction of visual.interactions) removeInteraction(state, interaction.id);
   refreshCounts(state);
 }

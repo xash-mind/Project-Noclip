@@ -1,5 +1,5 @@
-import { ARCH_HEADER_HEIGHT, ARCH_LOWER_HEIGHT } from '../world/gen3ArchitectureCore.js';
-import { CELL_SIZE, WALL_HEIGHT, type WallSpec } from '../world/types.js';
+import { archSemanticWallOwnsFinalCollision } from '../world/gen3ArchDividerSemantics.js';
+import { CELL_SIZE, type WallSpec } from '../world/types.js';
 
 /**
  * Original procedural recreation informed by the source-supported 1990s Borden
@@ -131,17 +131,9 @@ export function paintLevel0ChevronWallpaper(context: CanvasRenderingContext2D, s
 }
 
 /**
- * The runtime movement solver is 2D. Floor-reaching walls own collision normally;
- * A-A1 mid-height semantic pier pieces also collide because the renderer extends
- * those same world-owned supports down to the floor. Header/curve pieces never do.
+ * Compatibility surface for existing Level 0 callers. The semantic decision
+ * is owned exclusively by the pure Generation 3 A-A1 resolver.
  */
 export function shouldGen3WallCollide(wall: WallSpec): boolean {
-  const minY = wall.cy - wall.sy / 2;
-  if (minY <= 0.04) return true;
-  if (wall.materialId !== 'arch-pale-wallpaper') return false;
-  const maxY = wall.cy + wall.sy / 2;
-  const headerBottom = WALL_HEIGHT - ARCH_HEADER_HEIGHT;
-  return wall.sy > 1.35
-    && minY <= ARCH_LOWER_HEIGHT + 0.065
-    && maxY >= headerBottom - 0.045;
+  return archSemanticWallOwnsFinalCollision(wall);
 }

@@ -2,33 +2,44 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const correctionSource = await readFile(new URL('../src/renderer/archDividerRuntimeCorrection.ts', import.meta.url), 'utf8');
+const semanticSource = await readFile(new URL('../src/world/gen3ArchDividerSemantics.ts', import.meta.url), 'utf8');
+const collisionSource = await readFile(new URL('../src/renderer/archDividerCollision.ts', import.meta.url), 'utf8');
+const regionSource = await readFile(new URL('../src/renderer/level0RegionPresentation.ts', import.meta.url), 'utf8');
+const surfaceSource = await readFile(new URL('../src/renderer/level0SurfacePresentation.ts', import.meta.url), 'utf8');
 const batchingSource = await readFile(new URL('../src/renderer/StaticWorldBatching.ts', import.meta.url), 'utf8');
 const lifecycleSource = await readFile(new URL('../src/renderer/rendererCellLifecycle.ts', import.meta.url), 'utf8');
 
-test('A-A1 final renderer pass keeps structural fallback presentation-owned and removes hidden lower-panel collision tails', () => {
-  assert.ok(correctionSource.includes("type ArchStructuralRole = 'pier' | 'upper' | 'lower-panel'"));
-  assert.ok(correctionSource.includes("if (role === 'upper' || role === 'lower-panel') return false"));
-  assert.ok(correctionSource.includes("if (role === 'pier') return true"));
-  assert.ok(correctionSource.includes("const ARCH_VISIBLE_LOWER_COLLIDER_PREFIX = 'arch-visible-lower-collider:'"));
-  assert.ok(correctionSource.includes("const ARCH_LOWER_PANEL_PREFIX = 'arch-frame:lower-panel:'"));
-  assert.ok(correctionSource.includes('reconcileVisibleLowerPanelCollision'));
-  assert.ok(correctionSource.includes('renderer.walls.set(collider.id, collider)'));
-  assert.ok(correctionSource.includes('renderer.walls.delete(collider.id)'));
-  assert.ok(correctionSource.includes('queueMicrotask'));
-  assert.ok(correctionSource.includes("const ARCH_TARGET = 'material.arch-pale-wallpaper'"));
-  assert.ok(correctionSource.includes("materialColor(ARCH_TARGET, keyName, fallback)"));
-  assert.ok(correctionSource.includes("materialNumber(ARCH_TARGET, 'gloss', 0.07)"));
-  assert.ok(correctionSource.includes("role === 'pier' ? [0.76,0.735,0.665]"));
-  assert.ok(correctionSource.includes("role === 'lower-panel' ? [0.885,0.872,0.805]"));
-  assert.ok(correctionSource.includes('[0.955,0.945,0.885]'));
-  assert.equal(correctionSource.includes('ARCH_PIER_LOWER_PREFIX'), false);
-  assert.equal(correctionSource.includes('wallpaperUvForWall'), false);
-  assert.equal(correctionSource.includes('paintLevel0ChevronWallpaper'), false);
+test('A-A1 has one world-domain structural-role and collision-intent owner', () => {
+  assert.ok(semanticSource.includes("export type ArchStructuralRole = 'pier' | 'upper' | 'lower-panel'"));
+  assert.ok(semanticSource.includes('export function archStructuralRole(wall: WallSpec)'));
+  assert.ok(semanticSource.includes('export function archSemanticWallOwnsFinalCollision(wall: WallSpec)'));
+  assert.ok(semanticSource.includes("if (role === 'upper' || role === 'lower-panel') return false"));
+  assert.ok(semanticSource.includes("if (role === 'pier') return true"));
+  assert.equal(regionSource.includes('function isArchHeader'), false);
+  assert.equal(regionSource.includes('function isArchLower'), false);
+  assert.equal(regionSource.includes('function isArchPierSupport'), false);
+  assert.ok(regionSource.includes("from '../world/gen3ArchDividerSemantics.js'"));
+  assert.ok(surfaceSource.includes("from '../world/gen3ArchDividerSemantics.js'"));
+});
 
-  assert.ok(lifecycleSource.includes('applyArchDividerRuntimeCorrection(this, visual)'));
-  assert.ok(lifecycleSource.includes('scheduleNearbyArchCollisionReconciliation(this, descriptor)'));
-  assert.equal(correctionSource.includes('WorldRenderer.prototype.loadCell'), false);
-  assert.equal(correctionSource.includes('WorldRenderer.prototype.unloadCell'), false);
+test('A-A1 gameplay collision is descriptor-driven and no longer renderer-name-derived', () => {
+  assert.ok(collisionSource.includes('archFrameBaysForDescriptors'));
+  assert.ok(collisionSource.includes('archLowerPanelWorldVolumeForCell'));
+  assert.ok(collisionSource.includes('renderer.walls.set(collider.id, collider)'));
+  assert.ok(collisionSource.includes('renderer.walls.delete(collider.id)'));
+  for (const forbidden of ['entity.name', 'getLocalPosition', 'getLocalScale', 'childrenOf(', 'render.enabled']) {
+    assert.equal(collisionSource.includes(forbidden), false, `collision retained renderer dependency: ${forbidden}`);
+  }
+  assert.equal(collisionSource.includes('queueMicrotask'), false);
+});
+
+test('A-A1 canonical collision is composed synchronously before derived-index registration', () => {
+  const collision = lifecycleSource.indexOf('realizeNearbyArchCollision(this, descriptor)');
+  const register = lifecycleSource.indexOf('registerRuntimeCellState(this, descriptor)');
+  assert.ok(collision >= 0 && register > collision);
+  assert.ok(lifecycleSource.includes('refreshRuntimeCellCollisionState'));
+  assert.equal(lifecycleSource.includes('scheduleNearbyArchCollisionReconciliation'), false);
+  assert.equal(collisionSource.includes('WorldRenderer.prototype.loadCell'), false);
+  assert.equal(collisionSource.includes('WorldRenderer.prototype.unloadCell'), false);
   assert.equal(batchingSource.includes('installArchDividerRuntimeCorrection'), false);
 });
