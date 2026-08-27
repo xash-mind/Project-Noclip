@@ -57,10 +57,11 @@ test('M-F1 has one visible-panel policy owner and one shared fixture identity', 
   const arch = resolveMFluorescentPanelPresentation(descriptor('arch-rooms'), 'on', 1);
   const off = resolveMFluorescentPanelPresentation(descriptor('ordinary-level-0'), 'off', 1);
 
-  assert.deepEqual(ordinary.diffuse, [0.98, 0.955, 0.76]);
-  assert.deepEqual(ordinary.emissive, [1, 0.95, 0.68]);
+  assert.deepEqual(ordinary.diffuse, [250 / 255, 244 / 255, 194 / 255]);
+  assert.deepEqual(ordinary.emissive, [1, 242 / 255, 173 / 255]);
   assert.equal(ordinary.emissiveIntensity, 2.28);
-  assert.deepEqual(arch.diffuse, [0.99, 0.985, 0.83]);
+  assert.deepEqual(arch.diffuse, [252 / 255, 251 / 255, 212 / 255]);
+  assert.deepEqual(arch.emissive, [1, 251 / 255, 199 / 255]);
   assert.equal(arch.emissiveIntensity, 2.18);
   assert.deepEqual(off.diffuse, [0.31, 0.31, 0.27]);
   assert.equal(off.emissiveIntensity, 0);
@@ -90,11 +91,11 @@ test('M-F1 physical Omni shadow flicker runtime remains the accepted PD-3-frozen
 });
 
 test('Wave 4 explicit runtime ownership coexists with Wave 3 presentation without direct replacements', () => {
-  assert.match(appSource, /setupRenderRuntime\(this\)/);
+  assert.match(appSource, /setupRenderSettingsEngine\(this\)/);
   assert.match(appSource, /beginStreamingFrame\(this/);
   assert.match(appSource, /finishStreamingFrame\(this/);
-  assert.match(appSource, /reconcileStreamingResidency\(this/);
-  assert.match(appSource, /updateVisibilityParticipation\(this\)/);
+  assert.match(appSource, /reconcileStreaming\(this/);
+  assert.match(appSource, /updateVisibilityParticipation\(this/);
   assert.match(worldRendererSource, /runtimeCollisionCandidates\(this, bounds\)/);
   assert.match(worldRendererSource, /runtimeInteractionCandidates\(this, x, z, maxDistance\)/);
   assert.match(worldRendererSource, /runtimeDynamicItemCandidates\(this\)/);
@@ -107,10 +108,10 @@ test('Wave 4 explicit runtime ownership coexists with Wave 3 presentation withou
 });
 
 test('outlet dispatch and the sole Cell lifecycle owner retain their separate responsibilities', () => {
-  assert.match(appSource, /isOutletInteractionVisual/);
+  assert.match(appSource, /isOutletInteraction/);
   assert.match(appSource, /\[E\] Inspect outlet/);
   assert.match(appSource, /The outlet is inert\./);
-  assert.match(outletRuntimeSource, /isOutletInteractionVisual/);
+  assert.match(outletRuntimeSource, /isOutletInteraction/);
   assert.equal(outletRuntimeSource.includes('ProjectNoclipGame.prototype'), false);
   assert.match(streamingSource, /processOneJob\(game\)/);
   assert.match(visibilityRuntimeSource, /export function updateVisibilityParticipation/);
