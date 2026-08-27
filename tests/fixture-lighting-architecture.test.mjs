@@ -82,9 +82,10 @@ test('M-F1 panel ownership resolves the real visible panel and keeps it out of t
 
   assert.ok(fixtureLightingSource.includes('const panels = reconcileFixturePanels(state, visual)'));
   assert.ok(fixtureLightingSource.includes('const panel = matched ?? addFixturePanelVisual'));
-  assert.ok(fixtureLightingSource.includes('panel.name = `${group.id}:fixture:${fixtureIndex}`'));
+  assert.ok(fixtureLightingSource.includes('const identity = mFluorescentFixtureIdentity(group.id, fixtureIndex)'));
+  assert.ok(fixtureLightingSource.includes('panel.name = identity.panelName'));
   assert.ok(fixtureLightingSource.includes('if (!claimed.has(candidate)) candidate.destroy()'));
-  assert.ok(fixtureLightingSource.includes('const mesh = panels.get(id)'));
+  assert.ok(fixtureLightingSource.includes('const mesh = panels.get(identity.id)'));
 
   assert.ok(batchingSource.includes('if (isMFluorescentPanelVisualName(entity.name))'));
   assert.ok(batchingSource.includes('entity.render.batchGroupId = -1'));
@@ -99,7 +100,7 @@ test('M-F1 diffuser and Omni consume one canonical continuous pulse in the same 
   assert.equal(flickerCalls.length, 1, 'fixture renderer must have one flicker sampling path');
   assert.ok(fixtureLightingSource.includes('const groupPulses = new Map<string, number>()'));
   assert.ok(fixtureLightingSource.includes('const pulse = pulseFor(runtime.group)'));
-  assert.ok(fixtureLightingSource.includes('fixtureMaterial(state, runtime.descriptor, runtime.group, pulse)'));
+  assert.ok(fixtureLightingSource.includes('fixturePanelMaterial(state, runtime.descriptor, runtime.group, pulse)'));
   assert.ok(fixtureLightingSource.includes('runtime.group.intensity * pulse * FIXTURE_LIGHT_INTENSITY_MULTIPLIER'));
   assert.ok(fixtureLightingSource.includes("if (group.state === 'off') return 0"));
   assert.ok(fixtureLightingSource.includes('return lightFlickerValue(group, elapsedSeconds, reducedFlicker)'));
