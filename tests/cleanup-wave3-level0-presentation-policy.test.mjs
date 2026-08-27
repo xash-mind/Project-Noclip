@@ -100,11 +100,11 @@ test('Wave 3 policy and Wave 4 renderer now converge on one M-F1 visible-panel o
   const ordinary = resolveMFluorescentPanelPresentation(descriptor('ordinary-level-0'), 'on', 1);
   const arch = resolveMFluorescentPanelPresentation(descriptor('arch-rooms'), 'on', 1);
   const off = resolveMFluorescentPanelPresentation(descriptor('ordinary-level-0'), 'off', 1);
-  assert.deepEqual(ordinary.diffuse, [0.98, 0.955, 0.76]);
-  assert.deepEqual(ordinary.emissive, [1, 0.95, 0.68]);
+  assert.deepEqual(ordinary.diffuse, [250 / 255, 244 / 255, 194 / 255]);
+  assert.deepEqual(ordinary.emissive, [1, 242 / 255, 173 / 255]);
   assert.equal(ordinary.emissiveIntensity, 2.28);
-  assert.deepEqual(arch.diffuse, [0.99, 0.985, 0.83]);
-  assert.deepEqual(arch.emissive, [1, 0.985, 0.78]);
+  assert.deepEqual(arch.diffuse, [252 / 255, 251 / 255, 212 / 255]);
+  assert.deepEqual(arch.emissive, [1, 251 / 255, 199 / 255]);
   assert.equal(arch.emissiveIntensity, 2.18);
   assert.deepEqual(off.diffuse, [0.31, 0.31, 0.27]);
   assert.equal(off.emissive, undefined);
