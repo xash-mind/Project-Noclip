@@ -1,7 +1,7 @@
 import * as pc from 'playcanvas';
 import { materialAssetId, materialColor, materialNumber, materialString } from '../presentation/materialRuntime.js';
 import { archStructuralRole } from '../world/gen3ArchDividerSemantics.js';
-import { CELL_SIZE, type CellDescriptor, type LightState, type PropSpec, type WallSpec } from '../world/types.js';
+import { CELL_SIZE, type CellDescriptor, type PropSpec, type WallSpec } from '../world/types.js';
 import { applyLevel0WallpaperPresentation } from './ordinaryWallpaperPresentation.js';
 import { derivedPresentationTexture } from './presentationImageTextures.js';
 import { applyLevel0CarpetMaterials, level0ArchFinishMaterial } from './level0PresentationMaterials.js';
@@ -14,7 +14,6 @@ interface SurfacePresentationCache { app: pc.Application; wallpaper: pc.Texture;
 const caches = new WeakMap<WorldRenderer, SurfacePresentationCache>();
 
 const CEILING_TARGET = 'material.level-0-ceiling';
-const PANEL_TARGET = 'material.fluorescent-panel';
 
 function childrenOf(entity: pc.Entity): pc.Entity[] { return [...(entity as pc.Entity & { children: readonly pc.Entity[] }).children]; }
 function entityByName(root: pc.Entity, name: string): pc.Entity | undefined { return childrenOf(root).find((child) => child.name === name); }
@@ -48,16 +47,6 @@ function ceilingMaterial(cache: SurfacePresentationCache, descriptor: CellDescri
   return material(cache, key, () => makeMaterial(color, texture ?? cache.ceiling, tiling));
 }
 
-function quantizedPulse(state: LightState, pulse: number): number { if (state === 'off') return 0; return Math.max(0, Math.min(1, Math.round(pulse * 16) / 16)); }
-function fixtureMaterial(cache: SurfacePresentationCache, descriptor: CellDescriptor, state: LightState, pulse: number): pc.StandardMaterial {
-  const arch = descriptor.world.regionId === 'arch-rooms'; const level = quantizedPulse(state, pulse); const visualScale = materialNumber(PANEL_TARGET, 'visualEmissiveScale', 1);
-  const activeDiffuse = arch ? materialColor(PANEL_TARGET, 'archDiffuse', [0.99,0.985,0.83]) : materialColor(PANEL_TARGET, 'ordinaryDiffuse', [0.98,0.955,0.76]);
-  const offDiffuse: [number, number, number] = [0.31,0.31,0.27]; const diffuse: [number,number,number] = [offDiffuse[0]+(activeDiffuse[0]-offDiffuse[0])*level,offDiffuse[1]+(activeDiffuse[1]-offDiffuse[1])*level,offDiffuse[2]+(activeDiffuse[2]-offDiffuse[2])*level];
-  const emissive = arch ? materialColor(PANEL_TARGET, 'archEmissive', [1,0.985,0.78]) : materialColor(PANEL_TARGET, 'ordinaryEmissive', [1,0.95,0.68]);
-  const key = `fixture:${arch}:${state}:${level}:${visualScale}:${diffuse.join(',')}:${emissive.join(',')}`;
-  return material(cache, key, () => level <= 0.001 ? makeMaterial(diffuse) : makeMaterial(diffuse, undefined, [1,1], emissive, (arch ? 2.18 : 2.28) * level * visualScale));
-}
-
 function preparePillarPresentation(root: pc.Entity, prop: PropSpec): void {
   const container = entityByName(root, prop.id); if (!container) return;
   for (const child of childrenOf(container)) if (child.name.startsWith(`${prop.id}:wallpaper:`)) child.destroy();
@@ -70,6 +59,5 @@ export function applyLevel0SurfacePresentation(renderer: WorldRenderer, visual: 
   applyLevel0CarpetMaterials(renderer, visual); setCeilingMaterial(root, ceilingMaterial(cache, descriptor));
   for (const wall of descriptor.walls) setMaterial(entityByName(root, wall.id), wallMaterial(renderer, cache, descriptor, wall));
   for (const prop of descriptor.props) if (prop.kind === 'column' && prop.materialId === 'level-0-wallpaper') preparePillarPresentation(root, prop);
-  for (const group of descriptor.lightGroups) { const pulse = group.state === 'off' ? 0 : 1; const value = fixtureMaterial(cache, descriptor, group.state, pulse); group.fixtures.forEach((_position, index) => setMaterial(entityByName(root, `${group.id}:fixture:${index}`), value)); }
   applyLevel0WallpaperPresentation(renderer, visual);
 }
