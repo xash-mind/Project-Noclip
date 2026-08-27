@@ -7,8 +7,17 @@ Phone-friendly plain-text ownership map. Use this to find the authoritative file
 ```text
 browser
   -> src/main.ts
+       finite composition / startup only
   -> src/app/ProjectNoclipGame.ts
-       runtime loop, player/camera, streaming, save/runtime coordination
+       explicit application orchestration
+       -> render setup / atmosphere operation
+          src/renderer/renderSettingsRuntime.ts
+       -> predictive streaming frame + residency reconciliation
+          src/renderer/streamingScheduler.ts
+       -> renderer participation update
+          src/renderer/visibility/runtime.ts
+       -> outlet prompt/action dispatch
+          src/renderer/outletInteractionRuntime.ts supplies only outlet type/guard
 
 world request
   -> src/world/generator.ts
@@ -28,6 +37,9 @@ world request
        -> resolved presentation data + temporary Studio overrides
   -> src/renderer/WorldRenderer.ts + src/renderer/cellBuilder.ts
        base Cell realization / destruction
+       authoritative movement collision operation
+       authoritative nearest-interaction operation
+       authoritative dynamic Item ticking operation
   -> src/renderer/rendererCellLifecycle.ts
        one explicit streamed Cell load/unload ordering owner
        -> Level 0 surface / casing / Region / wall-junction participants
@@ -36,11 +48,60 @@ world request
        -> runtime derived-index registration / refresh
        -> localized static-batching dirtiness
        -> final Level 0 material convergence
-  -> src/renderer/visibility/runtime.ts (Generation 3 live render participation)
+  -> src/renderer/runtimePerformance.ts + src/renderer/runtimeSpatialIndex.ts
+       reconstructible collision / interaction / dynamic-ticking optimization state
+  -> src/renderer/visibility/runtime.ts
+       Generation 3 live render participation only; residency remains streaming-owned
   -> PlayCanvas scene + frustum culling
 ```
 
-PAU never participates in world generation. Presentation IDs and Asset IDs do not replace generated world/save identity.
+PAU never participates in world generation. Presentation IDs and Asset IDs do not replace generated world/save identity. Runtime indexes/caches never become world or gameplay semantic truth.
+
+## Application / runtime ownership
+
+```text
+ProjectNoclipGame
+  -> application orchestration / ordering
+  -> calls render settings, streaming, visibility and outlet operations explicitly
+
+renderSettingsRuntime.ts
+  -> setupRenderRuntime()
+  -> refreshRuntimeLightField()
+  -> current fog / ambient / clear-color coupling / flashlight / Blackout behavior
+  -> no ProjectNoclipGame prototype replacement
+
+streamingScheduler.ts
+  -> beginStreamingFrame()
+  -> finishStreamingFrame()
+  -> reconcileStreamingResidency()
+  -> predictive warming / queue / budget / stop-reversal cancellation
+  -> no application prototype wrapper
+
+visibility/runtime.ts
+  -> updateVisibilityParticipation()
+  -> safety core / hysteresis / existing prediction / fallback / topology-cache consumption
+  -> render participation only; never Cell residency authority
+
+WorldRenderer.ts
+  -> resolveMovement()
+  -> closestInteraction()
+  -> updateDynamicItems()
+  -> canonical operations consume derived candidate sets but own gameplay semantics
+
+runtimePerformance.ts + runtimeSpatialIndex.ts
+  -> collision candidate index
+  -> interaction candidate index
+  -> dedicated dynamic Item ticking set
+  -> diagnostics
+  -> reconstructible derived state only
+
+outletInteractionRuntime.ts
+  -> OutletInteractionVisual type guard only
+ProjectNoclipGame.ts
+  -> current outlet prompt + inert outlet action dispatch
+```
+
+Do not restore `installRenderSettingsRuntime`, `installRuntimePerformance`, `installVisibilityParticipationRuntime`, `installOutletInteractionRuntime`, or direct prototype replacements. Cleanup Wave 4 retired those ownership mechanisms while preserving behavior.
 
 ## Noclip Studio path
 
@@ -192,7 +253,7 @@ src/presentation/definitions/level0-materials.json
   -> src/presentation/level0PresentationPolicy.ts
 ```
 
-`src/presentation/level0PresentationPolicy.ts` is the canonical composition owner for the Wave 3 migrated policies below. `src/renderer/level0PresentationMaterials.ts` is a cached PlayCanvas realization consumer; it does not define competing semantic values.
+`src/presentation/level0PresentationPolicy.ts` is the canonical composition owner for the consolidated Level 0 policies below. `src/renderer/level0PresentationMaterials.ts` is a cached PlayCanvas realization consumer; it does not define competing semantic values.
 
 Material target ownership:
 
@@ -225,7 +286,7 @@ M-C1 carpet
 M-C1 Condition contribution
   current implemented IDs  -> damp-carpet / shallow-dry-carpet / deep-wet-carpet
   current visual modifier  -> explicit no-op in src/presentation/level0PresentationPolicy.ts
-  PD-4                      -> frozen; no wet/dry/stain/gloss/color invention in Wave 3
+  PD-4                      -> frozen; no wet/dry/stain/gloss/color invention in cleanup
 
 M-CE1 ceiling
   schema                    -> level0-materials.json
@@ -240,16 +301,20 @@ Outlet appearance
   schema                    -> level0-materials.json
   renderer                  -> src/renderer/ordinaryWallpaperPresentation.ts
   eligibility               -> current Ordinary-only behavior preserved pending PD-2
-  application dispatch      -> src/renderer/outletInteractionRuntime.ts (Wave 4/runtime owner)
+  application dispatch      -> src/app/ProjectNoclipGame.ts
+  narrow outlet type guard  -> src/renderer/outletInteractionRuntime.ts
 
-M-F1 visible panel material
+M-F1 visible panel
   schema                    -> level0-materials.json
-  current visible owners    -> src/renderer/WorldRenderer.ts
-                            + src/renderer/level0SurfacePresentation.ts
-                            + src/renderer/fixtureLighting.ts
-  physical Omni/shadows     -> src/renderer/fixtureLighting.ts + world lighting law
-  Wave 3 status             -> consolidation BLOCKED by the explicit WorldRenderer write boundary;
-                               do not add another presentation adapter or change PD-3
+  canonical appearance     -> src/presentation/level0PresentationPolicy.ts
+  canonical visual identity / dimensions
+                            -> src/renderer/fixtureVisualOwnership.ts
+  base panel realization   -> src/renderer/WorldRenderer.ts consuming canonical policy
+  steady/flicker panel update
+                            -> src/renderer/fixtureLighting.ts consuming canonical policy
+  physical Omni/shadows    -> src/renderer/fixtureLighting.ts
+  physical flicker source  -> src/world/lighting.ts
+  PD-3                      -> frozen; current 32 / 64 / 96 / 128 ceilings and selection remain unchanged
 
 CV-H1 visible depth material
   schema                    -> level0-materials.json
@@ -260,6 +325,8 @@ CV-H1 visible depth material
 ```
 
 `finalLevel0MaterialPresentation.ts` is retained as a narrow lifecycle consumer because neighbor-aware visible A-A1 reconstruction is still deferred. It must reapply the same canonical resolved policy; it is not a last-writer semantic correction layer.
+
+M-F1 has one visible-panel semantic policy owner. `WorldRenderer` may realize a panel and `fixtureLighting` may update that same panel from fixture pulse state, but neither defines a second color/emission policy. Visible panel identity and physical-light runtime both derive from the same fixture group/index identity.
 
 ## Image Asset treatment
 
@@ -316,7 +383,7 @@ src/presentation/materialRuntime.ts
   renderer-facing resolved material helpers
 
 src/presentation/level0PresentationPolicy.ts
-  canonical Wave 3 Level 0 material composition from resolved canonical/preview values
+  canonical Level 0 material composition from resolved canonical/preview values
 
 src/presentation/developmentContext.ts
   development-context-v1 including Asset-slot metadata/preview state
@@ -431,11 +498,12 @@ Studio edits only visible depth/material values. Hole geography, lattice/apertur
 ```text
 pressure/resolution -> src/world/fields.ts + src/world/gen3.ts
 fixture/world law   -> src/world/lighting.ts
+visible M-F1 panel  -> src/presentation/level0PresentationPolicy.ts
 physical lights     -> src/renderer/fixtureLighting.ts
-runtime render      -> src/app/ProjectNoclipGame.ts + blackoutRendering.ts
+runtime render      -> src/app/ProjectNoclipGame.ts + src/renderer/blackoutRendering.ts
 ```
 
-C-B1 remains read-only in Studio. Dev.9.6 does not turn Blackout world law into material sliders.
+C-B1 remains read-only in Studio. Cleanup does not turn Blackout world law into material sliders, and Blackout continues to suppress local fixture generation/light work exactly as accepted.
 
 ## Cell streaming / renderer lifecycle
 
@@ -459,7 +527,7 @@ load order
   -> current Region depth/A-A1 presentation + queued neighbor-aware visible Arch reconstruction
   -> wall-junction presentation
   -> synchronous canonical A-A1 collider realization from world semantics
-  -> M-F1 fixture attach
+  -> M-F1 fixture attach using canonical visible panel identity
   -> localized static-batching dirty signal
   -> derived collision/interaction index registration / neighbor collision refresh
   -> immediate canonical final Level 0 material reapplication
@@ -486,9 +554,9 @@ participants
   -> src/renderer/finalLevel0MaterialPresentation.ts
 ```
 
-`rendererCellLifecycle.ts` owns ordering only; it does not own the participants' semantic policy. `StaticWorldBatching.ts` owns batching only and is dirtied explicitly by the lifecycle. It no longer installs Region, wall-junction, A-A1, or fixture systems.
+`rendererCellLifecycle.ts` owns ordering only; it does not own the participants' semantic policy. `StaticWorldBatching.ts` owns batching only and is dirtied explicitly by the lifecycle. It does not install Region, wall-junction, A-A1, fixture, runtime-index, or application systems.
 
-Wave 2 removed the A-A1 lower-panel collision reconciliation microtask because collision no longer depends on presentation completion. Wave 3 keeps the neighbor-aware visible Arch reconstruction microtask and final-material deferred convergence because geometry still appears at that deferred boundary; both now consume the same canonical presentation policy rather than defining last-writer material values.
+Wave 2 removed the A-A1 lower-panel collision reconciliation microtask because collision no longer depends on presentation completion. Wave 3 keeps the neighbor-aware visible Arch reconstruction microtask and final-material deferred convergence because geometry still appears at that deferred boundary; both consume the same canonical presentation policy rather than defining last-writer material values. Wave 4 leaves this Cell lifecycle intact while moving application/runtime/index behavior out of prototype-replacement ownership.
 
 Streaming owns Cell residency and unloading. A resident Cell is not automatically a render-participating Cell.
 
@@ -508,16 +576,20 @@ participation composition
        PREDICTIVE
        DISTANCE_FALLBACK
        NON_PARTICIPATING
-live runtime adapter
+live runtime operation
   -> src/renderer/visibility/runtime.ts
-activation
+       updateVisibilityParticipation(game)
+application invocation
+  -> src/app/ProjectNoclipGame.ts
+       after explicit streaming residency reconciliation
+composition/bootstrap
   -> src/main.ts
-       installRenderSettingsRuntime()
+       initializeRenderSettingsRuntime()
        installFixtureLighting()
        installStaticWorldBatching()
-       installRuntimePerformance()
+       initializeRuntimePerformance()
        installRendererCellLifecycle()
-       installVisibilityParticipationRuntime(ProjectNoclipGame.prototype)
+       installRendererRuntimeDiagnostics()
 ```
 
 Phase 1 consumes the existing Generation 3 Visibility Snapshot and existing streaming predictor to decide which already-resident Cell roots participate in rendering. It does not own Cell destruction, cache eviction, generation identity, save identity, or a second prediction system.
@@ -554,4 +626,4 @@ src/world/types.ts
 src/app/ProjectNoclipGame.ts
 ```
 
-Presentation/Asset edits and render participation must not change save identity, generated IDs, seed results or geography.
+Presentation/Asset edits, runtime ownership consolidation, derived indexes and render participation must not change save identity, generated IDs, seed results or geography.
