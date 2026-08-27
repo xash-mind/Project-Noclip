@@ -45,8 +45,8 @@ test('integrated Wave 3 + 4 structural metrics stay at accepted ownership counts
   const callThroughWrappers =
     matches(files.lifecycle, /const baseLoadCell = WorldRenderer\.prototype\.loadCell/g).length
     + matches(files.lifecycle, /const baseUnloadCell = WorldRenderer\.prototype\.unloadCell/g).length
-    + matches(files.pauPilot, /const original = RendererCellBuilder\.prototype\.addPropGeometry/g).length
-    + matches(files.diagnostics, /const originalSetupEngine = ProjectNoclipGame\.prototype\.setupEngine/g).length;
+    + matches(files.pauPilot, /const original = prototype\.addPropGeometry/g).length
+    + matches(files.diagnostics, /const originalSetupEngine = prototype\.setupEngine/g).length;
   assert.equal(callThroughWrappers, 4);
 
   const applicationRuntimeWrappers =
