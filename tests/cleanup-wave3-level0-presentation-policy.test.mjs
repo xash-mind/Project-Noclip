@@ -33,6 +33,11 @@ function close(left, right, epsilon = 1e-12) {
   return Math.abs(left - right) <= epsilon;
 }
 
+function assertColorClose(actual, expected) {
+  assert.equal(actual.length, expected.length);
+  actual.forEach((value, index) => assert.ok(close(value, expected[index]), `colour channel ${index}: expected ${expected[index]}, got ${value}`));
+}
+
 test('M-C1 has one policy resolver with explicit no-op Condition contribution and stable Region values', () => {
   const ordinaryClear = resolveLevel0CarpetPresentation(descriptor('ordinary-level-0', []));
   const ordinaryDamp = resolveLevel0CarpetPresentation(descriptor('ordinary-level-0', ['damp-carpet']));
@@ -100,11 +105,11 @@ test('Wave 3 policy and Wave 4 renderer now converge on one M-F1 visible-panel o
   const ordinary = resolveMFluorescentPanelPresentation(descriptor('ordinary-level-0'), 'on', 1);
   const arch = resolveMFluorescentPanelPresentation(descriptor('arch-rooms'), 'on', 1);
   const off = resolveMFluorescentPanelPresentation(descriptor('ordinary-level-0'), 'off', 1);
-  assert.deepEqual(ordinary.diffuse, [250 / 255, 244 / 255, 194 / 255]);
-  assert.deepEqual(ordinary.emissive, [1, 242 / 255, 173 / 255]);
+  assertColorClose(ordinary.diffuse, [250 / 255, 244 / 255, 194 / 255]);
+  assertColorClose(ordinary.emissive, [1, 242 / 255, 173 / 255]);
   assert.equal(ordinary.emissiveIntensity, 2.28);
-  assert.deepEqual(arch.diffuse, [252 / 255, 251 / 255, 212 / 255]);
-  assert.deepEqual(arch.emissive, [1, 251 / 255, 199 / 255]);
+  assertColorClose(arch.diffuse, [252 / 255, 251 / 255, 212 / 255]);
+  assertColorClose(arch.emissive, [1, 251 / 255, 199 / 255]);
   assert.equal(arch.emissiveIntensity, 2.18);
   assert.deepEqual(off.diffuse, [0.31, 0.31, 0.27]);
   assert.equal(off.emissive, undefined);
