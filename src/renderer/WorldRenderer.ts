@@ -1,9 +1,11 @@
 import * as pc from 'playcanvas';
 import type { DroppedItemState, SaveData, SurfaceMark } from '../persistence/types.js';
 import { resolveCircleAgainstAabbs } from '../physics/collision.js';
+import { resolveMFluorescentPanelPresentation } from '../presentation/level0PresentationPolicy.js';
 import { sampleLightField, type LightFieldSample } from '../world/lighting.js';
 import { CELL_SIZE, type CellDescriptor, type FloorPatchSpec } from '../world/types.js';
 import { ZONE_PROFILES } from '../world/zones.js';
+import { M_F1_PANEL_DIMENSIONS, mFluorescentFixtureIdentity } from './fixtureVisualOwnership.js';
 import { registerObjectCatalogShowcaseHost, type ObjectCatalogEntry } from './objectCatalog.js';
 import {
   recordRuntimeCollisionQuery,
@@ -274,20 +276,27 @@ export class WorldRenderer {
       const name = (child as pc.Entity & { name?: string }).name;
       if (name?.startsWith('fixture:')) child.destroy();
     }
-    const profile = descriptor.world.generationVersion === 'gen3-v1' ? ZONE_PROFILES.baseline : ZONE_PROFILES[descriptor.address.zoneId];
     for (const group of descriptor.lightGroups) {
-      const active = group.state !== 'off';
-      const fixtureMat = this.getMaterial(
-        `fixture:${profile.id}:${group.state}`,
-        active ? [0.98, 0.96, 0.76] : [0.32, 0.32, 0.27],
+      const presentation = resolveMFluorescentPanelPresentation(descriptor, group.state, group.state === 'off' ? 0 : 1);
+      const panelMaterial = this.getMaterial(
+        `m-f1:${descriptor.world.regionId}:${group.state}:${presentation.pulseLevel.toFixed(4)}:${presentation.diffuse.join(',')}:${presentation.emissive?.join(',') ?? 'none'}:${presentation.emissiveIntensity.toFixed(4)}`,
+        presentation.diffuse,
         undefined,
         0,
         [1, 1],
-        active ? [1, 0.95, 0.68] : [0.01, 0.01, 0.008],
-        active ? (group.state === 'flicker' ? 1.35 : 2.35) * profile.lightMultiplier : 0.02
+        presentation.emissive,
+        presentation.emissiveIntensity
       );
       group.fixtures.forEach((fixture, index) => {
-        this.box(`${group.id}:fixture:${index}`, visual.root, [fixture.x, fixture.y, fixture.z], [2.2, 0.08, 0.38], fixtureMat, group.rotationY);
+        const identity = mFluorescentFixtureIdentity(group.id, index);
+        this.box(
+          identity.panelName,
+          visual.root,
+          [fixture.x, fixture.y, fixture.z],
+          [M_F1_PANEL_DIMENSIONS[0], M_F1_PANEL_DIMENSIONS[1], M_F1_PANEL_DIMENSIONS[2]],
+          panelMaterial,
+          group.rotationY
+        );
       });
     }
   }
