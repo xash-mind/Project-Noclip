@@ -33,6 +33,11 @@ function descriptor(regionId, conditionIds = []) {
   };
 }
 
+function assertColorClose(actual, expected, epsilon = 1e-12) {
+  assert.equal(actual.length, expected.length);
+  actual.forEach((value, index) => assert.ok(Math.abs(value - expected[index]) <= epsilon, `colour channel ${index}: expected ${expected[index]}, got ${value}`));
+}
+
 test('Wave 3 canonical Level 0 policy survives Wave 4 runtime integration', () => {
   const carpet = resolveLevel0CarpetPresentation(descriptor('pillar-field', ['shallow-dry-carpet']));
   const arch = resolveLevel0ArchFinishPresentation('lower-panel');
@@ -57,11 +62,11 @@ test('M-F1 has one visible-panel policy owner and one shared fixture identity', 
   const arch = resolveMFluorescentPanelPresentation(descriptor('arch-rooms'), 'on', 1);
   const off = resolveMFluorescentPanelPresentation(descriptor('ordinary-level-0'), 'off', 1);
 
-  assert.deepEqual(ordinary.diffuse, [250 / 255, 244 / 255, 194 / 255]);
-  assert.deepEqual(ordinary.emissive, [1, 242 / 255, 173 / 255]);
+  assertColorClose(ordinary.diffuse, [250 / 255, 244 / 255, 194 / 255]);
+  assertColorClose(ordinary.emissive, [1, 242 / 255, 173 / 255]);
   assert.equal(ordinary.emissiveIntensity, 2.28);
-  assert.deepEqual(arch.diffuse, [252 / 255, 251 / 255, 212 / 255]);
-  assert.deepEqual(arch.emissive, [1, 251 / 255, 199 / 255]);
+  assertColorClose(arch.diffuse, [252 / 255, 251 / 255, 212 / 255]);
+  assertColorClose(arch.emissive, [1, 251 / 255, 199 / 255]);
   assert.equal(arch.emissiveIntensity, 2.18);
   assert.deepEqual(off.diffuse, [0.31, 0.31, 0.27]);
   assert.equal(off.emissiveIntensity, 0);
