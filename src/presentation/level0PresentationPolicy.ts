@@ -1,9 +1,10 @@
-import { CELL_SIZE, type CellDescriptor } from '../world/types.js';
+import { CELL_SIZE, type CellDescriptor, type LightState } from '../world/types.js';
 import { materialAssetId, materialColor, materialNumber, materialString } from './materialRuntime.js';
 
 const ARCH_TARGET = 'material.arch-pale-wallpaper';
 const CARPET_TARGET = 'material.level-0-carpet';
 const HOLE_TARGET = 'carver.floor-hole-cluster';
+const FLUORESCENT_PANEL_TARGET = 'material.fluorescent-panel';
 
 export type Level0ArchFinishRole = 'pier' | 'upper' | 'lower-panel';
 export type Cvh1DepthKey = 'upper' | 'middle' | 'deep' | 'void';
@@ -45,6 +46,14 @@ export interface Cvh1DepthPresentation {
   middle: [number, number, number];
   deep: [number, number, number];
   void: [number, number, number];
+}
+
+export interface MFluorescentPanelPresentation {
+  state: LightState;
+  pulseLevel: number;
+  diffuse: [number, number, number];
+  emissive?: [number, number, number];
+  emissiveIntensity: number;
 }
 
 function wrap01(value: number): number {
@@ -159,5 +168,40 @@ export function resolveCvh1DepthPresentation(): Cvh1DepthPresentation {
     middle: materialColor(HOLE_TARGET, 'middleColor', [0.028, 0.022, 0.012]),
     deep: materialColor(HOLE_TARGET, 'deepColor', [0, 0, 0]),
     void: materialColor(HOLE_TARGET, 'voidColor', [0, 0, 0])
+  };
+}
+
+/**
+ * Canonical M-F1 visible-panel policy. World fixture identity/state supplies the
+ * inputs; presentation owns only the panel's pixels. Physical light selection,
+ * shadows and flicker runtime remain fixtureLighting responsibilities.
+ */
+export function resolveMFluorescentPanelPresentation(
+  descriptor: CellDescriptor,
+  state: LightState,
+  pulse: number
+): MFluorescentPanelPresentation {
+  const arch = descriptor.world.regionId === 'arch-rooms';
+  const pulseLevel = state === 'off' ? 0 : Math.max(0, Math.min(1, Math.round(pulse * 16) / 16));
+  const activeDiffuse = arch
+    ? materialColor(FLUORESCENT_PANEL_TARGET, 'archDiffuse', [0.99, 0.985, 0.83])
+    : materialColor(FLUORESCENT_PANEL_TARGET, 'ordinaryDiffuse', [0.98, 0.955, 0.76]);
+  const offDiffuse: [number, number, number] = [0.31, 0.31, 0.27];
+  const diffuse: [number, number, number] = [
+    offDiffuse[0] + (activeDiffuse[0] - offDiffuse[0]) * pulseLevel,
+    offDiffuse[1] + (activeDiffuse[1] - offDiffuse[1]) * pulseLevel,
+    offDiffuse[2] + (activeDiffuse[2] - offDiffuse[2]) * pulseLevel
+  ];
+  if (pulseLevel <= 0.001) return { state, pulseLevel, diffuse, emissiveIntensity: 0 };
+  const emissive = arch
+    ? materialColor(FLUORESCENT_PANEL_TARGET, 'archEmissive', [1, 0.985, 0.78])
+    : materialColor(FLUORESCENT_PANEL_TARGET, 'ordinaryEmissive', [1, 0.95, 0.68]);
+  const visualEmissiveScale = materialNumber(FLUORESCENT_PANEL_TARGET, 'visualEmissiveScale', 1);
+  return {
+    state,
+    pulseLevel,
+    diffuse,
+    emissive,
+    emissiveIntensity: (arch ? 2.18 : 2.28) * pulseLevel * visualEmissiveScale
   };
 }
