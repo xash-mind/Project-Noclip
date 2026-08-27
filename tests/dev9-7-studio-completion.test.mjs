@@ -8,6 +8,7 @@ const studioHtml = readFileSync('tools/studio/client/index.html', 'utf8');
 const studioClient = readFileSync('tools/studio/client/studio.js', 'utf8');
 const studioServer = readFileSync('tools/studio/server.mjs', 'utf8');
 const bridgeClient = readFileSync('src/dev/studioBridgeClient.ts', 'utf8');
+const presentationPolicy = readFileSync('src/presentation/level0PresentationPolicy.ts', 'utf8');
 const fixtureLighting = readFileSync('src/renderer/fixtureLighting.ts', 'utf8');
 const surfacePresentation = readFileSync('src/renderer/level0SurfacePresentation.ts', 'utf8');
 const finalPresentation = readFileSync('src/renderer/finalLevel0MaterialPresentation.ts', 'utf8');
@@ -88,11 +89,14 @@ test('runtime preview refreshes already-loaded presentation cells rather than wa
 });
 
 test('M-F1 Studio values now own steady panel presentation without changing physical Omni law', () => {
-  assert.match(fixtureLighting, /materialColor\(PANEL_TARGET, 'ordinaryDiffuse'/);
-  assert.match(fixtureLighting, /materialColor\(PANEL_TARGET, 'archDiffuse'/);
-  assert.match(fixtureLighting, /materialColor\(PANEL_TARGET, 'ordinaryEmissive'/);
-  assert.match(fixtureLighting, /materialColor\(PANEL_TARGET, 'archEmissive'/);
-  assert.match(fixtureLighting, /materialNumber\(PANEL_TARGET, 'visualEmissiveScale', 1\)/);
+  assert.match(presentationPolicy, /materialColor\(FLUORESCENT_PANEL_TARGET, 'ordinaryDiffuse'/);
+  assert.match(presentationPolicy, /materialColor\(FLUORESCENT_PANEL_TARGET, 'archDiffuse'/);
+  assert.match(presentationPolicy, /materialColor\(FLUORESCENT_PANEL_TARGET, 'ordinaryEmissive'/);
+  assert.match(presentationPolicy, /materialColor\(FLUORESCENT_PANEL_TARGET, 'archEmissive'/);
+  assert.match(presentationPolicy, /materialNumber\(FLUORESCENT_PANEL_TARGET, 'visualEmissiveScale', 1\)/);
+  assert.match(fixtureLighting, /resolveMFluorescentPanelPresentation/);
+  assert.doesNotMatch(fixtureLighting, /materialColor\(/);
+  assert.doesNotMatch(fixtureLighting, /materialNumber\(/);
   assert.match(fixtureLighting, /const FIXTURE_LIGHT_RANGE = 12\.0/);
   assert.match(fixtureLighting, /const FIXTURE_LIGHT_INTENSITY_MULTIPLIER = 2\.0/);
   assert.match(fixtureLighting, /castShadows: true/);
