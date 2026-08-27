@@ -7,6 +7,7 @@ const { generateCell } = await import('../.test-dist/src/world/generator.js');
 const { CELL_SIZE, DEFAULT_TUNING } = await import('../.test-dist/src/world/types.js');
 const fixtureSource = await readFile(new URL('../src/renderer/fixtureLighting.ts', import.meta.url), 'utf8');
 const runtimeSource = await readFile(new URL('../src/renderer/renderSettingsRuntime.ts', import.meta.url), 'utf8');
+const gameSource = await readFile(new URL('../src/app/ProjectNoclipGame.ts', import.meta.url), 'utf8');
 const streamingSource = await readFile(new URL('../src/renderer/streamingScheduler.ts', import.meta.url), 'utf8');
 const streamingPolicySource = await readFile(new URL('../src/renderer/streamingPolicy.ts', import.meta.url), 'utf8');
 const mainSource = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
@@ -140,13 +141,16 @@ test('M-F1 uses one canonical continuous flicker pulse and a one-to-one light/sh
   assert.match(fixtureSource, /runtime\.selected && runtime\.light\.enabled.*light\?\.castShadows/);
 });
 
-test('render runtime owns modern PlayCanvas FogParams and keeps camera clear color coupled to fog', () => {
+test('render runtime owns modern PlayCanvas FogParams while application explicitly owns invocation', () => {
   assert.match(runtimeSource, /scene\.fog\.type = pc\.FOG_LINEAR/);
   assert.match(runtimeSource, /scene\.fog\.start = fog\.start/);
   assert.match(runtimeSource, /scene\.fog\.end = fog\.end/);
   assert.match(runtimeSource, /cameraComponent\.clearColor = new pc\.Color\(fog\.color\.r, fog\.color\.g, fog\.color\.b\)/);
   assert.match(runtimeSource, /frustumCulling: true/);
-  assert.match(runtimeSource, /reconcileStreaming\(this, force, radiusOverride\)/);
+  assert.match(runtimeSource, /export function setupRenderSettingsEngine/);
+  assert.match(gameSource, /setupRenderSettingsEngine\(this\)/);
+  assert.match(gameSource, /reconcileStreaming\(this, force, radiusOverride\)/);
+  assert.doesNotMatch(runtimeSource, /ProjectNoclipGame\.prototype/);
   assert.match(streamingSource, /visual\.root\.enabled = false/);
   assert.match(streamingSource, /distance <= profile\.retentionRadius/);
   assert.match(streamingSource, /predictiveWarmCoordinates/);

@@ -39,7 +39,6 @@ interface GameStreamingAccess {
   refreshLightField(): void;
   notifyRegionEntry(): void;
 }
-interface RuntimePrototype { update(this: ProjectNoclipGame, dt: number): void; }
 type JobKind = 'prepare' | 'refresh' | 'unload';
 interface StreamJob {
   key: string; kind: JobKind; x: number; z: number; priority: number; serial: number; notBefore: number; predictive: boolean;
@@ -90,10 +89,10 @@ interface SchedulerState {
   frameActive: boolean;
   frameHeavyOperations: number;
   frameHeavyMs: number;
+  frameStartedAtMs?: number;
 }
 
 const states = new WeakMap<ProjectNoclipGame, SchedulerState>();
-let installed = false;
 
 function access(game: ProjectNoclipGame): GameStreamingAccess { return game as unknown as GameStreamingAccess; }
 function now(): number { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
@@ -446,38 +445,41 @@ export function reconcileStreaming(game: ProjectNoclipGame, force = false, radiu
   finishReconcile(game);
 }
 
-export function installStreamingScheduler(prototype: RuntimePrototype): void {
-  if (installed) return;
-  installed = true;
-  const originalUpdate = prototype.update;
-  prototype.update = function streamingScheduledUpdate(this: ProjectNoclipGame, dt: number): void {
-    const scheduler = stateFor(this);
-    const state = access(this);
-    const frameStart = now();
-    scheduler.frameActive = true;
-    scheduler.frameHeavyOperations = 0;
-    scheduler.frameHeavyMs = 0;
-    // Boundary safety gets first admission inside originalUpdate. Once movement
-    // resolves, refresh prediction before admitting queued heavy work so a stop,
-    // reversal, teleport, or locate cannot execute one stale predictive job.
-    originalUpdate.call(this, dt);
-    warmAhead(this, dt);
-    processOneJob(this);
-    scheduler.frameActive = false;
-    scheduler.diagnostics.lastHeavyOperations = scheduler.frameHeavyOperations;
-    scheduler.diagnostics.maxHeavyOperations = Math.max(scheduler.diagnostics.maxHeavyOperations, scheduler.frameHeavyOperations);
-    scheduler.diagnostics.lastHeavyMs = scheduler.frameHeavyMs;
-    const updateMs = now() - frameStart;
-    scheduler.diagnostics.lastUpdateMs = updateMs;
-    scheduler.diagnostics.maxUpdateMs = Math.max(scheduler.diagnostics.maxUpdateMs, updateMs);
-    const changedCell = scheduler.lastCellX !== undefined
-      && (scheduler.lastCellX !== state.currentCellX || scheduler.lastCellZ !== state.currentCellZ);
-    if (changedCell) {
-      scheduler.diagnostics.lastBoundaryFrameMs = updateMs;
-      scheduler.diagnostics.maxBoundaryFrameMs = Math.max(scheduler.diagnostics.maxBoundaryFrameMs, updateMs);
-    }
-    scheduler.lastCellX = state.currentCellX;
-    scheduler.lastCellZ = state.currentCellZ;
-    publish(this);
-  };
+/** Called by ProjectNoclipGame before its authoritative per-frame work. */
+export function beginStreamingFrame(game: ProjectNoclipGame): void {
+  const scheduler = stateFor(game);
+  scheduler.frameStartedAtMs = now();
+  scheduler.frameActive = true;
+  scheduler.frameHeavyOperations = 0;
+  scheduler.frameHeavyMs = 0;
+}
+
+/**
+ * Called by ProjectNoclipGame after movement/simulation. Boundary safety has
+ * already received first admission; prediction is refreshed before one queued
+ * heavy job so stop/reversal/teleport cannot execute stale predictive work.
+ */
+export function finishStreamingFrame(game: ProjectNoclipGame, dt: number): void {
+  const scheduler = stateFor(game);
+  const state = access(game);
+  const frameStart = scheduler.frameStartedAtMs ?? now();
+  warmAhead(game, dt);
+  processOneJob(game);
+  scheduler.frameActive = false;
+  scheduler.frameStartedAtMs = undefined;
+  scheduler.diagnostics.lastHeavyOperations = scheduler.frameHeavyOperations;
+  scheduler.diagnostics.maxHeavyOperations = Math.max(scheduler.diagnostics.maxHeavyOperations, scheduler.frameHeavyOperations);
+  scheduler.diagnostics.lastHeavyMs = scheduler.frameHeavyMs;
+  const updateMs = now() - frameStart;
+  scheduler.diagnostics.lastUpdateMs = updateMs;
+  scheduler.diagnostics.maxUpdateMs = Math.max(scheduler.diagnostics.maxUpdateMs, updateMs);
+  const changedCell = scheduler.lastCellX !== undefined
+    && (scheduler.lastCellX !== state.currentCellX || scheduler.lastCellZ !== state.currentCellZ);
+  if (changedCell) {
+    scheduler.diagnostics.lastBoundaryFrameMs = updateMs;
+    scheduler.diagnostics.maxBoundaryFrameMs = Math.max(scheduler.diagnostics.maxBoundaryFrameMs, updateMs);
+  }
+  scheduler.lastCellX = state.currentCellX;
+  scheduler.lastCellZ = state.currentCellZ;
+  publish(game);
 }

@@ -2,27 +2,23 @@ import './styles.css';
 import { ProjectNoclipGame } from './app/ProjectNoclipGame.js';
 import { installFixtureLighting } from './renderer/fixtureLighting.js';
 import { prepareOrdinaryWallpaperAssets } from './renderer/ordinaryWallpaperAssets.js';
-import { installOutletInteractionRuntime } from './renderer/outletInteractionRuntime.js';
-import { installRenderSettingsRuntime } from './renderer/renderSettingsRuntime.js';
+import { initializeRenderSettingsRuntime } from './renderer/renderSettingsRuntime.js';
 import { installPauFeaturePresentationPilot } from './renderer/pauFeaturePresentationPilot.js';
 import { installRendererCellLifecycle } from './renderer/rendererCellLifecycle.js';
 import { installStaticWorldBatching } from './renderer/StaticWorldBatching.js';
 import { installRendererRuntimeDiagnostics } from './renderer/rendererRuntimeDiagnostics.js';
-import { installRuntimePerformance } from './renderer/runtimePerformance.js';
-import { installVisibilityParticipationRuntime } from './renderer/visibility/runtime.js';
+import { initializeRuntimePerformanceDiagnostics } from './renderer/runtimePerformance.js';
 import { mountDevelopmentVersionIndicator } from './ui/DevelopmentVersionIndicator.js';
 import { installRegionDepthLab } from './ui/regionDepthLab.js';
 import { installRenderSettingsLab } from './ui/renderSettingsLab.js';
 
-installRenderSettingsRuntime();
+initializeRenderSettingsRuntime();
 installPauFeaturePresentationPilot();
 installFixtureLighting();
 installStaticWorldBatching();
-installRuntimePerformance();
-// Wave 1: one explicit owner now defines streamed Cell load/unload ordering.
+initializeRuntimePerformanceDiagnostics();
+// Wave 1: one explicit owner defines streamed Cell load/unload ordering.
 installRendererCellLifecycle();
-installVisibilityParticipationRuntime(ProjectNoclipGame.prototype);
-installOutletInteractionRuntime();
 installRendererRuntimeDiagnostics();
 mountDevelopmentVersionIndicator();
 
