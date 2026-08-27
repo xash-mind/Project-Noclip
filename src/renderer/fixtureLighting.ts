@@ -1,10 +1,12 @@
 import * as pc from 'playcanvas';
-import { materialColor, materialNumber } from '../presentation/materialRuntime.js';
+import { resolveMFluorescentPanelPresentation } from '../presentation/level0PresentationPolicy.js';
 import { lightFlickerValue } from '../world/lighting.js';
 import { CELL_SIZE, type CellDescriptor, type LightGroupSpec } from '../world/types.js';
 import {
   findMFluorescentPanelVisualIndex,
   isMFluorescentPanelVisualName,
+  M_F1_PANEL_DIMENSIONS,
+  mFluorescentFixtureIdentity,
   type MFluorescentPanelVisualAddress
 } from './fixtureVisualOwnership.js';
 import { cellIsInsideActiveRenderScope, getRenderSettings, renderDistanceProfile } from './renderSettings.js';
@@ -15,13 +17,10 @@ const FIXTURE_LIGHT_RANGE = 12.0;
 const FIXTURE_LIGHT_INTENSITY_MULTIPLIER = 2.0;
 const MAX_ACTIVE_FIXTURE_LIGHTS = 128;
 const FIXTURE_SELECTION_MOVEMENT_METERS = 0.25;
-const FIXTURE_PANEL_HALF_HEIGHT = 0.04;
-const FIXTURE_PANEL_LENGTH = 2.2;
-const FIXTURE_PANEL_WIDTH = 0.38;
+const FIXTURE_PANEL_HALF_HEIGHT = M_F1_PANEL_DIMENSIONS[1] / 2;
 const FIXTURE_EMITTER_CLEARANCE = 0.03;
 const FIXTURE_SHADOW_BIAS = 0.4;
 const FIXTURE_SHADOW_NORMAL_OFFSET = 0.04;
-const PANEL_TARGET = 'material.fluorescent-panel';
 
 interface FixtureLightComponent {
   intensity: number;
@@ -127,6 +126,27 @@ function entityByName(root: pc.Entity, name: string): pc.Entity | undefined {
   return childrenOf(root).find((child) => child.name === name);
 }
 
+function fixturePanelMaterial(
+  state: RendererFixtureState,
+  descriptor: CellDescriptor,
+  group: LightGroupSpec,
+  pulse: number
+): pc.StandardMaterial {
+  const presentation = resolveMFluorescentPanelPresentation(descriptor, group.state, pulse);
+  const key = `m-f1:${descriptor.world.regionId}:${group.state}:${presentation.pulseLevel.toFixed(4)}:${presentation.diffuse.join(',')}:${presentation.emissive?.join(',') ?? 'none'}:${presentation.emissiveIntensity.toFixed(4)}`;
+  const existing = state.materials.get(key);
+  if (existing) return existing;
+  const created = makeMaterial(
+    presentation.diffuse,
+    undefined,
+    [1, 1],
+    presentation.emissive,
+    presentation.emissiveIntensity
+  );
+  state.materials.set(key, created);
+  return created;
+}
+
 function addFixturePanelVisual(
   state: RendererFixtureState,
   visual: CellVisual,
@@ -135,13 +155,14 @@ function addFixturePanelVisual(
 ): pc.Entity | undefined {
   const fixture = group.fixtures[fixtureIndex];
   if (!fixture) return undefined;
-  const entity = new pc.Entity(`${group.id}:fixture:${fixtureIndex}`);
+  const identity = mFluorescentFixtureIdentity(group.id, fixtureIndex);
+  const entity = new pc.Entity(identity.panelName);
   entity.addComponent('render', { type: 'box' });
   entity.setLocalPosition(fixture.x, fixture.y, fixture.z);
-  entity.setLocalScale(FIXTURE_PANEL_LENGTH, FIXTURE_PANEL_HALF_HEIGHT * 2, FIXTURE_PANEL_WIDTH);
+  entity.setLocalScale(M_F1_PANEL_DIMENSIONS[0], M_F1_PANEL_DIMENSIONS[1], M_F1_PANEL_DIMENSIONS[2]);
   entity.setLocalEulerAngles(0, group.rotationY, 0);
   if (entity.render) {
-    entity.render.material = fixtureMaterial(state, visual.descriptor, group, group.state === 'off' ? 0 : 1);
+    entity.render.material = fixturePanelMaterial(state, visual.descriptor, group, group.state === 'off' ? 0 : 1);
     entity.render.castShadows = false;
   }
   visual.root.addChild(entity);
@@ -156,12 +177,12 @@ function reconcileFixturePanels(state: RendererFixtureState, visual: CellVisual)
 
   for (const group of visual.descriptor.lightGroups) {
     group.fixtures.forEach((fixture, fixtureIndex) => {
-      const id = `${group.id}:${fixtureIndex}`;
-      const direct = entityByName(root, `${group.id}:fixture:${fixtureIndex}`);
+      const identity = mFluorescentFixtureIdentity(group.id, fixtureIndex);
+      const direct = entityByName(root, identity.panelName);
       if (direct?.render) {
         direct.render.castShadows = false;
         claimed.add(direct);
-        resolved.set(id, direct);
+        resolved.set(identity.id, direct);
         return;
       }
       const candidates = available.filter((candidate) => !claimed.has(candidate));
@@ -173,10 +194,10 @@ function reconcileFixturePanels(state: RendererFixtureState, visual: CellVisual)
       const matched = matchIndex >= 0 ? candidates[matchIndex] : undefined;
       const panel = matched ?? addFixturePanelVisual(state, visual, group, fixtureIndex);
       if (!panel) return;
-      panel.name = `${group.id}:fixture:${fixtureIndex}`;
+      panel.name = identity.panelName;
       if (panel.render) panel.render.castShadows = false;
       claimed.add(panel);
-      resolved.set(id, panel);
+      resolved.set(identity.id, panel);
     });
   }
 
@@ -189,44 +210,6 @@ function reconcileFixturePanels(state: RendererFixtureState, visual: CellVisual)
 function fixturePulse(group: LightGroupSpec, elapsedSeconds: number, reducedFlicker: boolean): number {
   if (group.state === 'off') return 0;
   return lightFlickerValue(group, elapsedSeconds, reducedFlicker);
-}
-
-function fixtureMaterial(
-  state: RendererFixtureState,
-  descriptor: CellDescriptor,
-  group: LightGroupSpec,
-  pulse: number
-): pc.StandardMaterial {
-  const arch = descriptor.world.regionId === 'arch-rooms';
-  const level = Math.max(0, Math.min(1, Math.round(pulse * 16) / 16));
-  const activeDiffuse = arch
-    ? materialColor(PANEL_TARGET, 'archDiffuse', [0.99, 0.985, 0.83])
-    : materialColor(PANEL_TARGET, 'ordinaryDiffuse', [0.98, 0.955, 0.76]);
-  const emissive = arch
-    ? materialColor(PANEL_TARGET, 'archEmissive', [1, 0.985, 0.78])
-    : materialColor(PANEL_TARGET, 'ordinaryEmissive', [1, 0.95, 0.68]);
-  const visualEmissiveScale = materialNumber(PANEL_TARGET, 'visualEmissiveScale', 1);
-  const key = `fixture-owned:${arch ? 'arch' : 'ordinary'}:${group.state}:${level.toFixed(4)}:${activeDiffuse.join(',')}:${emissive.join(',')}:${visualEmissiveScale.toFixed(4)}`;
-  const existing = state.materials.get(key);
-  if (existing) return existing;
-
-  const offDiffuse: [number, number, number] = [0.31, 0.31, 0.27];
-  const diffuse: [number, number, number] = [
-    offDiffuse[0] + (activeDiffuse[0] - offDiffuse[0]) * level,
-    offDiffuse[1] + (activeDiffuse[1] - offDiffuse[1]) * level,
-    offDiffuse[2] + (activeDiffuse[2] - offDiffuse[2]) * level
-  ];
-  const created = level <= 0.001
-    ? makeMaterial(diffuse)
-    : makeMaterial(
-      diffuse,
-      undefined,
-      [1, 1],
-      emissive,
-      (arch ? 2.18 : 2.28) * level * visualEmissiveScale
-    );
-  state.materials.set(key, created);
-  return created;
 }
 
 function lightColor(group: LightGroupSpec): pc.Color {
@@ -335,10 +318,10 @@ export function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual)
   let added = false;
   for (const group of descriptor.lightGroups) {
     group.fixtures.forEach((fixture, fixtureIndex) => {
-      const id = `${group.id}:${fixtureIndex}`;
-      if (state.fixtures.has(id)) return;
+      const identity = mFluorescentFixtureIdentity(group.id, fixtureIndex);
+      if (state.fixtures.has(identity.id)) return;
 
-      const light = new pc.Entity(`fixture-owned-light:${id}`);
+      const light = new pc.Entity(`fixture-owned-light:${identity.id}`);
       light.addComponent('light', {
         type: 'omni',
         color: lightColor(group),
@@ -358,11 +341,11 @@ export function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual)
       );
       light.enabled = false;
 
-      const mesh = panels.get(id);
+      const mesh = panels.get(identity.id);
       if (mesh?.render) mesh.render.castShadows = false;
 
-      state.fixtures.set(id, {
-        id,
+      state.fixtures.set(identity.id, {
+        id: identity.id,
         cellId: descriptor.id,
         group,
         fixtureIndex,
@@ -446,7 +429,7 @@ function updateFixtureLighting(
 
     const pulse = pulseFor(runtime.group);
     if (runtime.mesh?.render) {
-      const material = fixtureMaterial(state, runtime.descriptor, runtime.group, pulse);
+      const material = fixturePanelMaterial(state, runtime.descriptor, runtime.group, pulse);
       if (runtime.mesh.render.material !== material) {
         runtime.mesh.render.material = material;
         fixtureDiagnostics.panelMaterialWrites += 1;

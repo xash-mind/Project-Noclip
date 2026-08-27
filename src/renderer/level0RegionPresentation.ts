@@ -1,4 +1,5 @@
 import * as pc from 'playcanvas';
+import { resolveCvh1DepthPresentation, resolveLevel0CarpetPresentation, type Level0ArchFinishRole } from '../presentation/level0PresentationPolicy.js';
 import { ARCH_SHOULDER_SPAN_SCALE } from '../world/gen3ArchitectureCore.js';
 import {
   ARCH_FRAME_CELL_SEAM_HANDOFF,
@@ -25,14 +26,16 @@ import {
   type RegionId,
   type WallSpec
 } from '../world/types.js';
+import {
+  bindLevel0ArchFinishRole,
+  cvh1DepthMaterial,
+  level0ArchFinishMaterial
+} from './level0PresentationMaterials.js';
 import { WorldRenderer } from './WorldRenderer.js';
-import { makeMaterial, type CellVisual } from './support.js';
+import type { CellVisual } from './support.js';
 
 interface RendererAccess { app: pc.Application; }
-interface RegionPresentationCache { materials: Map<string, pc.StandardMaterial>; }
-interface CarpetProfile { key: 'ordinary' | 'pillar' | 'arch'; tint: readonly [number, number, number]; gloss?: number; }
 type Vec3Tuple = readonly [number, number, number];
-type Vec2Tuple = readonly [number, number];
 
 export type { ArchFrameBay } from '../world/gen3ArchDividerSemantics.js';
 export interface ArchCurveSegment {
@@ -48,9 +51,6 @@ export interface HoleDepthBand {
   tint: readonly [number, number, number];
 }
 
-const caches = new WeakMap<WorldRenderer, RegionPresentationCache>();
-const carpetClones = new WeakMap<pc.StandardMaterial, Map<string, pc.StandardMaterial>>();
-const CARPET_REPEAT_METERS = CELL_SIZE / 5;
 const ARCH_CURVE_SEGMENTS = 18;
 const ARCH_UPPER_BOTTOM = 1.92;
 const ARCH_UPPER_TOP = WALL_HEIGHT - 0.24;
@@ -58,9 +58,6 @@ const ARCH_CURVE_APEX = Math.min(ARCH_UPPER_TOP - 0.24, 2.46);
 const ARCH_PIER_DEPTH = WALL_THICKNESS + 0.10;
 const ARCH_UPPER_DEPTH = WALL_THICKNESS + 0.16;
 const ARCH_FRAME_PREFIX = 'arch-frame:';
-const ARCH_PIER_TINT: readonly [number, number, number] = [0.76, 0.735, 0.665];
-const ARCH_UPPER_TINT: readonly [number, number, number] = [0.955, 0.945, 0.885];
-const ARCH_PANEL_TINT: readonly [number, number, number] = [0.885, 0.872, 0.805];
 
 function childrenOf(entity: pc.Entity): pc.Entity[] {
   return [...(entity as pc.Entity & { children: readonly pc.Entity[] }).children];
@@ -68,105 +65,43 @@ function childrenOf(entity: pc.Entity): pc.Entity[] {
 function entityByName(root: pc.Entity, name: string): pc.Entity | undefined {
   return childrenOf(root).find((child) => child.name === name);
 }
-function cacheFor(renderer: WorldRenderer): RegionPresentationCache {
-  const existing = caches.get(renderer);
-  if (existing) return existing;
-  const created = { materials: new Map<string, pc.StandardMaterial>() };
-  caches.set(renderer, created);
-  return created;
-}
-function material(cache: RegionPresentationCache, key: string, tint: readonly [number, number, number]): pc.StandardMaterial {
-  const existing = cache.materials.get(key);
-  if (existing) return existing;
-  const created = makeMaterial([tint[0], tint[1], tint[2]]);
-  cache.materials.set(key, created);
-  return created;
-}
-function lightlessBlackMaterial(cache: RegionPresentationCache): pc.StandardMaterial {
-  const existing = cache.materials.get('hole:deep-occluder');
-  if (existing) return existing;
-  const created = makeMaterial([0, 0, 0]);
-  created.gloss = 0;
-  created.update();
-  cache.materials.set('hole:deep-occluder', created);
-  return created;
-}
 function addBox(
   name: string,
   parent: pc.Entity,
   position: Vec3Tuple,
   scale: Vec3Tuple,
-  value: pc.StandardMaterial
+  value: pc.StandardMaterial,
+  finishRole?: Level0ArchFinishRole
 ): pc.Entity {
   const entity = new pc.Entity(name);
   entity.addComponent('render', { type: 'box' });
   entity.setLocalPosition(position[0], position[1], position[2]);
   entity.setLocalScale(scale[0], scale[1], scale[2]);
   if (entity.render) entity.render.material = value;
+  if (finishRole) bindLevel0ArchFinishRole(entity, finishRole);
   parent.addChild(entity);
   return entity;
 }
 
-export function carpetProfileForCell(regionId: RegionId): CarpetProfile {
-  if (regionId === 'ordinary-level-0') return { key: 'ordinary', tint: [0.79, 0.72, 0.55] };
-  if (regionId === 'pillar-field') return { key: 'pillar', tint: [0.825, 0.755, 0.585] };
-  return { key: 'arch', tint: [0.65, 0.60, 0.49], gloss: 0.11 };
-}
-
-function wrap01(value: number): number {
-  return ((value % 1) + 1) % 1;
-}
-
-function carpetClone(
-  source: pc.StandardMaterial,
-  profile: CarpetProfile,
-  key: string,
-  tiling?: Vec2Tuple,
-  offset?: Vec2Tuple
-): pc.StandardMaterial {
-  let variants = carpetClones.get(source);
-  if (!variants) {
-    variants = new Map<string, pc.StandardMaterial>();
-    carpetClones.set(source, variants);
-  }
-  const existing = variants.get(key);
-  if (existing) return existing;
-  const clone = source.clone();
-  clone.diffuse = new pc.Color(profile.tint[0], profile.tint[1], profile.tint[2]);
-  if (profile.gloss !== undefined) clone.gloss = profile.gloss;
-  if (tiling) clone.diffuseMapTiling = new pc.Vec2(tiling[0], tiling[1]);
-  if (offset) (clone as unknown as { diffuseMapOffset: pc.Vec2 }).diffuseMapOffset = new pc.Vec2(offset[0], offset[1]);
-  clone.update();
-  variants.set(key, clone);
-  return clone;
-}
-
-function applyCarpetPresentation(visual: CellVisual): void {
-  const descriptor = visual.descriptor;
-  if (descriptor.world.generationVersion !== 'gen3-v1') return;
-  const profile = carpetProfileForCell(descriptor.world.regionId);
-  const fullFloor = entityByName(visual.root, 'floor');
-  if (fullFloor?.render) {
-    fullFloor.render.material = carpetClone(fullFloor.render.material as pc.StandardMaterial, profile, profile.key);
-  }
-  for (const child of childrenOf(visual.root)) {
-    if (!child.name.startsWith('floor-piece:') || !child.render) continue;
-    const position = child.getLocalPosition();
-    const scale = child.getLocalScale();
-    const minWorldX = descriptor.address.cellX * CELL_SIZE + position.x - scale.x / 2;
-    const minWorldZ = descriptor.address.cellZ * CELL_SIZE + position.z - scale.z / 2;
-    const tiling: Vec2Tuple = [scale.x / CARPET_REPEAT_METERS, scale.z / CARPET_REPEAT_METERS];
-    const offset: Vec2Tuple = [wrap01(minWorldX / CARPET_REPEAT_METERS), wrap01(minWorldZ / CARPET_REPEAT_METERS)];
-    const uvKey = `${profile.key}:${tiling[0].toFixed(4)}:${tiling[1].toFixed(4)}:${offset[0].toFixed(4)}:${offset[1].toFixed(4)}`;
-    child.render.material = carpetClone(child.render.material as pc.StandardMaterial, profile, uvKey, tiling, offset);
-  }
+/** Compatibility diagnostic view; M-C1 values now resolve only through presentation policy. */
+export function carpetProfileForCell(regionId: RegionId): { key: 'ordinary' | 'pillar' | 'arch'; tint: readonly [number, number, number]; gloss?: number } {
+  const descriptor = {
+    world: { regionId, conditionIds: [] }
+  } as unknown as CellDescriptor;
+  const presentation = resolveLevel0CarpetPresentation(descriptor);
+  return regionId === 'arch-rooms'
+    ? { key: 'arch', tint: presentation.color, gloss: presentation.gloss }
+    : regionId === 'pillar-field'
+      ? { key: 'pillar', tint: presentation.color }
+      : { key: 'ordinary', tint: presentation.color };
 }
 
 export function holeDepthBands(): readonly HoleDepthBand[] {
+  const palette = resolveCvh1DepthPresentation();
   return [
-    { key: 'upper', top: -0.02, bottom: -0.82, tint: [0.145, 0.123, 0.072] },
-    { key: 'middle', top: -0.82, bottom: -2.0, tint: [0.028, 0.022, 0.012] },
-    { key: 'deep', top: -2.0, bottom: -8.4, tint: [0.0015, 0.0013, 0.001] }
+    { key: 'upper', top: -0.02, bottom: -0.82, tint: palette.upper },
+    { key: 'middle', top: -0.82, bottom: -2.0, tint: palette.middle },
+    { key: 'deep', top: -2.0, bottom: -8.4, tint: palette.deep }
   ];
 }
 
@@ -192,7 +127,6 @@ function addHoleBand(
 function replaceHoleDepth(renderer: WorldRenderer, visual: CellVisual): void {
   const holes = visual.descriptor.floorPatches.filter((patch) => patch.kind === 'hole');
   if (holes.length === 0) return;
-  const cache = cacheFor(renderer);
   for (const hole of holes) {
     for (const name of [
       `${hole.id}:void`, `${hole.id}:depth`, `${hole.id}:north-side`, `${hole.id}:south-side`, `${hole.id}:west-side`, `${hole.id}:east-side`
@@ -205,14 +139,14 @@ function replaceHoleDepth(renderer: WorldRenderer, visual: CellVisual): void {
       ) child.destroy();
     }
     const bands = holeDepthBands();
-    for (const band of bands) addHoleBand(visual.root, hole, band, material(cache, `hole:${band.key}`, band.tint));
+    for (const band of bands) addHoleBand(visual.root, hole, band, cvh1DepthMaterial(renderer, band.key));
     const deepBottom = bands[bands.length - 1]!.bottom;
     addBox(
       `${hole.id}:depth-occluder`,
       visual.root,
       [hole.position.x, deepBottom - 0.06, hole.position.z],
       [hole.scale.x * 2.6, 0.14, hole.scale.z * 2.6],
-      lightlessBlackMaterial(cache)
+      cvh1DepthMaterial(renderer, 'void')
     );
   }
 }
@@ -230,9 +164,7 @@ export function archFramePresentationProfile(): {
 
 function rectangularUpperRuns(bays: readonly ArchFrameBay[], supports: readonly Interval[]): Interval[] {
   const intervals: Interval[] = supports.map(([start, end]) => [start, end] as const);
-  for (const bay of bays) {
-    intervals.push([bay.start, bay.curveStart], [bay.curveEnd, bay.end]);
-  }
+  for (const bay of bays) intervals.push([bay.start, bay.curveStart], [bay.curveEnd, bay.end]);
   return mergeIntervals(intervals);
 }
 
@@ -255,25 +187,10 @@ export function archFrameVisibleVolumesForDescriptors(descriptors: readonly Cell
       .filter((support) => bays.some((bay) => Math.abs(support[1] - bay.start) < 0.08 || Math.abs(support[0] - bay.end) < 0.08));
     const upperRuns = rectangularUpperRuns(bays, supports);
     supports.forEach((support, index) => {
-      volumes.push({
-        id: `${line.key}:pier-lower:${index}`,
-        role: 'pier-lower',
-        lineKey: line.key,
-        start: support[0], end: support[1], minY: 0, maxY: ARCH_UPPER_BOTTOM
-      });
-      volumes.push({
-        id: `${line.key}:pier-upper:${index}`,
-        role: 'pier-upper',
-        lineKey: line.key,
-        start: support[0], end: support[1], minY: ARCH_UPPER_TOP, maxY: WALL_HEIGHT
-      });
+      volumes.push({ id: `${line.key}:pier-lower:${index}`, role: 'pier-lower', lineKey: line.key, start: support[0], end: support[1], minY: 0, maxY: ARCH_UPPER_BOTTOM });
+      volumes.push({ id: `${line.key}:pier-upper:${index}`, role: 'pier-upper', lineKey: line.key, start: support[0], end: support[1], minY: ARCH_UPPER_TOP, maxY: WALL_HEIGHT });
     });
-    upperRuns.forEach((run, index) => volumes.push({
-      id: `${line.key}:upper-mass:${index}`,
-      role: 'upper-mass',
-      lineKey: line.key,
-      start: run[0], end: run[1], minY: ARCH_UPPER_BOTTOM, maxY: ARCH_UPPER_TOP
-    }));
+    upperRuns.forEach((run, index) => volumes.push({ id: `${line.key}:upper-mass:${index}`, role: 'upper-mass', lineKey: line.key, start: run[0], end: run[1], minY: ARCH_UPPER_BOTTOM, maxY: ARCH_UPPER_TOP }));
   }
   return volumes;
 }
@@ -342,9 +259,7 @@ function localBoxPosition(
     : [fixed - baseX, y, along - baseZ];
 }
 function localBoxScale(orientation: WallSpec['orientation'], length: number, height: number, depth: number): Vec3Tuple {
-  return orientation === 'z'
-    ? [length, height, depth]
-    : [depth, height, length];
+  return orientation === 'z' ? [length, height, depth] : [depth, height, length];
 }
 
 function addWorldBoxClipped(
@@ -357,7 +272,8 @@ function addWorldBoxClipped(
   y: number,
   height: number,
   depth: number,
-  value: pc.StandardMaterial
+  value: pc.StandardMaterial,
+  finishRole: Level0ArchFinishRole
 ): void {
   const descriptor = visual.descriptor;
   if (!cellOwnsLine(descriptor, orientation, fixed)) return;
@@ -369,7 +285,8 @@ function addWorldBoxClipped(
     visual.root,
     localBoxPosition(descriptor, orientation, fixed, along, y),
     localBoxScale(orientation, clip[1] - clip[0], height, depth),
-    value
+    value,
+    finishRole
   );
 }
 
@@ -377,11 +294,7 @@ function subtract(left: Vec3Tuple, right: Vec3Tuple): Vec3Tuple {
   return [left[0] - right[0], left[1] - right[1], left[2] - right[2]];
 }
 function cross(left: Vec3Tuple, right: Vec3Tuple): Vec3Tuple {
-  return [
-    left[1] * right[2] - left[2] * right[1],
-    left[2] * right[0] - left[0] * right[2],
-    left[0] * right[1] - left[1] * right[0]
-  ];
+  return [left[1] * right[2] - left[2] * right[1], left[2] * right[0] - left[0] * right[2], left[0] * right[1] - left[1] * right[0]];
 }
 function normalize(value: Vec3Tuple): Vec3Tuple {
   const length = Math.hypot(value[0], value[1], value[2]) || 1;
@@ -434,9 +347,6 @@ function addCurveMeshClipped(
 ): void {
   const descriptor = visual.descriptor;
   if (!cellOwnsLine(descriptor, bay.orientation, bay.fixed)) return;
-  // The curve and its rectangular shoulders share exact world-space boundary
-  // coordinates. Neither side extends across the boundary, so there is no
-  // coplanar seam patch or inset step to reveal while the camera moves.
   const clip = clippedInterval(descriptor, bay.orientation, bay.curveStart, bay.curveEnd);
   if (!clip) return;
   const positions: number[] = [];
@@ -485,24 +395,19 @@ function addCurveMeshClipped(
   const meshInstance = new pc.MeshInstance(mesh, value);
   const entity = new pc.Entity(`${ARCH_FRAME_PREFIX}curve:${bay.id}:${descriptor.id}`);
   entity.addComponent('render', { meshInstances: [meshInstance] });
+  bindLevel0ArchFinishRole(entity, 'upper');
   visual.root.addChild(entity);
 }
 
 function dividerSourceWallIds(lines: Map<string, WorldArchLine>): Set<string> {
   const ids = new Set<string>();
-  for (const line of lines.values()) {
-    for (const wall of [...line.headers, ...line.lowers, ...line.solids]) ids.add(wall.id);
-  }
+  for (const line of lines.values()) for (const wall of [...line.headers, ...line.lowers, ...line.solids]) ids.add(wall.id);
   return ids;
 }
 
 function clearArchFrameVisuals(visual: CellVisual): void {
   for (const child of childrenOf(visual.root)) {
-    if (
-      child.name.startsWith(ARCH_FRAME_PREFIX)
-      || child.name.startsWith('arch-curve:')
-      || child.name.startsWith('arch-header-bridge:')
-    ) child.destroy();
+    if (child.name.startsWith(ARCH_FRAME_PREFIX) || child.name.startsWith('arch-curve:') || child.name.startsWith('arch-header-bridge:')) child.destroy();
   }
 }
 
@@ -528,10 +433,9 @@ function renderArchFrames(renderer: WorldRenderer, targetCellIds?: ReadonlySet<s
   const descriptors = visuals.map((visual) => visual.descriptor);
   const lines = archLinesForDescriptors(descriptors);
   const sourceIds = dividerSourceWallIds(lines);
-  const cache = cacheFor(renderer);
-  const pierMaterial = material(cache, 'arch-frame:pier', ARCH_PIER_TINT);
-  const upperMaterial = material(cache, 'arch-frame:upper', ARCH_UPPER_TINT);
-  const panelMaterial = material(cache, 'arch-frame:panel', ARCH_PANEL_TINT);
+  const pierMaterial = level0ArchFinishMaterial(renderer, 'pier');
+  const upperMaterial = level0ArchFinishMaterial(renderer, 'upper');
+  const panelMaterial = level0ArchFinishMaterial(renderer, 'lower-panel');
 
   for (const visual of targetVisuals) {
     clearArchFrameVisuals(visual);
@@ -551,61 +455,30 @@ function renderArchFrames(renderer: WorldRenderer, targetCellIds?: ReadonlySet<s
       for (let index = 0; index < activeSupportIntervals.length; index += 1) {
         const support = activeSupportIntervals[index]!;
         addWorldBoxClipped(
-          visual,
-          `pier-lower:${line.key}:${index}`,
-          line.orientation,
-          line.fixed,
-          support[0],
-          support[1],
-          ARCH_UPPER_BOTTOM / 2,
-          ARCH_UPPER_BOTTOM,
-          ARCH_PIER_DEPTH,
-          pierMaterial
+          visual, `pier-lower:${line.key}:${index}`, line.orientation, line.fixed, support[0], support[1],
+          ARCH_UPPER_BOTTOM / 2, ARCH_UPPER_BOTTOM, ARCH_PIER_DEPTH, pierMaterial, 'pier'
         );
         const upperPierHeight = WALL_HEIGHT - ARCH_UPPER_TOP;
         addWorldBoxClipped(
-          visual,
-          `pier-upper:${line.key}:${index}`,
-          line.orientation,
-          line.fixed,
-          support[0],
-          support[1],
-          ARCH_UPPER_TOP + upperPierHeight / 2,
-          upperPierHeight,
-          ARCH_PIER_DEPTH,
-          pierMaterial
+          visual, `pier-upper:${line.key}:${index}`, line.orientation, line.fixed, support[0], support[1],
+          ARCH_UPPER_TOP + upperPierHeight / 2, upperPierHeight, ARCH_PIER_DEPTH, pierMaterial, 'pier'
         );
       }
       const shoulderHeight = ARCH_UPPER_TOP - ARCH_UPPER_BOTTOM;
       for (let index = 0; index < upperRuns.length; index += 1) {
         const run = upperRuns[index]!;
         addWorldBoxClipped(
-          visual,
-          `upper-run:${line.key}:${index}`,
-          line.orientation,
-          line.fixed,
-          run[0],
-          run[1],
-          ARCH_UPPER_BOTTOM + shoulderHeight / 2,
-          shoulderHeight,
-          ARCH_UPPER_DEPTH,
-          upperMaterial
+          visual, `upper-run:${line.key}:${index}`, line.orientation, line.fixed, run[0], run[1],
+          ARCH_UPPER_BOTTOM + shoulderHeight / 2, shoulderHeight, ARCH_UPPER_DEPTH, upperMaterial, 'upper'
         );
       }
       for (const bay of bays) {
         addCurveMeshClipped(renderer, visual, bay, upperMaterial);
         if (!bay.route) {
           addWorldBoxClipped(
-            visual,
-            `lower-panel:${bay.id}`,
-            bay.orientation,
-            bay.fixed,
-            bay.start + ARCH_LOWER_PANEL_END_INSET,
-            bay.end - ARCH_LOWER_PANEL_END_INSET,
-            ARCH_LOWER_PANEL_HEIGHT / 2,
-            ARCH_LOWER_PANEL_HEIGHT,
-            ARCH_LOWER_PANEL_DEPTH,
-            panelMaterial
+            visual, `lower-panel:${bay.id}`, bay.orientation, bay.fixed,
+            bay.start + ARCH_LOWER_PANEL_END_INSET, bay.end - ARCH_LOWER_PANEL_END_INSET,
+            ARCH_LOWER_PANEL_HEIGHT / 2, ARCH_LOWER_PANEL_HEIGHT, ARCH_LOWER_PANEL_DEPTH, panelMaterial, 'lower-panel'
           );
         }
       }
@@ -622,7 +495,6 @@ function renderArchFrames(renderer: WorldRenderer, targetCellIds?: ReadonlySet<s
 export function applyLevel0RegionPresentation(renderer: WorldRenderer, visual: CellVisual): void {
   if (visual.descriptor.world.generationVersion !== 'gen3-v1') return;
   replaceHoleDepth(renderer, visual);
-  applyCarpetPresentation(visual);
 }
 
 export interface ArchPresentationDiagnostics {

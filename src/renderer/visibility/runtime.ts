@@ -34,10 +34,6 @@ interface GameVisibilityAccess {
   currentCellZ: number;
 }
 type VisibilityGame = object;
-interface RuntimePrototype {
-  update(this: VisibilityGame, dt: number): void;
-  updateStreaming(this: VisibilityGame, force?: boolean, radiusOverride?: number): void;
-}
 
 export interface VisibilitySuspiciousExclusion {
   observerCell: string;
@@ -108,7 +104,6 @@ interface RuntimeState {
 }
 
 const runtimeStates = new WeakMap<VisibilityGame, RuntimeState>();
-let installed = false;
 
 function now(): number { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
 function access(game: VisibilityGame): GameVisibilityAccess { return game as unknown as GameVisibilityAccess; }
@@ -279,7 +274,11 @@ function clearVisibilityAuthority(game: VisibilityGame, renderer: WorldRenderer)
   state.topologyCache = undefined;
 }
 
-function applyVisibilityParticipation(game: VisibilityGame, force = false): void {
+/**
+ * Explicit renderer-participation update. Streaming remains the sole residency
+ * owner; this function never loads, unloads, or destroys Cells.
+ */
+export function updateVisibilityParticipation(game: VisibilityGame, force = false): void {
   const gameState = access(game);
   if (!gameState.save || !gameState.renderer || !gameState.camera) return;
   const renderer = gameState.renderer;
@@ -456,25 +455,4 @@ function applyVisibilityParticipation(game: VisibilityGame, force = false): void
 
 export function visibilityParticipationDiagnostics(game: VisibilityGame): VisibilityParticipationDiagnostics {
   return structuredClone(stateFor(game).diagnostics);
-}
-
-export function installVisibilityParticipationRuntime(prototypeInput: object): void {
-  if (installed) return;
-  installed = true;
-  const prototype = prototypeInput as RuntimePrototype;
-  const originalUpdateStreaming = prototype.updateStreaming;
-  prototype.updateStreaming = function visibilityStreamingUpdate(this: VisibilityGame, force = false, radiusOverride?: number): void {
-    originalUpdateStreaming.call(this, force, radiusOverride);
-    // Streaming owns residency. Visibility immediately recomputes participation
-    // after any envelope reconcile, including locate/teleport operations.
-    applyVisibilityParticipation(this, true);
-  };
-
-  const originalUpdate = prototype.update;
-  prototype.update = function visibilityRuntimeUpdate(this: VisibilityGame, dt: number): void {
-    // The streaming scheduler remains inside this call and therefore updates its
-    // existing movement prediction before visibility reads the latest prediction.
-    originalUpdate.call(this, dt);
-    applyVisibilityParticipation(this, false);
-  };
 }
