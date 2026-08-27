@@ -6,7 +6,8 @@ const {
   canonicalLevel0CarpetUv,
   resolveCvh1DepthPresentation,
   resolveLevel0ArchFinishPresentation,
-  resolveLevel0CarpetPresentation
+  resolveLevel0CarpetPresentation,
+  resolveMFluorescentPanelPresentation
 } = await import('../.test-dist/src/presentation/level0PresentationPolicy.js');
 const { CELL_SIZE } = await import('../.test-dist/src/world/types.js');
 
@@ -18,6 +19,7 @@ const materialSource = await readFile(new URL('../src/renderer/level0Presentatio
 const wallpaperSource = await readFile(new URL('../src/renderer/ordinaryWallpaperPresentation.ts', import.meta.url), 'utf8');
 const casingSource = await readFile(new URL('../src/renderer/ordinaryCasingMaterialPresentation.ts', import.meta.url), 'utf8');
 const fixtureSource = await readFile(new URL('../src/renderer/fixtureLighting.ts', import.meta.url), 'utf8');
+const fixtureVisualSource = await readFile(new URL('../src/renderer/fixtureVisualOwnership.ts', import.meta.url), 'utf8');
 const worldRendererSource = await readFile(new URL('../src/renderer/WorldRenderer.ts', import.meta.url), 'utf8');
 
 function descriptor(regionId, conditionIds = []) {
@@ -88,17 +90,34 @@ test('M-A1 and CV-H1 depth semantic values resolve only from canonical presentat
   assert.match(finalSource, /cvh1DepthMaterial/);
 });
 
-test('Wave 3 preserves shared M-W1 and PD-1/PD-2 behavior while exposing the M-F1 write-boundary blocker', () => {
+test('Wave 3 policy and Wave 4 renderer now converge on one M-F1 visible-panel owner without changing PD-1/PD-2', () => {
   assert.match(wallpaperSource, /pillar-field/);
   assert.match(wallpaperSource, /arch-rooms/);
   assert.match(wallpaperSource, /applyPillarWallpaper/);
   assert.match(wallpaperSource, /descriptor\.world\.regionId !== 'ordinary-level-0'/);
   assert.match(casingSource, /descriptor\.world\.regionId !== 'ordinary-level-0'/);
 
-  // Do not fake M-F1 completion: WorldRenderer is outside the Wave 3 write
-  // boundary and still constructs/assigns panel presentation independently.
-  assert.match(worldRendererSource, /replaceFixtureMeshes/);
-  assert.match(worldRendererSource, /fixtureMat/);
-  assert.match(fixtureSource, /function fixtureMaterial/);
-  assert.equal(policySource.includes('fluorescent-panel'), false);
+  const ordinary = resolveMFluorescentPanelPresentation(descriptor('ordinary-level-0'), 'on', 1);
+  const arch = resolveMFluorescentPanelPresentation(descriptor('arch-rooms'), 'on', 1);
+  const off = resolveMFluorescentPanelPresentation(descriptor('ordinary-level-0'), 'off', 1);
+  assert.deepEqual(ordinary.diffuse, [0.98, 0.955, 0.76]);
+  assert.deepEqual(ordinary.emissive, [1, 0.95, 0.68]);
+  assert.equal(ordinary.emissiveIntensity, 2.28);
+  assert.deepEqual(arch.diffuse, [0.99, 0.985, 0.83]);
+  assert.deepEqual(arch.emissive, [1, 0.985, 0.78]);
+  assert.equal(arch.emissiveIntensity, 2.18);
+  assert.deepEqual(off.diffuse, [0.31, 0.31, 0.27]);
+  assert.equal(off.emissive, undefined);
+  assert.equal(off.emissiveIntensity, 0);
+
+  assert.match(policySource, /FLUORESCENT_PANEL_TARGET = 'material\.fluorescent-panel'/);
+  assert.match(worldRendererSource, /resolveMFluorescentPanelPresentation/);
+  assert.match(fixtureSource, /resolveMFluorescentPanelPresentation/);
+  assert.match(fixtureVisualSource, /M_F1_PANEL_DIMENSIONS = Object\.freeze\(\[2\.2, 0\.08, 0\.38\]/);
+  assert.match(fixtureVisualSource, /mFluorescentFixtureIdentity/);
+  assert.equal(surfaceSource.includes('material.fluorescent-panel'), false);
+  assert.equal(worldRendererSource.includes('[0.98, 0.96, 0.76]'), false);
+  assert.equal(fixtureSource.includes('PANEL_TARGET'), false);
+  assert.equal(fixtureSource.includes('materialColor('), false);
+  assert.equal(fixtureSource.includes('materialNumber('), false);
 });
