@@ -25,7 +25,7 @@ const streamingPolicySource = await readFile(new URL('../src/renderer/streamingP
 const batchingSource = await readFile(new URL('../src/renderer/StaticWorldBatching.ts', import.meta.url), 'utf8');
 const archPresentationSource = await readFile(new URL('../src/renderer/level0RegionPresentation.ts', import.meta.url), 'utf8');
 const featurePresentationSource = await readFile(new URL('../src/renderer/level0FeaturePresentation.ts', import.meta.url), 'utf8');
-const pauPilotSource = await readFile(new URL('../src/renderer/pauFeaturePresentationPilot.ts', import.meta.url), 'utf8');
+const cellBuilderSource = await readFile(new URL('../src/renderer/cellBuilder.ts', import.meta.url), 'utf8');
 const mainSource = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
 
 function tuning(regionOverride) {
@@ -120,14 +120,14 @@ test('Medium Bucket and Small Grey Open Paint Can use the PAU registry and conti
     assert.equal(geometryIsFinite(mesh), true);
     assert.equal(hasDuplicateTriangles(mesh), false);
   }
-  assert.match(pauPilotSource, /addLevel0PilotFeaturePresentation/);
-  assert.match(pauPilotSource, /original\.call\(this, parent, prop, profile\)/);
-  assert.match(mainSource, /installPauFeaturePresentationPilot\(\)/);
+  assert.match(cellBuilderSource, /addLevel0PilotFeaturePresentation/);
+  assert.match(cellBuilderSource, /if \(presentation\) return presentation/);
+  assert.doesNotMatch(mainSource, /installPauFeaturePresentationPilot/);
   assert.match(featurePresentationSource, /resolveRepresentation\(\s*semanticTarget,\s*LEVEL0_FEATURE_PRESENTATION_REGISTRY,/);
   assert.match(featurePresentationSource, /resolveGeometry\(resolved\.definition\.geometryId/);
   assert.match(featurePresentationSource, /`\$\{prop\.id\}:surface`/);
   assert.equal(featurePresentationSource.includes("addComponent('render', { type: 'cylinder' })"), false);
-  assert.match(pauPilotSource, /before the legacy cellBuilder presentation path runs/);
+  assert.doesNotMatch(cellBuilderSource, /patchedAddPropGeometry|original\.call\(this, parent, prop, profile\)/);
 });
 
 test('CV-H1 depth bands preserve an illuminated upper shaft and hide the deep terminator', () => {

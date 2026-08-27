@@ -17,6 +17,7 @@ import { WorldRenderer, type WorldItemVisual } from '../renderer/WorldRenderer.j
 import { addStableTime, calculateExposureDay, calculateWorldDay, canonicalEdgeId, EMPTY_EXPOSURE, recordTraversal } from '../simulation/timeline.js';
 import { GameUI } from '../ui/GameUI.js';
 import { estimateBlackoutExtent, estimateRegionExtent, locateNearestBlackout, locateNearestHoleCluster, locateNearestRegion, sampleGen3Environment, type RegionExtentEstimate } from '../world/gen3.js';
+import { gen2ZoneForCell, isGen2Compatibility } from '../world/gen2Compatibility.js';
 import { formatFieldDiagnostics, formatGeographyDiagnostics } from '../world/fields.js';
 import { stableId, unitFloat } from '../world/hash.js';
 import { LIGHT_FIELD_UPDATE_INTERVAL, type LightFieldSample } from '../world/lighting.js';
@@ -385,8 +386,8 @@ export class ProjectNoclipGame {
 
   private notifyRegionEntry(): void {
     if (!this.save || !this.currentCell) return;
-    if (this.save.generationVersion === 'gen2') {
-      const zone = this.currentCell.address.zoneId;
+    if (isGen2Compatibility(this.save.generationVersion)) {
+      const zone = gen2ZoneForCell(this.currentCell);
       if (!this.save.enteredZoneIds.includes(zone)) { this.save.enteredZoneIds.push(zone); this.ui.toast(`The legacy architecture changes: ${ZONE_PROFILES[zone].label}.`, 4200); void this.persist(); }
       return;
     }

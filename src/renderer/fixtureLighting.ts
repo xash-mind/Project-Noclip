@@ -207,6 +207,20 @@ function reconcileFixturePanels(state: RendererFixtureState, visual: CellVisual)
   return resolved;
 }
 
+function canonicalFixturePanels(visual: CellVisual): Map<string, pc.Entity> {
+  const resolved = new Map<string, pc.Entity>();
+  for (const group of visual.descriptor.lightGroups) {
+    group.fixtures.forEach((_fixture, fixtureIndex) => {
+      const identity = mFluorescentFixtureIdentity(group.id, fixtureIndex);
+      const panel = entityByName(visual.root, identity.panelName);
+      if (!panel?.render) throw new Error(`Missing canonical M-F1 panel ${identity.panelName} for Gen3 Cell ${visual.descriptor.id}`);
+      panel.render.castShadows = false;
+      resolved.set(identity.id, panel);
+    });
+  }
+  return resolved;
+}
+
 function fixturePulse(group: LightGroupSpec, elapsedSeconds: number, reducedFlicker: boolean): number {
   if (group.state === 'off') return 0;
   return lightFlickerValue(group, elapsedSeconds, reducedFlicker);
@@ -314,7 +328,9 @@ function componentFor(runtime: FixtureRuntime): FixtureLightComponent | undefine
 export function attachFixtureLights(renderer: WorldRenderer, visual: CellVisual): void {
   const state = stateFor(renderer);
   const descriptor = visual.descriptor;
-  const panels = reconcileFixturePanels(state, visual);
+  const panels = descriptor.world.generationVersion === 'gen2'
+    ? reconcileFixturePanels(state, visual)
+    : canonicalFixturePanels(visual);
   let added = false;
   for (const group of descriptor.lightGroups) {
     group.fixtures.forEach((fixture, fixtureIndex) => {

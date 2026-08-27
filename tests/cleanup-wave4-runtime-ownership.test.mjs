@@ -20,7 +20,7 @@ const visibilitySource = await readFile(new URL('../src/renderer/visibility/runt
 const performanceSource = await readFile(new URL('../src/renderer/runtimePerformance.ts', import.meta.url), 'utf8');
 const outletSource = await readFile(new URL('../src/renderer/outletInteractionRuntime.ts', import.meta.url), 'utf8');
 const lifecycleSource = await readFile(new URL('../src/renderer/rendererCellLifecycle.ts', import.meta.url), 'utf8');
-const pauSource = await readFile(new URL('../src/renderer/pauFeaturePresentationPilot.ts', import.meta.url), 'utf8');
+const cellBuilderSource = await readFile(new URL('../src/renderer/cellBuilder.ts', import.meta.url), 'utf8');
 const diagnosticsSource = await readFile(new URL('../src/renderer/rendererRuntimeDiagnostics.ts', import.meta.url), 'utf8');
 
 function assignmentCount(source, pattern) {
@@ -117,15 +117,15 @@ test('interaction index and dynamic ticking membership follow explicit canonical
 test('main composition keeps out-of-scope owners while removing Wave 4 installer order', () => {
   assert.doesNotMatch(mainSource, /installRenderSettingsRuntime|installRuntimePerformance|installVisibilityParticipationRuntime|installOutletInteractionRuntime/);
   assert.match(mainSource, /installRendererCellLifecycle\(\)/);
-  assert.match(mainSource, /installPauFeaturePresentationPilot\(\)/);
+  assert.doesNotMatch(mainSource, /installPauFeaturePresentationPilot/);
+  assert.match(cellBuilderSource, /addLevel0PilotFeaturePresentation/);
+  assert.match(cellBuilderSource, /if \(presentation\) return presentation/);
   assert.match(mainSource, /installRendererRuntimeDiagnostics\(\)/);
   assert.match(mainSource, /initializeRuntimePerformanceDiagnostics\(\)/);
 
   const lifecycleWrappers = assignmentCount(lifecycleSource, /WorldRenderer\.prototype\.(?:loadCell|unloadCell)\s*=/g);
-  const pauWrappers = assignmentCount(pauSource, /prototype\.[A-Za-z0-9_]+\s*=/g);
   const diagnosticWrappers = assignmentCount(diagnosticsSource, /prototype\.[A-Za-z0-9_]+\s*=/g);
   assert.equal(lifecycleWrappers, 2, 'Wave 1 Cell lifecycle owner must remain intact');
-  assert.equal(pauWrappers, 1, 'PAU pilot remains Wave 5 territory');
   assert.equal(diagnosticWrappers, 1, 'renderer diagnostics stays isolated and out of Wave 4 scope');
-  assert.equal(lifecycleWrappers + pauWrappers + diagnosticWrappers, 4, 'final project call-through wrapper count should be the four explicitly preserved owners');
+  assert.equal(lifecycleWrappers + diagnosticWrappers, 3, 'Wave 5 removes the PAU bridge while preserving the three legitimate call-through wrappers');
 });

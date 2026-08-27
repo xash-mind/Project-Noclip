@@ -3,8 +3,12 @@ import { createItemInstance } from '../items/factory.js';
 import { ITEM_DEFINITIONS, type ItemDefinitionId } from '../items/definitions.js';
 import type { ItemInstance } from '../items/types.js';
 import type { SaveData } from '../persistence/types.js';
+import { resolveMFluorescentPanelPresentation } from '../presentation/level0PresentationPolicy.js';
 import { CELL_SIZE, WALL_HEIGHT, type CellDescriptor, type FloorPatchSpec, type PropSpec, type WallSpec } from '../world/types.js';
 import { ZONE_PROFILES, type ZoneProfile } from '../world/zones.js';
+import { cvh1FloorSurfaceMesh } from './cvh1FloorSurface.js';
+import { M_F1_PANEL_DIMENSIONS, mFluorescentFixtureIdentity } from './fixtureVisualOwnership.js';
+import { addLevel0PilotFeaturePresentation } from './level0FeaturePresentation.js';
 import { LEVEL0_SEPARATE_BASE_TRIM } from './level0Wallpaper.js';
 import type { ObjectCatalogEntry } from './objectCatalog.js';
 import { color, type CellVisual, type ExitVisual, type InteractionVisual, type NoteVisual, type SeatVisual, type TextureKind, type WorldCollider, type WorldItemVisual } from './support.js';
@@ -78,9 +82,11 @@ export class RendererCellBuilder {
     const ceilingMat = this.getMaterial(`ceiling:${profile.id}`, profile.ceilingTint, 'ceiling', gen3 ? 0 : descriptor.ceilingPattern, [4, 4]);
     const trimMat = this.getMaterial(`trim:${profile.id}`, profile.trimTint, 'wood', gen3 ? 0 : descriptor.variant % 2, [2, 2]);
     const concrete = this.getMaterial('concrete', [0.52, 0.52, 0.47], 'concrete', descriptor.variant % 3, [2, 2]);
-    const fixtureMat = this.getMaterial(`fixture:${profile.id}`, [0.69, 0.68, 0.53], undefined, 0, [1, 1], [0.84, 0.82, 0.61], descriptor.lightFailure ? 0.03 : 1.3 * profile.lightMultiplier * descriptor.lightTemperature);
+    const fixtureMat = gen3 ? undefined : this.getMaterial(`fixture:${profile.id}`, [0.69, 0.68, 0.53], undefined, 0, [1, 1], [0.84, 0.82, 0.61], descriptor.lightFailure ? 0.03 : 1.3 * profile.lightMultiplier * descriptor.lightTemperature);
+    const holes = descriptor.floorPatches.filter((patch) => patch.kind === 'hole');
 
-    this.box('floor', root, [0, -0.12, 0], [CELL_SIZE, 0.24, CELL_SIZE], floorMat);
+    if (gen3 && holes.length > 0) this.addCvh1FloorSurface(root, holes, floorMat);
+    else this.box('floor', root, [0, -0.12, 0], [CELL_SIZE, 0.24, CELL_SIZE], floorMat);
     this.box('ceiling', root, [0, WALL_HEIGHT + 0.12, 0], [CELL_SIZE, 0.24, CELL_SIZE], ceilingMat);
 
     const colliders: WorldCollider[] = [];
@@ -109,19 +115,75 @@ export class RendererCellBuilder {
     }
 
     this.addLighting(descriptor, root, fixtureMat);
-    for (const patch of descriptor.floorPatches) this.addFloorPatch(root, patch, profile);
+    for (const patch of descriptor.floorPatches) {
+      if (gen3 && patch.kind === 'hole') this.addRecessedHole(root, patch);
+      else this.addFloorPatch(root, patch, profile);
+    }
     for (const prop of descriptor.props) this.addProp(descriptor, root, prop, colliders);
     const interactions = this.addInteractions(descriptor, root);
     return { descriptor, root, colliders, interactions };
   }
 
-  private addLighting(descriptor: CellDescriptor, root: pc.Entity, fixtureMat: pc.StandardMaterial): void {
+  private addLighting(descriptor: CellDescriptor, root: pc.Entity, fixtureMat?: pc.StandardMaterial): void {
+    if (descriptor.world.generationVersion === 'gen3-v1') {
+      for (const group of descriptor.lightGroups) {
+        const presentation = resolveMFluorescentPanelPresentation(descriptor, group.state, group.state === 'off' ? 0 : 1);
+        const panelMaterial = this.getMaterial(
+          `m-f1:${descriptor.world.regionId}:${group.state}:${presentation.pulseLevel.toFixed(4)}:${presentation.diffuse.join(',')}:${presentation.emissive?.join(',') ?? 'none'}:${presentation.emissiveIntensity.toFixed(4)}`,
+          presentation.diffuse,
+          undefined,
+          0,
+          [1, 1],
+          presentation.emissive,
+          presentation.emissiveIntensity
+        );
+        group.fixtures.forEach((fixture, fixtureIndex) => {
+          const identity = mFluorescentFixtureIdentity(group.id, fixtureIndex);
+          this.box(
+            identity.panelName,
+            root,
+            [fixture.x, fixture.y, fixture.z],
+            [M_F1_PANEL_DIMENSIONS[0], M_F1_PANEL_DIMENSIONS[1], M_F1_PANEL_DIMENSIONS[2]],
+            panelMaterial,
+            group.rotationY
+          );
+        });
+      }
+      return;
+    }
+    if (!fixtureMat) throw new Error(`Gen2 fixture compatibility material missing for Cell ${descriptor.id}`);
     const positions = descriptor.roomArchetype.includes('corridor') || descriptor.roomArchetype === 'narrow-hall'
       ? [[0, -3.8], [0, 0], [0, 3.8]]
-      : descriptor.world.generationVersion === 'gen2' && descriptor.address.zoneId === 'pillar'
+      : descriptor.address.zoneId === 'pillar'
         ? [[-4.3, -4.3], [0, -4.3], [4.3, -4.3], [-4.3, 4.3], [0, 4.3], [4.3, 4.3]]
         : [[-3.4, -2.4], [3.4, 2.4], [-3.4, 2.4], [3.4, -2.4]];
     positions.forEach(([x, z], index) => this.box(`fixture:${index}`, root, [x!, WALL_HEIGHT - 0.08, z!], [2.2, 0.08, 0.38], fixtureMat, descriptor.ceilingPattern % 2 ? 90 : 0));
+  }
+
+  private addCvh1FloorSurface(root: pc.Entity, holes: readonly FloorPatchSpec[], floorMat: pc.StandardMaterial): void {
+    const data = cvh1FloorSurfaceMesh(holes);
+    if (data.indices.length === 0) return;
+    const mesh = new pc.Mesh(this.app.graphicsDevice);
+    mesh.setPositions(data.positions);
+    mesh.setNormals(data.normals);
+    mesh.setUvs(0, data.uvs);
+    mesh.setIndices(data.indices);
+    mesh.update();
+    const entity = new pc.Entity('cvh1-floor-surface');
+    entity.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, floorMat)] });
+    root.addChild(entity);
+  }
+
+  private addRecessedHole(root: pc.Entity, hole: FloorPatchSpec): void {
+    const voidMat = this.getMaterial('hole:void:recessed', [0.002, 0.002, 0.001]);
+    const sideMat = this.getMaterial('hole:side:recessed', [0.006, 0.006, 0.004]);
+    const x = hole.position.x; const z = hole.position.z; const sx = hole.scale.x; const sz = hole.scale.z;
+    this.box(`${hole.id}:depth`, root, [x, -4.6, z], [sx * 0.94, 0.04, sz * 0.94], voidMat);
+    const sideDepth = 4.5; const sideY = -sideDepth / 2; const edge = 0.035;
+    this.box(`${hole.id}:north-side`, root, [x, sideY, z - sz / 2], [sx, sideDepth, edge], sideMat);
+    this.box(`${hole.id}:south-side`, root, [x, sideY, z + sz / 2], [sx, sideDepth, edge], sideMat);
+    this.box(`${hole.id}:west-side`, root, [x - sx / 2, sideY, z], [edge, sideDepth, sz], sideMat);
+    this.box(`${hole.id}:east-side`, root, [x + sx / 2, sideY, z], [edge, sideDepth, sz], sideMat);
   }
 
   private addFloorPatch(root: pc.Entity, patch: FloorPatchSpec, profile: ZoneProfile): void {
@@ -280,6 +342,8 @@ export class RendererCellBuilder {
   }
 
   private addPropGeometry(parent: pc.Entity, prop: PropSpec, profile: ZoneProfile): pc.Entity {
+    const presentation = addLevel0PilotFeaturePresentation(parent, prop, { app: this.app, getMaterial: this.getMaterial, box: this.box });
+    if (presentation) return presentation;
     const container = new pc.Entity(prop.id);
     container.setLocalPosition(prop.position.x, prop.position.y, prop.position.z);
     if (prop.rotationY) container.setLocalEulerAngles(0, prop.rotationY, 0);

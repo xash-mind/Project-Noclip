@@ -21,6 +21,7 @@ const casingSource = await readFile(new URL('../src/renderer/ordinaryCasingMater
 const fixtureSource = await readFile(new URL('../src/renderer/fixtureLighting.ts', import.meta.url), 'utf8');
 const fixtureVisualSource = await readFile(new URL('../src/renderer/fixtureVisualOwnership.ts', import.meta.url), 'utf8');
 const worldRendererSource = await readFile(new URL('../src/renderer/WorldRenderer.ts', import.meta.url), 'utf8');
+const cellBuilderSource = await readFile(new URL('../src/renderer/cellBuilder.ts', import.meta.url), 'utf8');
 
 function descriptor(regionId, conditionIds = []) {
   return {
@@ -116,7 +117,7 @@ test('Wave 3 policy and Wave 4 renderer now converge on one M-F1 visible-panel o
   assert.equal(off.emissiveIntensity, 0);
 
   assert.match(policySource, /FLUORESCENT_PANEL_TARGET = 'material\.fluorescent-panel'/);
-  assert.match(worldRendererSource, /resolveMFluorescentPanelPresentation/);
+  assert.match(cellBuilderSource, /resolveMFluorescentPanelPresentation/);
   assert.match(fixtureSource, /resolveMFluorescentPanelPresentation/);
   assert.match(fixtureVisualSource, /M_F1_PANEL_DIMENSIONS = Object\.freeze\(\[2\.2, 0\.08, 0\.38\]/);
   assert.match(fixtureVisualSource, /mFluorescentFixtureIdentity/);
