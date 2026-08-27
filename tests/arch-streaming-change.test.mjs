@@ -152,7 +152,7 @@ test('streaming scheduler predicts into only the existing retention ring and bud
   assert.match(streamingPolicySource, /unloadGraceMs: 1200/);
   assert.match(streamingPolicySource, /const retentionRadius = loadRadius \+ STREAMING_SCHEDULER_PROFILE\.predictiveExtraRings/);
   assert.match(streamingPolicySource, /for \(let offset = -loadRadius; offset <= loadRadius; offset \+= 1\)/);
-  assert.match(streamingSource, /processOneJob\(this\)/);
+  assert.match(streamingSource, /processOneJob\(game\)/);
   assert.equal(streamingSource.includes("enqueue(scheduler, 'refresh', x, z"), false);
   assert.match(streamingSource, /visual\.root\.enabled = false/);
 });
