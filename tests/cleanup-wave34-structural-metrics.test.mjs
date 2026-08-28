@@ -12,7 +12,6 @@ const files = {
   streamingScheduler: await readFile(new URL('../src/renderer/streamingScheduler.ts', import.meta.url), 'utf8'),
   visibilityRuntime: await readFile(new URL('../src/renderer/visibility/runtime.ts', import.meta.url), 'utf8'),
   outletRuntime: await readFile(new URL('../src/renderer/outletInteractionRuntime.ts', import.meta.url), 'utf8'),
-  pauPilot: await readFile(new URL('../src/renderer/pauFeaturePresentationPilot.ts', import.meta.url), 'utf8'),
   diagnostics: await readFile(new URL('../src/renderer/rendererRuntimeDiagnostics.ts', import.meta.url), 'utf8'),
   presentationPolicy: await readFile(new URL('../src/presentation/level0PresentationPolicy.ts', import.meta.url), 'utf8'),
   presentationMaterials: await readFile(new URL('../src/renderer/level0PresentationMaterials.ts', import.meta.url), 'utf8'),
@@ -45,9 +44,8 @@ test('integrated Wave 3 + 4 structural metrics stay at accepted ownership counts
   const callThroughWrappers =
     matches(files.lifecycle, /const baseLoadCell = WorldRenderer\.prototype\.loadCell/g).length
     + matches(files.lifecycle, /const baseUnloadCell = WorldRenderer\.prototype\.unloadCell/g).length
-    + matches(files.pauPilot, /const original = prototype\.addPropGeometry/g).length
     + matches(files.diagnostics, /const originalSetupEngine = prototype\.setupEngine/g).length;
-  assert.equal(callThroughWrappers, 4);
+  assert.equal(callThroughWrappers, 3);
 
   const applicationRuntimeWrappers =
     matches(files.renderSettingsRuntime, /ProjectNoclipGame\.prototype/g).length

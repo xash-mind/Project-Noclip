@@ -15,6 +15,8 @@ const surfaceSource = await readFile(new URL('../src/renderer/level0SurfacePrese
 const regionSource = await readFile(new URL('../src/renderer/level0RegionPresentation.ts', import.meta.url), 'utf8');
 const finalSource = await readFile(new URL('../src/renderer/finalLevel0MaterialPresentation.ts', import.meta.url), 'utf8');
 const worldRendererSource = await readFile(new URL('../src/renderer/WorldRenderer.ts', import.meta.url), 'utf8');
+const cellBuilderSource = await readFile(new URL('../src/renderer/cellBuilder.ts', import.meta.url), 'utf8');
+const cvh1Source = await readFile(new URL('../src/renderer/cvh1FloorSurface.ts', import.meta.url), 'utf8');
 const fixtureSource = await readFile(new URL('../src/renderer/fixtureLighting.ts', import.meta.url), 'utf8');
 const fixtureVisualSource = await readFile(new URL('../src/renderer/fixtureVisualOwnership.ts', import.meta.url), 'utf8');
 const appSource = await readFile(new URL('../src/app/ProjectNoclipGame.ts', import.meta.url), 'utf8');
@@ -53,8 +55,10 @@ test('Wave 3 canonical Level 0 policy survives Wave 4 runtime integration', () =
   assert.match(regionSource, /bindLevel0ArchFinishRole/);
   assert.match(finalSource, /level0ArchFinishRoleForEntity/);
   assert.match(regionSource, /cvh1DepthMaterial/);
-  assert.match(worldRendererSource, /inheritedFloorMaterial/);
-  assert.match(worldRendererSource, /cvh1-floor-surface/);
+  assert.match(cellBuilderSource, /addCvh1FloorSurface/);
+  assert.match(cellBuilderSource, /cvh1-floor-surface/);
+  assert.match(cvh1Source, /export function cvh1FloorSurfaceMesh/);
+  assert.doesNotMatch(worldRendererSource, /inheritedFloorMaterial/);
 });
 
 test('M-F1 has one visible-panel policy owner and one shared fixture identity', () => {
@@ -75,9 +79,9 @@ test('M-F1 has one visible-panel policy owner and one shared fixture identity', 
   assert.equal(surfaceSource.includes('material.fluorescent-panel'), false);
   assert.equal(worldRendererSource.includes('material.fluorescent-panel'), false);
   assert.equal(fixtureSource.includes('material.fluorescent-panel'), false);
-  assert.match(worldRendererSource, /resolveMFluorescentPanelPresentation/);
+  assert.match(cellBuilderSource, /resolveMFluorescentPanelPresentation/);
   assert.match(fixtureSource, /resolveMFluorescentPanelPresentation/);
-  assert.match(worldRendererSource, /mFluorescentFixtureIdentity/);
+  assert.match(cellBuilderSource, /mFluorescentFixtureIdentity/);
   assert.match(fixtureSource, /mFluorescentFixtureIdentity/);
   assert.match(fixtureVisualSource, /M_F1_PANEL_DIMENSIONS = Object\.freeze\(\[2\.2, 0\.08, 0\.38\]/);
 });

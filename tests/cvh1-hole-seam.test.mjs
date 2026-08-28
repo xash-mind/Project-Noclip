@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-const { cvh1FloorSurfaceMesh, cvh1FloorSurfaceProfile } = await import('../.test-dist/src/renderer/WorldRenderer.js');
+const { cvh1FloorSurfaceMesh, cvh1FloorSurfaceProfile } = await import('../.test-dist/src/renderer/cvh1FloorSurface.js');
 const { canonicalLevel0CarpetUv, resolveCanonicalLevel0CarpetPresentation } = await import('../.test-dist/src/renderer/finalLevel0MaterialPresentation.js');
 const { generateCell } = await import('../.test-dist/src/world/generator.js');
 const { CELL_SIZE, DEFAULT_TUNING } = await import('../.test-dist/src/world/types.js');

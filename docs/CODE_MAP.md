@@ -236,7 +236,7 @@ hydrated feature registry
   -> src/presentation/level0FeatureRepresentations.ts
 renderer adapter
   -> src/renderer/level0FeaturePresentation.ts
-  -> src/renderer/pauFeaturePresentationPilot.ts
+  -> src/renderer/cellBuilder.ts direct Representation dispatch
 ```
 
 ## Level 0 visual material authoring
@@ -309,7 +309,8 @@ M-F1 visible panel
   canonical appearance     -> src/presentation/level0PresentationPolicy.ts
   canonical visual identity / dimensions
                             -> src/renderer/fixtureVisualOwnership.ts
-  base panel realization   -> src/renderer/WorldRenderer.ts consuming canonical policy
+  base panel realization   -> src/renderer/cellBuilder.ts for Gen3 consuming canonical policy
+  Gen2 visual compatibility -> src/renderer/WorldRenderer.ts frozen replacement path
   steady/flicker panel update
                             -> src/renderer/fixtureLighting.ts consuming canonical policy
   physical Omni/shadows    -> src/renderer/fixtureLighting.ts
@@ -482,7 +483,9 @@ Current NAL v1 can satisfy mesh/image Avatar slots. Humanoid animation clips req
 
 ```text
 Carver decision         -> src/world/gen3.ts / src/world/generator.ts
-Floor reconstruction   -> src/renderer/WorldRenderer.ts
+Gen3 floor construction-> src/renderer/cellBuilder.ts
+Indexed floor mesh basis -> src/renderer/cvh1FloorSurface.ts
+Gen2 floor compatibility -> src/renderer/WorldRenderer.ts
 M-C1 surviving carpet  -> src/presentation/level0PresentationPolicy.ts
 Depth palette policy   -> src/presentation/level0PresentationPolicy.ts
 Depth geometry         -> src/renderer/level0RegionPresentation.ts
@@ -500,7 +503,7 @@ pressure/resolution -> src/world/fields.ts + src/world/gen3.ts
 fixture/world law   -> src/world/lighting.ts
 visible M-F1 panel  -> src/presentation/level0PresentationPolicy.ts
 physical lights     -> src/renderer/fixtureLighting.ts
-runtime render      -> src/app/ProjectNoclipGame.ts + src/renderer/blackoutRendering.ts
+runtime render      -> src/app/ProjectNoclipGame.ts + src/renderer/renderSettingsRuntime.ts
 ```
 
 C-B1 remains read-only in Studio. Cleanup does not turn Blackout world law into material sliders, and Blackout continues to suppress local fixture generation/light work exactly as accepted.

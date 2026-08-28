@@ -4,6 +4,7 @@ import { resolveCircleAgainstAabbs } from '../physics/collision.js';
 import { resolveMFluorescentPanelPresentation } from '../presentation/level0PresentationPolicy.js';
 import { sampleLightField, type LightFieldSample } from '../world/lighting.js';
 import { CELL_SIZE, type CellDescriptor, type FloorPatchSpec } from '../world/types.js';
+import { cvh1FloorSurfaceMesh } from './cvh1FloorSurface.js';
 import { ZONE_PROFILES } from '../world/zones.js';
 import { M_F1_PANEL_DIMENSIONS, mFluorescentFixtureIdentity } from './fixtureVisualOwnership.js';
 import { registerObjectCatalogShowcaseHost, type ObjectCatalogEntry } from './objectCatalog.js';
@@ -23,118 +24,8 @@ import { canvasTexture, makeMaterial, markWorldPoint, clamp01, rayAabb, type Cel
 import { RendererCellBuilder } from './cellBuilder.js';
 export type { InteractionVisual, WorldItemVisual } from './support.js';
 
-export interface Cvh1FloorSurfaceMeshData {
-  positions: number[];
-  normals: number[];
-  uvs: number[];
-  indices: number[];
-  visibleArea: number;
-}
-
-export interface Cvh1FloorSurfaceProfile {
-  strategy: 'single-indexed-planar-mesh';
-  topY: number;
-  carpetRepeatMeters: number;
-  renderEntitiesPerHoleCell: 1;
-  internalSideFaces: false;
-  handoffGeometry: false;
-}
-
-interface Cvh1HoleBounds {
-  minX: number;
-  maxX: number;
-  minZ: number;
-  maxZ: number;
-}
-
-const CVH1_FLOOR_TOP_Y = 0;
-const CVH1_CARPET_REPEAT_METERS = CELL_SIZE / 5;
-
 function runtimeNow(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
-}
-
-function cvh1HoleBounds(hole: FloorPatchSpec): Cvh1HoleBounds {
-  const half = CELL_SIZE / 2;
-  return {
-    minX: Math.max(-half, hole.position.x - hole.scale.x / 2),
-    maxX: Math.min(half, hole.position.x + hole.scale.x / 2),
-    minZ: Math.max(-half, hole.position.z - hole.scale.z / 2),
-    maxZ: Math.min(half, hole.position.z + hole.scale.z / 2)
-  };
-}
-
-function cvh1PointInsideHole(x: number, z: number, holes: readonly Cvh1HoleBounds[]): boolean {
-  return holes.some((hole) => x > hole.minX && x < hole.maxX && z > hole.minZ && z < hole.maxZ);
-}
-
-/**
- * One watertight top surface for a CV-H1 Cell. Hole bounds are the exact
- * semantic FloorPatchSpec bounds; the internal grid exists only to triangulate
- * rectangular apertures and never becomes visible geometry of its own.
- */
-export function cvh1FloorSurfaceMesh(holes: readonly FloorPatchSpec[]): Cvh1FloorSurfaceMeshData {
-  const half = CELL_SIZE / 2;
-  const bounds = holes.map(cvh1HoleBounds);
-  const xEdges = [...new Set([-half, half, ...bounds.flatMap((hole) => [hole.minX, hole.maxX])])].sort((a, b) => a - b);
-  const zEdges = [...new Set([-half, half, ...bounds.flatMap((hole) => [hole.minZ, hole.maxZ])])].sort((a, b) => a - b);
-  const positions: number[] = [];
-  const normals: number[] = [];
-  const uvs: number[] = [];
-  const indices: number[] = [];
-  const vertices = new Map<string, number>();
-  let visibleArea = 0;
-
-  const vertex = (xIndex: number, zIndex: number): number => {
-    const key = `${xIndex}:${zIndex}`;
-    const existing = vertices.get(key);
-    if (existing !== undefined) return existing;
-    const x = xEdges[xIndex]!;
-    const z = zEdges[zIndex]!;
-    const index = positions.length / 3;
-    positions.push(x, CVH1_FLOOR_TOP_Y, z);
-    normals.push(0, 1, 0);
-    // The mesh owns only a stable five-repeat UV basis. The canonical M-C1
-    // material owner scales that basis to the Region floor's real pattern size
-    // and world phase, so CV-H1 never owns carpet treatment or frequency.
-    uvs.push((x + half) / CVH1_CARPET_REPEAT_METERS, (z + half) / CVH1_CARPET_REPEAT_METERS);
-    vertices.set(key, index);
-    return index;
-  };
-
-  for (let zIndex = 1; zIndex < zEdges.length; zIndex += 1) {
-    const minZ = zEdges[zIndex - 1]!;
-    const maxZ = zEdges[zIndex]!;
-    if (maxZ - minZ <= 0.000001) continue;
-    for (let xIndex = 1; xIndex < xEdges.length; xIndex += 1) {
-      const minX = xEdges[xIndex - 1]!;
-      const maxX = xEdges[xIndex]!;
-      if (maxX - minX <= 0.000001) continue;
-      const centerX = (minX + maxX) / 2;
-      const centerZ = (minZ + maxZ) / 2;
-      if (cvh1PointInsideHole(centerX, centerZ, bounds)) continue;
-
-      const southwest = vertex(xIndex - 1, zIndex - 1);
-      const northwest = vertex(xIndex - 1, zIndex);
-      const northeast = vertex(xIndex, zIndex);
-      const southeast = vertex(xIndex, zIndex - 1);
-      indices.push(southwest, northwest, northeast, southwest, northeast, southeast);
-      visibleArea += (maxX - minX) * (maxZ - minZ);
-    }
-  }
-
-  return { positions, normals, uvs, indices, visibleArea };
-}
-
-export function cvh1FloorSurfaceProfile(): Cvh1FloorSurfaceProfile {
-  return {
-    strategy: 'single-indexed-planar-mesh',
-    topY: CVH1_FLOOR_TOP_Y,
-    carpetRepeatMeters: CVH1_CARPET_REPEAT_METERS,
-    renderEntitiesPerHoleCell: 1,
-    internalSideFaces: false,
-    handoffGeometry: false
-  };
 }
 
 export class WorldRenderer {
@@ -191,8 +82,10 @@ export class WorldRenderer {
   loadCell(descriptor: CellDescriptor): void {
     if (this.loaded.has(descriptor.id)) return;
     const visual = this.cellBuilder.buildCell(descriptor);
-    this.replaceFixtureMeshes(visual);
-    if (descriptor.floorPatches.some((patch) => patch.kind === 'hole')) this.replaceHoleFloor(visual);
+    if (descriptor.world.generationVersion === 'gen2') {
+      this.replaceLegacyFixtureMeshes(visual);
+      if (descriptor.floorPatches.some((patch) => patch.kind === 'hole')) this.replaceLegacyHoleFloor(visual);
+    }
     this.loaded.set(descriptor.id, visual);
     this.renderMarksForCell(descriptor.id);
   }
@@ -269,7 +162,7 @@ export class WorldRenderer {
     return entries.length;
   }
 
-  private replaceFixtureMeshes(visual: CellVisual): void {
+  private replaceLegacyFixtureMeshes(visual: CellVisual): void {
     const descriptor = visual.descriptor;
     const rootNode = visual.root as pc.Entity & { children?: pc.Entity[] };
     for (const child of [...(rootNode.children ?? [])]) {
@@ -301,7 +194,7 @@ export class WorldRenderer {
     }
   }
 
-  private replaceHoleFloor(visual: CellVisual): void {
+  private replaceLegacyHoleFloor(visual: CellVisual): void {
     const descriptor = visual.descriptor;
     const holes = descriptor.floorPatches.filter((patch) => patch.kind === 'hole');
     if (holes.length === 0) return;
@@ -309,21 +202,12 @@ export class WorldRenderer {
       `${hole.id}:void`, `${hole.id}:north-rim`, `${hole.id}:south-rim`, `${hole.id}:west-rim`, `${hole.id}:east-rim`
     ])]);
     const rootNode = visual.root as pc.Entity & { children?: pc.Entity[] };
-    const children = [...(rootNode.children ?? [])];
-    const gen3 = descriptor.world.generationVersion === 'gen3-v1';
-    const inheritedFloorMaterial = gen3
-      ? children.find((child) => (child as pc.Entity & { name?: string }).name === 'floor')?.render?.material
-      : undefined;
-    if (gen3 && !inheritedFloorMaterial) throw new Error(`CV-H1 Cell ${descriptor.id} is missing its Region-owned base floor material`);
-    for (const child of children) {
+    for (const child of [...(rootNode.children ?? [])]) {
       const name = (child as pc.Entity & { name?: string }).name;
       if (name && (removableNames.has(name) || name.startsWith('floor-piece:') || name === 'cvh1-floor-surface')) child.destroy();
     }
-
     const legacyProfile = ZONE_PROFILES[descriptor.address.zoneId];
-    const floorMat = gen3
-      ? inheritedFloorMaterial as pc.StandardMaterial
-      : this.getMaterial(`floor:${legacyProfile.id}:cvh1-coherent`, legacyProfile.floorTint, 'carpet', descriptor.variant % 3, [1, 1]);
+    const floorMat = this.getMaterial(`floor:${legacyProfile.id}:cvh1-coherent`, legacyProfile.floorTint, 'carpet', descriptor.variant % 3, [1, 1]);
     this.addCvh1FloorSurface(visual.root, holes, floorMat);
     for (const hole of holes) this.addRecessedHole(visual.root, hole, legacyProfile.floorTint);
   }

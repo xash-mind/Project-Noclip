@@ -3,7 +3,6 @@ import { ProjectNoclipGame } from './app/ProjectNoclipGame.js';
 import { installFixtureLighting } from './renderer/fixtureLighting.js';
 import { prepareOrdinaryWallpaperAssets } from './renderer/ordinaryWallpaperAssets.js';
 import { initializeRenderSettingsRuntime } from './renderer/renderSettingsRuntime.js';
-import { installPauFeaturePresentationPilot } from './renderer/pauFeaturePresentationPilot.js';
 import { installRendererCellLifecycle } from './renderer/rendererCellLifecycle.js';
 import { installStaticWorldBatching } from './renderer/StaticWorldBatching.js';
 import { installRendererRuntimeDiagnostics } from './renderer/rendererRuntimeDiagnostics.js';
@@ -13,7 +12,6 @@ import { installRegionDepthLab } from './ui/regionDepthLab.js';
 import { installRenderSettingsLab } from './ui/renderSettingsLab.js';
 
 initializeRenderSettingsRuntime();
-installPauFeaturePresentationPilot();
 installFixtureLighting();
 installStaticWorldBatching();
 initializeRuntimePerformanceDiagnostics();

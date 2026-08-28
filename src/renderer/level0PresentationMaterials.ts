@@ -9,7 +9,8 @@ import {
   type Level0ArchFinishRole
 } from '../presentation/level0PresentationPolicy.js';
 import { derivedPresentationTexture } from './presentationImageTextures.js';
-import { cvh1FloorSurfaceProfile, WorldRenderer } from './WorldRenderer.js';
+import { cvh1FloorSurfaceProfile } from './cvh1FloorSurface.js';
+import { WorldRenderer } from './WorldRenderer.js';
 import { canvasTexture, makeMaterial, type CellVisual } from './support.js';
 
 interface RendererAccess { app: pc.Application; }

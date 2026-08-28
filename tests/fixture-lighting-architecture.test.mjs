@@ -80,7 +80,10 @@ test('M-F1 panel ownership resolves the real visible panel and keeps it out of t
   assert.equal(findMFluorescentPanelVisualIndex(currentCellBuilderPanels, -3.4, 2.4), 2);
   assert.equal(findMFluorescentPanelVisualIndex(currentCellBuilderPanels, 4.3, 4.3), -1);
 
-  assert.ok(fixtureLightingSource.includes('const panels = reconcileFixturePanels(state, visual)'));
+  assert.ok(fixtureLightingSource.includes("descriptor.world.generationVersion === 'gen2'"));
+  assert.ok(fixtureLightingSource.includes('reconcileFixturePanels(state, visual)'));
+  assert.ok(fixtureLightingSource.includes('canonicalFixturePanels(visual)'));
+  assert.ok(fixtureLightingSource.includes('Missing canonical M-F1 panel'));
   assert.ok(fixtureLightingSource.includes('const panel = matched ?? addFixturePanelVisual'));
   assert.ok(fixtureLightingSource.includes('const identity = mFluorescentFixtureIdentity(group.id, fixtureIndex)'));
   assert.ok(fixtureLightingSource.includes('panel.name = identity.panelName'));
@@ -132,6 +135,7 @@ test('generated Blackout cells still own no M-F1 light groups', () => {
   assert.equal(cell.world.blackoutStrength, 1);
   assert.ok(fixtureLightingSource.includes('for (const candidate of available)'));
   assert.ok(fixtureLightingSource.includes('candidate.destroy()'));
+  assert.ok(fixtureLightingSource.includes("descriptor.world.generationVersion === 'gen2'"));
 });
 
 test('eye adaptation stays bounded and recovers from light much faster than darkness', () => {
