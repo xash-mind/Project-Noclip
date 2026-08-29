@@ -137,7 +137,7 @@ export class WorldRenderer {
       wrapper.setLocalScale(scale, scale, scale);
       wrapper.setLocalEulerAngles(0, 180, 0);
       root.addChild(wrapper);
-      this.cellBuilder.addCatalogVisual(wrapper, 0, 0);
+      this.cellBuilder.addCatalogVisual(wrapper, entry, 0, 0);
     };
 
     if (entries.length === 1) {
