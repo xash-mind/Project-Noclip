@@ -1,5 +1,5 @@
 import type { ProjectNoclipGame } from '../app/ProjectNoclipGame.js';
-import { ordinaryWallpaperPresentationDiagnostics } from '../renderer/ordinaryWallpaperPresentation.js';
+import { ordinaryWallpaperPresentationDiagnostics } from '../renderer/level0WallpaperPresentation.js';
 import {
   applyRenderPreset,
   getRenderSettings,
