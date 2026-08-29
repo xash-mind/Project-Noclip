@@ -93,7 +93,7 @@ def run_one(
         result = profiler.scenario(
             driver,
             name,
-            SAMPLE_SECONDS,
+            seconds=SAMPLE_SECONDS,
             running=running,
             turning=turning,
         )
