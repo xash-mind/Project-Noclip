@@ -22,7 +22,7 @@ test('A-A1 has one world-domain structural-role and collision-intent owner', () 
   assert.ok(surfaceSource.includes("from '../world/gen3ArchDividerSemantics.js'"));
 });
 
-test('A-A1 gameplay collision is descriptor-driven and no longer renderer-name-derived', () => {
+test('A-A1 gameplay collision is descriptor-driven and never renderer-name-derived', () => {
   assert.ok(collisionSource.includes('archFrameBaysForDescriptors'));
   assert.ok(collisionSource.includes('archLowerPanelWorldVolumeForCell'));
   assert.ok(collisionSource.includes('renderer.walls.set(collider.id, collider)'));
@@ -30,12 +30,12 @@ test('A-A1 gameplay collision is descriptor-driven and no longer renderer-name-d
   for (const forbidden of ['entity.name', 'getLocalPosition', 'getLocalScale', 'childrenOf(', 'render.enabled']) {
     assert.equal(collisionSource.includes(forbidden), false, `collision retained renderer dependency: ${forbidden}`);
   }
-  assert.equal(collisionSource.includes('queueMicrotask'), false);
+  assert.equal(collisionSource.includes('scheduleNearbyArchCollisionReconciliation'), false);
 });
 
 test('A-A1 canonical collision is composed synchronously before derived-index registration', () => {
-  const collision = lifecycleSource.indexOf('realizeNearbyArchCollision(this, descriptor)');
-  const register = lifecycleSource.indexOf('registerRuntimeCellState(this, descriptor)');
+  const collision = lifecycleSource.indexOf('realizeNearbyArchCollision(renderer, descriptor)');
+  const register = lifecycleSource.indexOf('registerRuntimeCellState(renderer, descriptor)');
   assert.ok(collision >= 0 && register > collision);
   assert.ok(lifecycleSource.includes('refreshRuntimeCellCollisionState'));
   assert.equal(lifecycleSource.includes('scheduleNearbyArchCollisionReconciliation'), false);
