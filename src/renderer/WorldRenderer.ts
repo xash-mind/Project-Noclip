@@ -22,6 +22,7 @@ import {
 import { movementCollisionQueryBounds } from './runtimeSpatialIndex.js';
 import { canvasTexture, makeMaterial, markWorldPoint, clamp01, rayAabb, type CellVisual, type InteractionVisual, type TextureKind, type WorldItemVisual, type WorldWall } from './support.js';
 import { RendererCellBuilder } from './cellBuilder.js';
+import { runRendererCellLoadLifecycle, runRendererCellUnloadLifecycle } from './rendererCellLifecycle.js';
 export type { InteractionVisual, WorldItemVisual } from './support.js';
 
 function runtimeNow(): number {
@@ -80,6 +81,10 @@ export class WorldRenderer {
   }
 
   loadCell(descriptor: CellDescriptor): void {
+    runRendererCellLoadLifecycle(this, descriptor, () => this.realizeBaseCell(descriptor));
+  }
+
+  private realizeBaseCell(descriptor: CellDescriptor): void {
     if (this.loaded.has(descriptor.id)) return;
     const visual = this.cellBuilder.buildCell(descriptor);
     if (descriptor.world.generationVersion === 'gen2') {
@@ -91,6 +96,10 @@ export class WorldRenderer {
   }
 
   unloadCell(cellId: string): void {
+    runRendererCellUnloadLifecycle(this, cellId, () => this.destroyBaseCell(cellId));
+  }
+
+  private destroyBaseCell(cellId: string): void {
     const visual = this.loaded.get(cellId); if (!visual) return;
     for (const collider of visual.colliders) this.walls.delete(collider.id);
     for (const interaction of visual.interactions) this.interactions.delete(interaction.id);
@@ -128,7 +137,7 @@ export class WorldRenderer {
       wrapper.setLocalScale(scale, scale, scale);
       wrapper.setLocalEulerAngles(0, 180, 0);
       root.addChild(wrapper);
-      this.cellBuilder.addCatalogVisual(wrapper, entry, 0, 0);
+      this.cellBuilder.addCatalogVisual(wrapper, 0, 0);
     };
 
     if (entries.length === 1) {
