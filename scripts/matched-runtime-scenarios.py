@@ -85,6 +85,8 @@ def run_one(
     turning: bool = False,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     driver = profiler.build_driver()
+    driver.set_page_load_timeout(60)
+    driver.set_script_timeout(max(120.0, SAMPLE_SECONDS + 60.0))
     locate_evidence: list[dict[str, Any]] = []
     try:
         deterministic_startup(driver)
