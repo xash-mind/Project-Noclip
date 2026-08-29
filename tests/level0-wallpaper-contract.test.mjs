@@ -18,7 +18,7 @@ const {
 
 const sourceDefinitions = JSON.parse(await readFile(new URL('../assets/definitions/library.json', import.meta.url), 'utf8'));
 const materialDefinitions = JSON.parse(await readFile(new URL('../src/presentation/definitions/level0-materials.json', import.meta.url), 'utf8'));
-const presentationSource = await readFile(new URL('../src/renderer/ordinaryWallpaperPresentation.ts', import.meta.url), 'utf8');
+const presentationSource = await readFile(new URL('../src/renderer/level0WallpaperPresentation.ts', import.meta.url), 'utf8');
 const surfaceSource = await readFile(new URL('../src/renderer/level0SurfacePresentation.ts', import.meta.url), 'utf8');
 const assetSource = await readFile(new URL('../src/renderer/ordinaryWallpaperAssets.ts', import.meta.url), 'utf8');
 const imagePipelineSource = await readFile(new URL('../src/renderer/presentationImageTextures.ts', import.meta.url), 'utf8');
@@ -26,6 +26,7 @@ const casingSource = await readFile(new URL('../src/renderer/ordinaryCasingMater
 const interactionSource = await readFile(new URL('../src/renderer/outletInteractionRuntime.ts', import.meta.url), 'utf8');
 const gameSource = await readFile(new URL('../src/app/ProjectNoclipGame.ts', import.meta.url), 'utf8');
 const lifecycleSource = await readFile(new URL('../src/renderer/rendererCellLifecycle.ts', import.meta.url), 'utf8');
+const rendererSource = await readFile(new URL('../src/renderer/WorldRenderer.ts', import.meta.url), 'utf8');
 const mainSource = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
 
 function wall(id, cx = 0, cz = 0, orientation = 'z', sx = 6, sz = 6) {
@@ -151,7 +152,7 @@ test('three uploaded-source wallpaper derivatives are registered through NAL', (
   }
 });
 
-test('real NAL bytes preload and one surface lifecycle owns final supplied wall finishes', () => {
+test('real NAL bytes preload and one Level 0 surface lifecycle owns supplied wall finishes', () => {
   assert.doesNotMatch(presentationSource, /paintLevel0ChevronWallpaper|fallbackCanvas/);
   assert.match(presentationSource, /function wallpaperAsset\(family/);
   assert.match(presentationSource, /materialAssetId\(TARGET, SLOT_BY_FAMILY\[family\]\)/);
@@ -173,18 +174,18 @@ test('real NAL bytes preload and one surface lifecycle owns final supplied wall 
     'interactive game construction must be gated behind verified wallpaper preload'
   );
 
-  assert.match(surfaceSource, /import \{ applyLevel0WallpaperPresentation \} from '\.\/ordinaryWallpaperPresentation\.js'/);
+  assert.match(surfaceSource, /import \{ applyLevel0WallpaperPresentation \} from '\.\/level0WallpaperPresentation\.js'/);
   assert.match(surfaceSource, /applyLevel0WallpaperPresentation\(renderer, visual\)/);
   assert.match(presentationSource, /export function applyLevel0WallpaperPresentation/);
   assert.doesNotMatch(presentationSource, /installOrdinaryWallpaperPresentation|patchedOrdinaryWallpaperLoad/);
   assert.doesNotMatch(mainSource, /installOrdinaryWallpaperPresentation/);
-  const surfaceStep = lifecycleSource.indexOf('applyLevel0SurfacePresentation(this, visual)');
-  const casingStep = lifecycleSource.indexOf('applyOrdinaryCasingMaterialPresentation(this, descriptor)');
+  const surfaceStep = lifecycleSource.indexOf('applyLevel0SurfacePresentation(renderer, visual)');
+  const casingStep = lifecycleSource.indexOf('applyOrdinaryCasingMaterialPresentation(renderer, descriptor)');
   const batchingStep = lifecycleSource.indexOf('markStaticWorldBatchingDirty()');
   assert.ok(surfaceStep >= 0 && casingStep > surfaceStep, 'casing must follow the single Level 0 surface/wallpaper lifecycle');
   assert.ok(batchingStep > casingStep, 'static batching must observe completed wallpaper/casing Cell presentation');
-  assert.match(mainSource, /installRendererCellLifecycle\(\)/);
-  assert.doesNotMatch(mainSource, /installLevel0SurfacePresentation|installOrdinaryCasingMaterialPresentation/);
+  assert.match(rendererSource, /runRendererCellLoadLifecycle\(this, descriptor/);
+  assert.doesNotMatch(mainSource, /installRendererCellLifecycle|installLevel0SurfacePresentation|installOrdinaryCasingMaterialPresentation/);
 });
 
 test('wallpaper finish keeps unsplit geometry and delegates the entire A-A1 divider to the pale Arch owner', () => {
