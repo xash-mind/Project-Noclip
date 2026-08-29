@@ -58,8 +58,8 @@ test('every active M-F1 Omni retains its own shadow while its luminous diffuser 
   assert.ok(fixtureLightingSource.includes('FIXTURE_EMITTER_CLEARANCE'));
   assert.ok(fixtureLightingSource.includes('markFixtureShadowsDirtyNearCell'));
   assert.equal(fixtureLightingSource.includes('markFixtureShadowsDirty(state)'), false);
-  assert.ok(lifecycleSource.includes('attachFixtureLights(this, visual)'));
-  assert.ok(lifecycleSource.includes('detachCellFixtures(this, cellId, descriptor)'));
+  assert.ok(lifecycleSource.includes('attachFixtureLights(renderer, visual)'));
+  assert.ok(lifecycleSource.includes('detachCellFixtures(renderer, cellId, descriptor)'));
   assert.equal(fixtureLightingSource.includes('WorldRenderer.prototype.loadCell'), false);
   assert.equal(fixtureLightingSource.includes('WorldRenderer.prototype.unloadCell'), false);
   assert.equal(batchingSource.includes('installFixtureLighting'), false);
