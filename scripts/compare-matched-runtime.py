@@ -12,6 +12,7 @@ P99_LIMIT_PCT = 10.0
 MIN_MATCHED_RUNS = 5
 MIN_FRAME_SAMPLES = 10
 POSITION_TOLERANCE_METERS = 0.05
+THRESHOLD_EPSILON_PCT = 1e-9
 
 
 def load(path: Path) -> dict[str, Any]:
@@ -178,7 +179,7 @@ def main() -> None:
             candidate_values = [float(scenario_map(candidate)[name][metric]) for _, _, candidate in pairs]
             result = metric_summary(run_names, candidate_values, baseline_values)
             result["limitPct"] = limit
-            result["pass"] = result["deltaPct"] <= limit
+            result["pass"] = result["deltaPct"] <= limit + THRESHOLD_EPSILON_PCT
             metric_results[metric] = result
             if not result["pass"]:
                 regressions.append({"scenario": name, "metric": metric, **result})
