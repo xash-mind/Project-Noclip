@@ -13,7 +13,7 @@ const rendererSource = await readFile(new URL('../src/renderer/WorldRenderer.ts'
 const fixtureSource = await readFile(new URL('../src/renderer/fixtureLighting.ts', import.meta.url), 'utf8');
 const mainSource = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
 
-test('Wave 5 names the frozen persisted Generation boundary without changing supported values', () => {
+test('frozen persisted Generation boundary preserves supported values', () => {
   assert.equal(generationVersionFromPersisted(undefined), 'gen2');
   assert.equal(generationVersionFromPersisted('gen2'), 'gen2');
   assert.equal(generationVersionFromPersisted('gen3-v1'), 'gen3-v1');
