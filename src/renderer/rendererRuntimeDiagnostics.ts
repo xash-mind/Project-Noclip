@@ -227,7 +227,7 @@ function attach(game: ProjectNoclipGame): void {
   const canvas = (graphicsDevice as { canvas: HTMLCanvasElement }).canvas;
   canvas.addEventListener('webglcontextlost', () => {
     captureEvent(game, 'webgl-context-lost', true);
-    showFailureState('Renderer context lost. Local Dev.8 diagnostics were captured; reload if the image does not recover.');
+    showFailureState('Renderer context lost. Local renderer diagnostics were captured; reload if the image does not recover.');
   });
   canvas.addEventListener('webglcontextrestored', () => {
     captureEvent(game, 'webgl-context-restored', true);
@@ -237,7 +237,7 @@ function attach(game: ProjectNoclipGame): void {
   const device = graphicsDevice as GraphicsDeviceEvents;
   device.on('devicelost', () => {
     captureEvent(game, 'graphics-device-lost', true);
-    showFailureState('Graphics device lost. Local Dev.8 diagnostics were captured.');
+    showFailureState('Graphics device lost. Local renderer diagnostics were captured.');
   });
   device.on('devicerestored', () => captureEvent(game, 'graphics-device-restored', true));
 

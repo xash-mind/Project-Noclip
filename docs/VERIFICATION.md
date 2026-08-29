@@ -1,206 +1,543 @@
 # Project Noclip Verification Architecture
 
-This document defines the current verification architecture. Verification evidence is intentionally split so a late browser, visual, or profiling failure does not erase already-established evidence from another category.
+This document defines the current verification and evidence architecture. Verification is split into independent lanes so one browser, visual or profiling failure does not erase evidence already established in another category.
+
+## Exact-head rule
+
+Blocking acceptance evidence counts only for the exact candidate branch-head SHA being accepted.
+
+Each GitHub Actions lane:
+
+1. records or receives the branch-head SHA;
+2. checks out that exact SHA rather than relying on a mutable branch ref;
+3. verifies `git rev-parse HEAD` where required by the lane;
+4. names uploaded evidence with the candidate SHA.
+
+A result from an earlier SHA is historical evidence only. If a fix changes the candidate SHA, all required final acceptance lanes must be re-established for the new exact head.
 
 ## Verification categories
 
-### A. Core correctness
+### A. Core Correctness
 
-Authoritative workflow: `.github/workflows/ci.yml`.
+Authoritative workflow:
 
-Core correctness is browser-independent and covers:
+```text
+.github/workflows/ci.yml
+```
 
-- presentation-definition / NAL generation;
-- Noclip Studio static validation;
-- strict TypeScript;
-- full deterministic/system tests;
-- 10,000-Cell benchmark;
-- production build;
-- production Studio security boundary.
+Current responsibilities:
 
-Core correctness must not install Selenium, launch Chromium, capture screenshots, or run expensive visual acceptance.
+```text
+verification architecture contract
+  -> python scripts/verification-contract-tests.py
 
-### B. Feature acceptance
+presentation definitions / NAL build
+  -> npm run presentation:build
 
-Authoritative workflow: `.github/workflows/feature-acceptance.yml`.
+Studio static check
+  -> npm run studio:check
 
-Independent jobs exist for:
+strict TypeScript
+  -> npm run typecheck
 
-- gameplay functional journey;
-- Character Creator;
-- Inventory UI;
-- Noclip Studio authoring.
+full deterministic/system suite
+  -> npm test
+  -> artifacts/core-correctness/test.log
 
-The Inventory UI job is deliberately present before the Inventory UI integration lands. When `scripts/inventory-ui-smoke.py` is absent it reports `SKIPPED_NOT_PRESENT`; it does not invent product behavior or fail an unrelated candidate. The Inventory UI worker can add that script without coupling its acceptance to Character Creator or Studio.
+10,000-Cell benchmark
+  -> npm run benchmark
+  -> artifacts/core-correctness/benchmark.log
 
-Studio browser acceptance builds the canonical NAL registry before launching Studio. Compatible replacement Assets are source-controlled canonical fixtures; the acceptance lane must not mistake an unbuilt generated registry for missing product capability.
+production build + Studio production security boundary
+  -> npm run build
+```
 
-### C. Visual regression
+Core Correctness owns deterministic/system correctness, static architecture contracts that belong in the Node test suite, the deterministic 10,000-Cell benchmark, production build viability and the production Studio boundary.
 
-Authoritative workflow: `.github/workflows/visual-regression.yml`.
+### B. Feature Acceptance
 
-The visual matrix independently runs current world/fidelity, wallpaper/material, CV-H1, and Blackout/flashlight-facing evidence. Matrix `fail-fast` is disabled so one visual failure cannot suppress the other visual artifacts.
+Authoritative workflow:
 
-Visual screenshots are blocking. A screenshot timeout in this workflow is still classified `HEADLESS_RENDERER_LIMITATION` when that is the cause, but the visual job remains failed because the required pixel evidence was not obtained.
+```text
+.github/workflows/feature-acceptance.yml
+```
 
-Flashlight visual acceptance must select the canonical Flashlight Item instance before issuing the use action. Merely proving that a Flashlight exists somewhere in the starter inventory is not proof that the current selected Item is the Flashlight.
+Current independent jobs:
 
-### D. Renderer / performance diagnostics
+```text
+gameplay-functional
+  -> scripts/version-smoke.py
+  -> scripts/gameplay-functional-smoke.py
 
-Authoritative workflow: `.github/workflows/renderer-diagnostics.yml`.
+character-creator
+  -> scripts/character-creator-smoke.py
 
-Two independent jobs collect:
+inventory-ui
+  -> scripts/inventory-ui-smoke.py when present on the candidate
 
-- the current renderer profile and renderer metrics;
-- the reusable runtime scenario evidence contract.
+studio-authoring
+  -> tools/studio/browser-acceptance.py
+```
 
-These jobs observe current runtime behavior only. They must not tune movement, camera/input, collision, Cell streaming/construction, StaticWorldBatching, visibility update frequency, M-F1/shadows, or renderer submission.
+Inventory UI acceptance is a current supported lane. The workflow still has an explicit `SKIPPED_NOT_PRESENT` evidence shape for a candidate that genuinely does not contain the Inventory acceptance script; candidates that contain the script run the independent Inventory job and must treat its result normally.
 
-After live Visibility participation, diagnostics must keep these concepts distinct:
+Studio authoring verifies the exact candidate commit even though its browser harness creates the disposable local branch label required by the Save-to-Project safety guard. The branch label is harness infrastructure; the checked-out commit SHA remains the acceptance identity.
 
-- `RESIDENT_CELLS`: Cells retained by streaming/cache ownership;
-- `VISIBILITY_CELLS`: Cells reached by the topology Visibility Snapshot;
-- `RENDER_PARTICIPATING_CELLS`: resident Cells enabled after visibility + safety core + hysteresis + existing prediction + fail-open fallback.
+### C. Visual Regression
 
-A historical assertion about resident Cells must continue to inspect residency. It must not be silently retargeted to renderer participation or replaced by a new magic number.
+Authoritative workflow:
 
-## Failure classification
+```text
+.github/workflows/visual-regression.yml
+```
 
-Shared constants and classification rules live in `scripts/verification_contract.py`. Browser tasks write a machine-readable `verification-result.json` through `scripts/verification-browser-runner.py`.
+Current matrix:
 
-- `PRODUCT_FAILURE`: gameplay/state assertion, deterministic mismatch, missing required geometry, renderer/browser product error, failed touch-target assertion, or another product acceptance assertion.
-- `TEST_HARNESS_FAILURE`: Python/import/type error, malformed harness invocation, driver/orchestration failure, missing required test script, acceptance-fixture/setup defect, or artifact/harness defect.
-- `HEADLESS_RENDERER_LIMITATION`: a screenshot API timeout under the headless renderer. In functional/diagnostic tasks it can coexist with a functional pass; in visual regression it remains blocking because pixels are the target.
-- `LEGACY_EXPECTATION_FAILURE`: an explicitly historical expectation that no longer describes the modern candidate, such as a hard-coded old VERSION assumption.
-- `PERFORMANCE_REGRESSION`: reserved for an explicit comparable performance threshold/baseline failure. The Dev.9.7 integration records evidence but does not invent new optimization thresholds.
+```text
+world
+  -> scripts/run-character-aware-smoke.py
+  -> scripts/visual-smoke.py
 
-Classification never converts a real failing product assertion into a pass.
+fidelity
+  -> scripts/run-character-aware-smoke.py
+  -> scripts/fidelity-smoke.py
 
-## Screenshot policy
+wallpaper
+  -> scripts/run-character-aware-smoke.py
+  -> scripts/wallpaper-presentation-smoke.py
 
-`verification-browser-runner.py` has two explicit policies:
+cvh1
+  -> scripts/run-character-aware-smoke.py
+  -> scripts/cvh1-floor-smoke.py
 
-- `blocking`: screenshot `TimeoutException` is classified `HEADLESS_RENDERER_LIMITATION` and re-raised; used by visual regression so missing pixel evidence still fails that visual task;
-- `functional-tolerant`: screenshot `TimeoutException` is recorded as `HEADLESS_RENDERER_LIMITATION` and the functional task continues; all non-screenshot task exceptions remain blocking.
+flashlight
+  -> scripts/run-character-aware-smoke.py
+  -> scripts/flashlight-smoke.py
+  -> scripts/blackout-uniformity-smoke.py
+```
 
-This permits a Character Creator journey to pass its New Game -> Creator -> Begin Journey -> Continue assertions while separately recording a SwiftShader screenshot timeout.
+The lane resolves deterministic visual targets before the browser checks. Screenshots in this category are blocking evidence, not merely diagnostic captures.
 
-## Exact-head law
+`run-character-aware-smoke.py` is a supported compatibility harness and must not be removed merely because newer browser scripts can also reach the world.
 
-Every modern workflow defines:
+### D. Renderer / Performance Diagnostics
 
-- `NOCLIP_BRANCH_HEAD_SHA = github.event.pull_request.head.sha || github.sha`;
-- `NOCLIP_PR_MERGE_SHA = github.event.pull_request.merge_commit_sha || ''`.
+Authoritative workflow:
 
-Modern workflows explicitly checkout `NOCLIP_BRANCH_HEAD_SHA`, print the checked-out SHA, and assert `git rev-parse HEAD` equals it. `PR_MERGE_SHA` is recorded only as separate context. A synthetic pull-request merge commit is never silently reported as the worker branch head.
+```text
+.github/workflows/renderer-diagnostics.yml
+```
 
-Studio browser acceptance currently requires the disposable branch label `agent/dev9-7-studio-completion` for its Save-to-Project safety guard. The feature workflow records and verifies the exact branch-head commit before and after applying that label; the commit itself is not changed.
+Current independent jobs:
 
-## VERSION law
+```text
+renderer-profile
+  -> scripts/renderer-diagnostics-smoke.py
+  -> artifacts/renderer-diagnostics/current/renderer-diagnostics.json
 
-Modern verification derives candidate VERSION from the repository `VERSION` file. Generic verification and live-visibility architecture tests do not hard-code a historical release VERSION.
+runtime-scenarios
+  -> scripts/profile-runtime-scenarios.py
+  -> artifacts/runtime-diagnostics/runtime-performance-evidence.json
+```
 
-Historical Dev.8 / Dev.9.5 workflow files that encoded branch-era assumptions are removed from the current workflow directory because their useful coverage is consolidated here and their exact historical definitions remain available in Git history.
+This lane owns comparable runtime evidence, renderer diagnostics and performance-regression classification. It does not redefine world or presentation correctness.
 
-## Browser isolation
+## Browser verification runner
 
-Modern browser work is not one Selenium chain:
+Authoritative wrapper:
 
-1. gameplay functional acceptance;
-2. Character Creator acceptance;
-3. Inventory UI acceptance when present;
-4. Studio authoring acceptance;
-5. each visual-regression task;
-6. renderer profile;
-7. runtime performance scenarios.
+```text
+scripts/verification-browser-runner.py
+```
 
-A Chrome/SwiftShader failure in one job cannot erase reports uploaded by another job. The obsolete `run-legacy-smoke-with-character-creator.py` and `run-screenshot-tolerant-smoke.py` wrappers were removed; their historical definitions remain in Git history. Modern workflows use the classified runner, and only `run-character-aware-smoke.py` remains as a narrow entry compatibility shim.
+Browser tasks declare:
 
-`run-character-aware-smoke.py` contains only the compatibility action required to enter through the current Character Creator when older visual evidence scripts still start from the New Game button. It does not alter text assertions and does not modify screenshot behavior.
+- task name;
+- verification category;
+- artifact directory;
+- screenshot policy;
+- underlying smoke script(s).
 
-## Performance evidence contract
+The wrapper exists to standardize evidence shape and failure classification. A browser harness failure is not automatically a product failure.
 
-`scripts/profile-runtime-scenarios.py` writes `runtime-performance-evidence.json` with schema version 2.
+## Failure taxonomy
 
-Top-level evidence includes:
+Every blocking failure must be captured before editing with:
 
-- exact commit SHA;
-- repository VERSION;
-- base URL/environment;
-- metric semantics;
-- per-scenario evidence;
-- Region-locate timing;
-- runtime/browser exceptions.
+- file / script;
+- test or task name;
+- exact assertion/error;
+- expected value/condition;
+- actual value/condition;
+- stack/location when available.
 
-Where observable, every scenario records:
+Then classify it as exactly one of the following.
 
-- median frame time;
-- p95 frame time;
-- p99 frame time;
-- maximum / major hitch evidence;
-- `RESIDENT_CELLS`;
-- `VISIBILITY_CELLS`;
-- `RENDER_PARTICIPATING_CELLS`;
-- legacy-distance envelope Cell count;
-- Visibility topology/snapshot/participation-decision timing;
-- fallback/invalidation diagnostics;
-- draw calls;
-- active Omnis;
-- shadowed Omnis;
-- M-F1 active/shadow invariant;
-- localized StaticWorldBatching counters;
-- renderer runtime diagnostic counters;
-- browser exceptions.
+### `PRODUCT_FAILURE`
 
-`loadedCells` and `participatingCells` remain only as compatibility aliases for old evidence readers. New analysis must use the explicit architectural labels.
+Production behavior violates the accepted product/runtime contract.
 
-The repeatable scenario IDs are:
+Examples:
 
-1. `standing-ordinary`;
-2. `sustained-running`;
-3. `rapid-camera-rotation`;
-4. `running-plus-turning`;
-5. `repeated-cell-crossings`;
-6. `pillar-field`;
-7. `arch-rooms`;
-8. `region-locate`.
+- deterministic world output changed unexpectedly;
+- collision differs from the independent oracle;
+- Character Creator or Inventory flow is functionally broken;
+- accepted visual output materially changed;
+- Studio production privilege leaked into the production build;
+- accepted M-F1 physical-light behavior changed.
 
-Headless Chromium uses SwiftShader, so absolute CI FPS is diagnostic evidence, not a physical-device FPS claim. The later complete runtime performance run should compare like-for-like scenario JSON and then apply explicit regression thresholds.
+Fix the authoritative production owner. Do not weaken the test or label the failure legacy merely because the production fix is inconvenient.
 
-## Workflow audit and disposition
+### `TEST_HARNESS_FAILURE`
 
-| Workflow at required base | Base behavior / problem | Current disposition |
-| --- | --- | --- |
-| `ci.yml` | Core checks plus Studio plus Character/mobile/desktop/CV-H1/renderer/cohesion in one long browser chain | **Consolidated** into browser-free Core Correctness; browser work moved to independent workflows |
-| `dev8-corrective-baseline.yml` | Dev.8 High traversal baseline, PR-gated against modern branches | **Removed as redundant historical workflow**; modern runtime scenarios supersede its current diagnostic role; Git history retains the original |
-| `dev8-production-spike-baseline.yml` | Dev.8 canonical production traversal spike baseline | **Removed as redundant historical workflow**; current production profiling and runtime evidence cover the ongoing role |
-| `dev9-6-integrated-browser-isolation.yml` | Good isolation direction but mixed old wrapper assumptions and duplicated CI work | **Consolidated/replaced** by `feature-acceptance.yml` plus renderer/visual workflows |
-| `presentation-recovery-exact-candidate.yml` | Exact-head concept was useful, but hard-coded Dev.9.5 VERSION and all browser/visual/profile work in one chain | **Removed as redundant historical workflow**; exact-head law is generalized in every modern workflow |
-| `production-region-locator-smoke.yml` | Production-only Region locator verification | **Retained** as production/release verification, not a generic PR correctness gate |
-| `production-smoke.yml` | Production desktop/mobile release smoke and asset evidence | **Retained** as production/release verification |
-| `profile-production.yml` | Production profiling, with a narrow PR trigger for profiler/benchmark changes | **Retained** as diagnostic/production evidence; it is not part of Core Correctness |
-| `renderer-compare.yml` | Renderer comparison mixed canonical-production availability, old Dev.8 invariants and candidate caps | **Consolidated/replaced** by `renderer-diagnostics.yml`; future baseline comparison consumes the new evidence contract |
-| `visual-coherence.yml` | Re-ran typecheck/tests/benchmark/build before visual work; mixed blocking visuals and `continue-on-error` legacy calibration | **Consolidated/replaced** by `visual-regression.yml`; core work is no longer repeated as a visual gate |
+The verifier itself cannot correctly exercise or observe the product.
 
-## Current verification matrix
+Examples:
 
-| Surface | Browser? | Screenshot role | Failure blocks that surface? | Independent evidence |
-| --- | --- | --- | --- | --- |
-| Core correctness | No | None | Yes | Yes |
-| Gameplay functional | Yes | Non-target evidence | Functional/product failures yes; screenshot timeout separately recorded | Yes |
-| Character Creator | Yes | Non-target evidence | Functional/product failures yes; screenshot timeout separately recorded | Yes |
-| Inventory UI | Yes when present | Feature-defined | Yes when present | Yes |
-| Studio authoring | Yes | Non-target evidence | Functional/product failures yes; screenshot timeout separately recorded | Yes |
-| Visual world/fidelity | Yes | Acceptance target | Yes | Yes |
-| Wallpaper/material | Yes | Acceptance target | Yes | Yes |
-| CV-H1 | Yes | Acceptance target | Yes | Yes |
-| Blackout/flashlight | Yes | Acceptance target | Yes | Yes |
-| Renderer profile | Yes | Diagnostic | Diagnostic job only | Yes |
-| Runtime performance scenarios | Yes | Diagnostic | Diagnostic job only | Yes |
-| Production release smoke | Yes | Release evidence | Production/release workflow only | Yes |
+- browser automation uses an invalid API/key;
+- preview boot orchestration is broken while production behavior is intact;
+- evidence serialization loses required output;
+- harness assumptions do not match the supported browser/runtime interface.
 
-## Product/runtime ownership
+Fix the harness. Preserve the product contract.
 
-Verification Consolidation owns workflow architecture, reports, browser-entry helpers, fixture/setup correctness and diagnostics. It does not tune product runtime behavior.
+### `LEGACY_EXPECTATION_FAILURE`
 
-Live Visibility Phase 1 is a separate runtime owner under `src/renderer/visibility/**`: streaming still owns Cell residency, while visibility composes topology output with the safety core, hysteresis, existing prediction and fail-open fallback to decide final renderer participation. PlayCanvas keeps lower-level frustum culling authority. The consolidated verification layer observes that boundary; it does not redefine it.
+Production conforms to the accepted current contract, but a test still requires a retired historical implementation mechanism or release-era shape.
+
+A legacy expectation is not permission to delete coverage. Before changing the test, answer:
+
+1. what contract was the assertion trying to protect?
+2. who owns that contract now?
+3. does production satisfy it?
+4. is the assertion only freezing a retired mechanism?
+5. does an equal-or-stronger durable behavioral/architecture assertion exist or need to be added?
+6. would changing the test reduce coverage?
+
+Only then migrate the test to the durable contract. Do not restore retired architecture to satisfy a stale assertion.
+
+### `PERFORMANCE_REGRESSION`
+
+Comparable matched evidence shows accepted performance has persistently regressed beyond the active threshold or a new repeatable hitch/scanning class has appeared.
+
+Performance failures are not converted into harness or legacy failures merely because hosted browser measurements are noisy. Noise is handled with matched repeated samples.
+
+## Behavioral vs source-shape verification
+
+Source-shape assertions are divided into four classes.
+
+### A. Behavioral contract
+
+Verify observable or deterministic behavior. Prefer this class whenever mechanism is not the product/architecture contract.
+
+Examples:
+
+- indexed collision equals the independent brute-force oracle;
+- Gen2 generation dispatch equals the frozen legacy path;
+- visual/feature browser flows pass;
+- stable presentation policy returns accepted values;
+- save/reload preserves identity and state.
+
+### B. Architecture contract
+
+Source shape is appropriate when architecture shape itself is explicitly governed.
+
+Examples:
+
+- no direct semantic runtime prototype replacement;
+- renderer Cell lifecycle is invoked directly rather than installed;
+- derived indexes do not become semantic owners;
+- targeted policy resolver ownership remains singular;
+- the retained diagnostics wrapper count stays within the documented structural contract.
+
+### C. Security / static contract
+
+Preserve source/build shape where static absence/presence is the security contract.
+
+Examples:
+
+- Studio privileged bridge is absent from the production path;
+- production boundary scan passes;
+- DEV-only authoring code is not bundled as production privilege.
+
+### D. Legacy mechanism assertion
+
+Do not preserve assertions whose only purpose is to freeze a retired mechanism.
+
+Examples:
+
+- requiring an old pilot/correction module filename;
+- requiring `queueMicrotask` as the exact spelling of a deferred stage;
+- requiring a prototype wrapper because an older release installed one;
+- requiring historical startup installer order after ownership became explicit;
+- requiring wave/release filenames as correctness.
+
+A D-class assertion may be removed or migrated only when equal-or-stronger behavioral/architecture coverage remains.
+
+## Permanent post-cleanup contract tests
+
+Cleanup-era permanent tests use durable contract names:
+
+```text
+tests/level0-cleanup-equivalence.test.mjs
+tests/renderer-cell-lifecycle-contract.test.mjs
+tests/aa1-ownership-contract.test.mjs
+tests/level0-presentation-policy-contract.test.mjs
+tests/presentation-runtime-integration-contract.test.mjs
+tests/architecture-structural-metrics.test.mjs
+tests/runtime-ownership-contract.test.mjs
+tests/gen2-compatibility-boundary.test.mjs
+tests/aa1-collision-architecture.test.mjs
+tests/level0-wallpaper-contract.test.mjs
+```
+
+Historical seed strings inside deterministic tests are not renamed merely to make source text look newer; changing seed domains or fixture identities is unnecessary churn and can obscure equivalence.
+
+## Structural architecture metrics
+
+The durable structural contract is checked by:
+
+```text
+tests/architecture-structural-metrics.test.mjs
+```
+
+Current post-cleanup targets:
+
+```text
+DIRECT_RUNTIME_PROTOTYPE_REPLACEMENTS = 0
+APPLICATION_RUNTIME_WRAPPERS          = 0
+RUNTIME_INDEX_MUTATION_WRAPPERS       = 0
+RETAINED_CALL_THROUGH_WRAPPERS        <= 2
+IMPLICIT_INSTALL_ORDER_DEPENDENCIES   = 0
+DUPLICATE_POLICY_OWNER_GROUPS         = 0
+ACTIVE_SEMANTIC_CORRECTION_LAYERS     = 0
+```
+
+The current permitted retained call-through wrapper is renderer diagnostics around engine setup. It is non-semantic instrumentation and must remain isolated from product policy/lifecycle authority.
+
+Metric definitions must not be manipulated to improve the count. Combining wrappers, hiding callbacks behind another mechanism, or introducing a generic event/plugin framework is not acceptable closure.
+
+## Renderer Cell lifecycle verification
+
+Durable lifecycle contract:
+
+```text
+tests/renderer-cell-lifecycle-contract.test.mjs
+```
+
+It verifies:
+
+- one explicit load order;
+- one explicit unload order;
+- direct `WorldRenderer` invocation of the lifecycle owner;
+- synchronous canonical A-A1 collision before derived-index registration;
+- explicit visible-Arch and final-material deferred stages;
+- no participant renderer prototype installation;
+- batching owns batching only;
+- startup does not own lifecycle through installer order.
+
+It intentionally does **not** require a particular microtask spelling when the contract is simply that a named convergence stage is deferred.
+
+## A-A1 collision verification
+
+Durable contracts include:
+
+```text
+tests/aa1-ownership-contract.test.mjs
+tests/aa1-collision-architecture.test.mjs
+```
+
+They protect:
+
+- one world-domain structural-role/collision-intent owner;
+- descriptor/bay-driven collision;
+- no renderer-name-derived gameplay collision;
+- synchronous collision realization before index registration;
+- runtime index as derived state only;
+- independent brute-force oracle equivalence elsewhere in the deterministic/system suite.
+
+## Level 0 presentation verification
+
+Durable contracts include:
+
+```text
+tests/level0-presentation-policy-contract.test.mjs
+tests/presentation-runtime-integration-contract.test.mjs
+tests/level0-wallpaper-contract.test.mjs
+```
+
+They protect one canonical owner for targeted policy, shared M-W1 wallpaper realization, accepted M-C1/M-A1/CV-H1/M-F1 policy values and the intentional distinction:
+
+```text
+M-F1 visible presentation != M-F1 physical lighting runtime
+```
+
+Multiple lifecycle consumers of one canonical resolver are allowed. Multiple independent definitions are not.
+
+## Generation / compatibility verification
+
+`gen2` remains LEGACY / SUPPORTED.
+
+Durable compatibility contract:
+
+```text
+tests/gen2-compatibility-boundary.test.mjs
+```
+
+It verifies:
+
+- absent/unknown persisted generation values remain Gen2 under the accepted migration rule;
+- `gen2` and `gen3-v1` values remain stable;
+- `generateCell(gen2)` dispatches to the frozen Gen2 generator;
+- Gen3 construction does not consume Gen2 renderer-compatibility ownership;
+- Gen2-specific fixture/CV-H1 render compatibility remains explicit and isolated.
+
+No verification cleanup may expire Gen2, collapse Gen2 into Gen3 or silently regenerate an existing Journey.
+
+## Save / identity verification
+
+Acceptance must preserve:
+
+- CharacterProfileId meaning;
+- Journey identity;
+- journey-local `characterId` meaning;
+- Item `instanceId`;
+- Item origin lineage;
+- Cell IDs / world addresses;
+- Gen2 shift components;
+- deterministic seed-domain strings;
+- stable presentation IDs;
+- AssetIds / MaterialIds / RepresentationIds;
+- persisted enums/strings.
+
+Save/reload and old-save compatibility are product contracts, not migration-cleanup opportunities.
+
+## Collision / interaction / dynamic Item equivalence
+
+Runtime performance indexes are candidate selectors only.
+
+Verification must preserve:
+
+```text
+indexed collision == independent brute-force collision oracle
+indexed nearest interaction == canonical interaction semantics
+dynamic Item candidate/ticking membership == canonical Item semantics
+```
+
+The brute-force collision oracle must remain independent of the runtime index implementation; sharing the indexed candidate selector with the oracle would invalidate the equivalence proof.
+
+## Streaming / visibility equivalence
+
+Streaming and visibility are distinct:
+
+```text
+streaming -> load/residency timing
+visibility -> render participation of owned state
+```
+
+Verification must block broader scans, altered residency semantics, semantic destruction from visibility, or new ownership overlap between these mechanisms.
+
+## M-F1 physical-light invariant
+
+The accepted physical-light contract remains:
+
+- Render Distance safety ceilings;
+- distance-sorted fixture selection;
+- retained selection behavior;
+- `active Omni == shadowed Omni`;
+- flicker behavior;
+- Blackout suppression;
+- accepted fixture light law.
+
+The relevant runtime is `src/renderer/fixtureLighting.ts`; visible panel material policy remains `src/presentation/level0PresentationPolicy.ts`.
+
+## Performance acceptance
+
+Use a matched accepted base and candidate SHA. Do not compare unrelated machine/browser configurations as if they were controlled measurements.
+
+For Cleanup Wave 6 the matched baseline is:
+
+```text
+4c16a3770d7f29476626062cda6dd13850aa805b
+```
+
+Blocking thresholds:
+
+```text
+10,000-Cell benchmark: > 5% persistent regression
+scenario median:        > 5% persistent regression
+scenario p95:           > 5% persistent regression
+scenario p99:           > 10% persistent regression
+```
+
+Also block for:
+
+- a new repeatable hitch class;
+- sustained-running regression;
+- rapid-turn regression;
+- run+turn regression;
+- repeated Cell-crossing regression;
+- broader collision scans;
+- broader interaction scans;
+- broader dynamic Item scans;
+- broader visibility scans;
+- broader fixture-selection scans.
+
+When hosted Chromium / SwiftShader variance is near a threshold, collect at least three matched samples per SHA and compare medians. A noisy single result is neither a regression nor a pass.
+
+## Screenshot policies
+
+Browser runner screenshot policy expresses the evidence role:
+
+```text
+blocking
+  -> visual-regression screenshots whose mismatch can fail acceptance
+
+functional-tolerant
+  -> functional/browser evidence where screenshot capture supports diagnosis but is not itself a pixel-identity contract
+```
+
+Do not convert a blocking visual contract to tolerant evidence merely to make a candidate pass.
+
+## Studio security verification
+
+Studio authoring and production security are separate contracts.
+
+Authoring acceptance:
+
+```text
+.github/workflows/feature-acceptance.yml
+  -> studio-authoring
+```
+
+Static/build boundary:
+
+```text
+npm run studio:check
+npm run build
+scripts/check-production-studio-boundary.mjs
+```
+
+Privileged Studio bridge code must remain DEV-only. Browser authoring success does not substitute for production-boundary proof, and production-boundary proof does not substitute for authoring acceptance.
+
+## Verification failure procedure
+
+For every failure:
+
+1. capture the exact failure before editing;
+2. classify it under the four-category taxonomy;
+3. identify the current authoritative owner;
+4. determine whether production violates the contract;
+5. determine whether the test freezes a historical mechanism;
+6. confirm equal-or-stronger coverage before migrating an expectation;
+7. fix only the authoritative owner or harness implicated by the classification;
+8. rerun focused verification;
+9. establish all required exact-head final acceptance lanes for the resulting SHA.
+
+Do not add a new correction layer, prototype installer, wrapper, reconciliation layer, migration, generic event bus or generic plugin framework to make verification green.
+
+## Final acceptance evidence
+
+A cleanup/closeout candidate is not accepted merely because one umbrella status is green. Its handoff must separately record the evidence required by the work request, including exact deterministic/system test count, feature/browser results, visual results, performance comparison, build/security results and exact-head workflow status.
+
+When a required item is unresolved, report it as unresolved. Do not infer a pass from neighboring evidence.

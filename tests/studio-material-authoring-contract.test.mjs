@@ -6,7 +6,7 @@ const materialSource = JSON.parse(readFileSync('src/presentation/definitions/lev
 const readOnlySource = readFileSync('src/presentation/readOnlyPresentationMetadata.ts', 'utf8');
 const wallpaperAssetsSource = readFileSync('src/renderer/ordinaryWallpaperAssets.ts', 'utf8');
 const wallpaperRulesSource = readFileSync('src/renderer/ordinaryWallpaperRules.ts', 'utf8');
-const wallpaperPresentationSource = readFileSync('src/renderer/ordinaryWallpaperPresentation.ts', 'utf8');
+const wallpaperPresentationSource = readFileSync('src/renderer/level0WallpaperPresentation.ts', 'utf8');
 const surfaceSource = readFileSync('src/renderer/level0SurfacePresentation.ts', 'utf8');
 const studioServerSource = readFileSync('tools/studio/server.mjs', 'utf8');
 const studioClientSource = readFileSync('tools/studio/client/studio.js', 'utf8');
@@ -30,7 +30,7 @@ function definition(targetId) {
   return materialSource.representations.find((item) => item.id === found?.representationId);
 }
 
-test('Dev.9.6 has an independent canonical material source with editable visual targets', () => {
+test('Studio has an independent canonical material source with editable visual targets', () => {
   assert.equal(materialSource.schema, 'representation-source-v1');
   for (const targetId of [
     'material.level-0-wallpaper',

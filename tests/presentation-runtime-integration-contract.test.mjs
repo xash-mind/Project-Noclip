@@ -40,7 +40,7 @@ function assertColorClose(actual, expected, epsilon = 1e-12) {
   actual.forEach((value, index) => assert.ok(Math.abs(value - expected[index]) <= epsilon, `colour channel ${index}: expected ${expected[index]}, got ${value}`));
 }
 
-test('Wave 3 canonical Level 0 policy survives Wave 4 runtime integration', () => {
+test('canonical Level 0 presentation policy remains intact through runtime integration', () => {
   const carpet = resolveLevel0CarpetPresentation(descriptor('pillar-field', ['shallow-dry-carpet']));
   const arch = resolveLevel0ArchFinishPresentation('lower-panel');
   const depth = resolveCvh1DepthPresentation();
@@ -99,7 +99,7 @@ test('M-F1 physical Omni shadow flicker runtime remains the accepted PD-3-frozen
   assert.equal(fixtureSource.includes('materialNumber('), false);
 });
 
-test('Wave 4 explicit runtime ownership coexists with Wave 3 presentation without direct replacements', () => {
+test('explicit runtime ownership coexists with presentation without direct replacements', () => {
   assert.match(appSource, /setupRenderSettingsEngine\(this\)/);
   assert.match(appSource, /beginStreamingFrame\(this/);
   assert.match(appSource, /finishStreamingFrame\(this/);
@@ -116,7 +116,7 @@ test('Wave 4 explicit runtime ownership coexists with Wave 3 presentation withou
   assert.equal(mainSource.includes('installVisibilityParticipationRuntime'), false);
 });
 
-test('outlet dispatch and the sole Cell lifecycle owner retain their separate responsibilities', () => {
+test('outlet dispatch and direct Cell lifecycle retain separate responsibilities', () => {
   assert.match(appSource, /isOutletInteraction/);
   assert.match(appSource, /\[E\] Inspect outlet/);
   assert.match(appSource, /The outlet is inert\./);
@@ -124,9 +124,9 @@ test('outlet dispatch and the sole Cell lifecycle owner retain their separate re
   assert.equal(outletRuntimeSource.includes('ProjectNoclipGame.prototype'), false);
   assert.match(streamingSource, /processOneJob\(game\)/);
   assert.match(visibilityRuntimeSource, /export function updateVisibilityParticipation/);
-
-  const loadWrappers = lifecycleSource.match(/const baseLoadCell = WorldRenderer\.prototype\.loadCell/g) ?? [];
-  const unloadWrappers = lifecycleSource.match(/const baseUnloadCell = WorldRenderer\.prototype\.unloadCell/g) ?? [];
-  assert.equal(loadWrappers.length, 1);
-  assert.equal(unloadWrappers.length, 1);
+  assert.equal(lifecycleSource.includes('WorldRenderer.prototype.loadCell'), false);
+  assert.equal(lifecycleSource.includes('WorldRenderer.prototype.unloadCell'), false);
+  assert.match(worldRendererSource, /runRendererCellLoadLifecycle\(this, descriptor/);
+  assert.match(worldRendererSource, /runRendererCellUnloadLifecycle\(this, cellId/);
+  assert.equal(mainSource.includes('installRendererCellLifecycle'), false);
 });

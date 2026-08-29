@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const presentationSource = await readFile(new URL('../src/renderer/level0SurfacePresentation.ts', import.meta.url), 'utf8');
-const wallpaperSource = await readFile(new URL('../src/renderer/ordinaryWallpaperPresentation.ts', import.meta.url), 'utf8');
+const wallpaperSource = await readFile(new URL('../src/renderer/level0WallpaperPresentation.ts', import.meta.url), 'utf8');
 const { generateCell } = await import('../.test-dist/src/world/generator.js');
 const { CELL_SIZE, DEFAULT_TUNING } = await import('../.test-dist/src/world/types.js');
 const { PILLAR_WALL_CLEARANCE } = await import('../.test-dist/src/world/gen3SpaceTopologyBuild.js');

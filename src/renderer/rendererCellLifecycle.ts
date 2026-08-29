@@ -12,15 +12,11 @@ import {
 } from './runtimePerformance.js';
 import { markStaticWorldBatchingDirty } from './StaticWorldBatching.js';
 import { applyWallJunctionPresentation } from './wallJunctionPresentation.js';
-import { WorldRenderer } from './WorldRenderer.js';
+import type { WorldRenderer } from './WorldRenderer.js';
 
 /**
- * Single streamed Cell composition owner established by Cleanup Wave 1.
- *
- * Wave 2 replaces the A-A1 correction/reconciliation pair with synchronous,
- * descriptor-driven canonical collision realization. Neighbor-aware visible
- * reconstruction and final-material convergence retain their accepted deferred
- * boundaries; neither owns gameplay collision.
+ * Canonical streamed Cell load composition order. WorldRenderer invokes this
+ * owner directly; participants below do not install or wrap renderer methods.
  */
 export const RENDERER_CELL_LOAD_ORDER = Object.freeze([
   'base-cell-realization',
@@ -46,8 +42,6 @@ export const RENDERER_CELL_UNLOAD_ORDER = Object.freeze([
   'static-batching-dirty'
 ] as const);
 
-let installed = false;
-
 function syncAlreadyIndexedArchNeighbors(
   renderer: WorldRenderer,
   affectedCellIds: readonly string[],
@@ -61,64 +55,59 @@ function syncAlreadyIndexedArchNeighbors(
 }
 
 /**
- * Installs exactly one load/unload composition hook around WorldRenderer's
- * base Cell realization. No participant below is allowed to wrap loadCell or
- * unloadCell independently; this module is the single ordering authority.
+ * Executes the accepted Cell load composition around WorldRenderer's base Cell
+ * realization. The callback keeps base entity construction owned by
+ * WorldRenderer while this module remains the single explicit ordering owner.
  */
-export function installRendererCellLifecycle(): void {
-  if (installed) return;
-  installed = true;
+export function runRendererCellLoadLifecycle(
+  renderer: WorldRenderer,
+  descriptor: CellDescriptor,
+  realizeBaseCell: () => void
+): void {
+  const alreadyLoaded = renderer.loaded.has(descriptor.id);
+  realizeBaseCell();
+  const visual = renderer.loaded.get(descriptor.id);
+  if (!visual) return;
 
-  const baseLoadCell = WorldRenderer.prototype.loadCell;
-  WorldRenderer.prototype.loadCell = function rendererLifecycleLoadCell(
-    this: WorldRenderer,
-    descriptor: CellDescriptor
-  ): void {
-    const alreadyLoaded = this.loaded.has(descriptor.id);
-    baseLoadCell.call(this, descriptor);
-    const visual = this.loaded.get(descriptor.id);
-    if (!visual) return;
+  applyLevel0SurfacePresentation(renderer, visual);
+  applyOrdinaryCasingMaterialPresentation(renderer, descriptor);
+  if (!alreadyLoaded) applyLevel0RegionPresentation(renderer, visual);
+  scheduleNearbyArchPresentation(renderer, descriptor);
+  applyWallJunctionPresentation(visual);
 
-    // Preserve accepted presentation order while moving A-A1 gameplay collision
-    // onto the canonical semantic path before derived-index registration.
-    applyLevel0SurfacePresentation(this, visual);
-    applyOrdinaryCasingMaterialPresentation(this, descriptor);
-    if (!alreadyLoaded) applyLevel0RegionPresentation(this, visual);
-    scheduleNearbyArchPresentation(this, descriptor);
-    applyWallJunctionPresentation(visual);
+  const affectedArchCells = realizeNearbyArchCollision(renderer, descriptor);
+  syncAlreadyIndexedArchNeighbors(renderer, affectedArchCells, descriptor.id, alreadyLoaded);
 
-    const affectedArchCells = realizeNearbyArchCollision(this, descriptor);
-    syncAlreadyIndexedArchNeighbors(this, affectedArchCells, descriptor.id, alreadyLoaded);
+  if (!alreadyLoaded) {
+    attachFixtureLights(renderer, visual);
+    markStaticWorldBatchingDirty();
+    registerRuntimeCellState(renderer, descriptor);
+  }
 
-    if (!alreadyLoaded) {
-      attachFixtureLights(this, visual);
-      markStaticWorldBatchingDirty();
-      registerRuntimeCellState(this, descriptor);
-    }
+  applyFinalLevel0Materials(renderer, visual);
+  scheduleFinalLevel0MaterialsAfterArchReconstruction(renderer, descriptor);
+}
 
-    applyFinalLevel0Materials(this, visual);
-    scheduleFinalLevel0MaterialsAfterArchReconstruction(this, descriptor);
-  };
+/**
+ * Executes the accepted Cell unload composition around WorldRenderer's base
+ * entity destruction. Derived state observes the still-live Cell before base
+ * destruction; neighbor A-A1 collision is then recomputed and re-indexed.
+ */
+export function runRendererCellUnloadLifecycle(
+  renderer: WorldRenderer,
+  cellId: string,
+  destroyBaseCell: () => void
+): void {
+  const visual = renderer.loaded.get(cellId);
+  const descriptor = visual?.descriptor;
 
-  const baseUnloadCell = WorldRenderer.prototype.unloadCell;
-  WorldRenderer.prototype.unloadCell = function rendererLifecycleUnloadCell(
-    this: WorldRenderer,
-    cellId: string
-  ): void {
-    const visual = this.loaded.get(cellId);
-    const descriptor = visual?.descriptor;
+  unregisterRuntimeCellState(renderer, cellId);
+  detachCellFixtures(renderer, cellId, descriptor);
+  destroyBaseCell();
 
-    // Derived indexes and fixture state observe the still-live Cell before base
-    // entity destruction. Neighbor A-A1 collision is then recomputed from the
-    // remaining deterministic descriptors and re-indexed synchronously.
-    unregisterRuntimeCellState(this, cellId);
-    detachCellFixtures(this, cellId, descriptor);
-    baseUnloadCell.call(this, cellId);
-
-    if (!descriptor) return;
-    scheduleNearbyArchPresentation(this, descriptor);
-    const affectedArchCells = realizeNearbyArchCollision(this, descriptor);
-    for (const affectedCellId of affectedArchCells) refreshRuntimeCellCollisionState(this, affectedCellId);
-    if (visual && !this.loaded.has(cellId)) markStaticWorldBatchingDirty();
-  };
+  if (!descriptor) return;
+  scheduleNearbyArchPresentation(renderer, descriptor);
+  const affectedArchCells = realizeNearbyArchCollision(renderer, descriptor);
+  for (const affectedCellId of affectedArchCells) refreshRuntimeCellCollisionState(renderer, affectedCellId);
+  if (visual && !renderer.loaded.has(cellId)) markStaticWorldBatchingDirty();
 }

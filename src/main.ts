@@ -3,7 +3,6 @@ import { ProjectNoclipGame } from './app/ProjectNoclipGame.js';
 import { installFixtureLighting } from './renderer/fixtureLighting.js';
 import { prepareOrdinaryWallpaperAssets } from './renderer/ordinaryWallpaperAssets.js';
 import { initializeRenderSettingsRuntime } from './renderer/renderSettingsRuntime.js';
-import { installRendererCellLifecycle } from './renderer/rendererCellLifecycle.js';
 import { installStaticWorldBatching } from './renderer/StaticWorldBatching.js';
 import { installRendererRuntimeDiagnostics } from './renderer/rendererRuntimeDiagnostics.js';
 import { initializeRuntimePerformanceDiagnostics } from './renderer/runtimePerformance.js';
@@ -15,8 +14,6 @@ initializeRenderSettingsRuntime();
 installFixtureLighting();
 installStaticWorldBatching();
 initializeRuntimePerformanceDiagnostics();
-// Wave 1: one explicit owner defines streamed Cell load/unload ordering.
-installRendererCellLifecycle();
 installRendererRuntimeDiagnostics();
 mountDevelopmentVersionIndicator();
 

@@ -13,6 +13,7 @@ const fixtureLighting = readFileSync('src/renderer/fixtureLighting.ts', 'utf8');
 const surfacePresentation = readFileSync('src/renderer/level0SurfacePresentation.ts', 'utf8');
 const finalPresentation = readFileSync('src/renderer/finalLevel0MaterialPresentation.ts', 'utf8');
 const rendererLifecycle = readFileSync('src/renderer/rendererCellLifecycle.ts', 'utf8');
+const worldRenderer = readFileSync('src/renderer/WorldRenderer.ts', 'utf8');
 const mainSource = readFileSync('src/main.ts', 'utf8');
 
 const { STUDIO_TARGETS } = await import('../.test-dist/src/presentation/studioTargets.js');
@@ -82,13 +83,15 @@ test('runtime preview refreshes already-loaded presentation cells rather than wa
   }
   assert.match(surfacePresentation, /export function applyLevel0SurfacePresentation/);
   assert.match(finalPresentation, /export function applyFinalLevel0Materials/);
-  assert.match(rendererLifecycle, /applyLevel0SurfacePresentation\(this, visual\)/);
-  assert.match(rendererLifecycle, /applyFinalLevel0Materials\(this, visual\)/);
-  assert.match(rendererLifecycle, /scheduleFinalLevel0MaterialsAfterArchReconstruction\(this, descriptor\)/);
-  assert.match(mainSource, /installRendererCellLifecycle\(\)/);
+  assert.match(rendererLifecycle, /applyLevel0SurfacePresentation\(renderer, visual\)/);
+  assert.match(rendererLifecycle, /applyFinalLevel0Materials\(renderer, visual\)/);
+  assert.match(rendererLifecycle, /scheduleFinalLevel0MaterialsAfterArchReconstruction\(renderer, descriptor\)/);
+  assert.match(worldRenderer, /runRendererCellLoadLifecycle\(this, descriptor/);
+  assert.match(worldRenderer, /runRendererCellUnloadLifecycle\(this, cellId/);
+  assert.doesNotMatch(mainSource, /installRendererCellLifecycle\(\)/);
 });
 
-test('M-F1 Studio values now own steady panel presentation without changing physical Omni law', () => {
+test('M-F1 Studio values own steady panel presentation without changing physical Omni law', () => {
   assert.match(presentationPolicy, /materialColor\(FLUORESCENT_PANEL_TARGET, 'ordinaryDiffuse'/);
   assert.match(presentationPolicy, /materialColor\(FLUORESCENT_PANEL_TARGET, 'archDiffuse'/);
   assert.match(presentationPolicy, /materialColor\(FLUORESCENT_PANEL_TARGET, 'ordinaryEmissive'/);

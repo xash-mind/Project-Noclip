@@ -1,412 +1,584 @@
 # Project Noclip Code Navigation Map
 
-Phone-friendly plain-text ownership map. Use this to find the authoritative file before editing; current implementation wins if this map is ever stale.
+This map describes the architecture that exists in the repository now. Use it to find the authoritative owner before editing. Repository implementation remains authoritative if this document ever drifts.
 
-## Runtime path
+## Ownership rule
 
-```text
-browser
-  -> src/main.ts
-       finite composition / startup only
-  -> src/app/ProjectNoclipGame.ts
-       explicit application orchestration
-       -> render setup / atmosphere operation
-          src/renderer/renderSettingsRuntime.ts
-       -> predictive streaming frame + residency reconciliation
-          src/renderer/streamingScheduler.ts
-       -> renderer participation update
-          src/renderer/visibility/runtime.ts
-       -> outlet prompt/action dispatch
-          src/renderer/outletInteractionRuntime.ts supplies only outlet type/guard
-
-world request
-  -> src/world/generator.ts
-  -> Generation 3
-       -> src/world/gen3.ts
-       -> src/world/fields.ts
-       -> src/world/gen3SpaceTopology.ts
-       -> src/world/gen3SpaceTopologyDomain.ts
-       -> src/world/gen3SpaceTopologyBuild.ts
-       -> src/world/gen3Architecture.ts
-       -> src/world/gen3ArchitectureCore.ts
-       -> src/world/gen3ArchDividerSemantics.ts
-  -> CellDescriptor / semantic world truth
-  -> src/presentation/* for migrated PAU targets
-       -> Representation Registry
-       -> typed Asset slots / NAL Asset Registry
-       -> resolved presentation data + temporary Studio overrides
-  -> src/renderer/WorldRenderer.ts + src/renderer/cellBuilder.ts
-       base Cell realization / destruction
-       authoritative movement collision operation
-       authoritative nearest-interaction operation
-       authoritative dynamic Item ticking operation
-  -> src/renderer/rendererCellLifecycle.ts
-       one explicit streamed Cell load/unload ordering owner
-       -> Level 0 surface / casing / Region / wall-junction participants
-       -> canonical descriptor-driven A-A1 collision realization
-       -> M-F1 fixture attach/detach
-       -> runtime derived-index registration / refresh
-       -> localized static-batching dirtiness
-       -> final Level 0 material convergence
-  -> src/renderer/runtimePerformance.ts + src/renderer/runtimeSpatialIndex.ts
-       reconstructible collision / interaction / dynamic-ticking optimization state
-  -> src/renderer/visibility/runtime.ts
-       Generation 3 live render participation only; residency remains streaming-owned
-  -> PlayCanvas scene + frustum culling
-```
-
-PAU never participates in world generation. Presentation IDs and Asset IDs do not replace generated world/save identity. Runtime indexes/caches never become world or gameplay semantic truth.
-
-## Application / runtime ownership
+The dependency direction is:
 
 ```text
-ProjectNoclipGame
-  -> application orchestration / ordering
-  -> calls render settings, streaming, visibility and outlet operations explicitly
-
-renderSettingsRuntime.ts
-  -> setupRenderRuntime()
-  -> refreshRuntimeLightField()
-  -> current fog / ambient / clear-color coupling / flashlight / Blackout behavior
-  -> no ProjectNoclipGame prototype replacement
-
-streamingScheduler.ts
-  -> beginStreamingFrame()
-  -> finishStreamingFrame()
-  -> reconcileStreamingResidency()
-  -> predictive warming / queue / budget / stop-reversal cancellation
-  -> no application prototype wrapper
-
-visibility/runtime.ts
-  -> updateVisibilityParticipation()
-  -> safety core / hysteresis / existing prediction / fallback / topology-cache consumption
-  -> render participation only; never Cell residency authority
-
-WorldRenderer.ts
-  -> resolveMovement()
-  -> closestInteraction()
-  -> updateDynamicItems()
-  -> canonical operations consume derived candidate sets but own gameplay semantics
-
-runtimePerformance.ts + runtimeSpatialIndex.ts
-  -> collision candidate index
-  -> interaction candidate index
-  -> dedicated dynamic Item ticking set
-  -> diagnostics
-  -> reconstructible derived state only
-
-outletInteractionRuntime.ts
-  -> OutletInteractionVisual type guard only
-ProjectNoclipGame.ts
-  -> current outlet prompt + inert outlet action dispatch
+WORLD DOMAIN
+  -> PRESENTATION POLICY / DEFINITIONS
+  -> RUNTIME / RENDERER
+  -> PLAYCANVAS
 ```
 
-Do not restore `installRenderSettingsRuntime`, `installRuntimePerformance`, `installVisibilityParticipationRuntime`, `installOutletInteractionRuntime`, or direct prototype replacements. Cleanup Wave 4 retired those ownership mechanisms while preserving behavior.
+For any behavior, distinguish four questions:
 
-## Noclip Studio path
+1. **Who owns the decision?** The semantic or policy authority.
+2. **Who realizes it?** The code that creates runtime/PlayCanvas state.
+3. **Who observes derived state?** Indexes, diagnostics, batching or visibility consumers.
+4. **What is the lifecycle order?** Explicit orchestration, never hidden installer order.
+
+Derived indexes do not own semantics. Runtime realization must consume canonical world/presentation decisions rather than recreate them.
+
+## Application / runtime path
+
+```text
+src/main.ts
+  -> initializeRenderSettingsRuntime()
+  -> installFixtureLighting()
+  -> installStaticWorldBatching()
+  -> initializeRuntimePerformanceDiagnostics()
+  -> installRendererRuntimeDiagnostics()       # non-semantic diagnostics wrapper only
+  -> mountDevelopmentVersionIndicator()
+  -> prepareOrdinaryWallpaperAssets()
+  -> new ProjectNoclipGame()
+  -> DEV-only Studio / World Lab bridges
+  -> game.initialize()
+
+src/app/ProjectNoclipGame.ts
+  -> application orchestration
+  -> GenerationVersion-aware journey/runtime coordination
+  -> explicit render-settings operations
+  -> explicit streaming operations
+  -> explicit visibility participation
+  -> interaction dispatch
+  -> save/reload coordination
+
+src/renderer/WorldRenderer.ts
+  -> base Cell realization/destruction
+  -> explicit invocation of renderer Cell lifecycle
+  -> authoritative movement-collision operation
+  -> authoritative nearest-interaction operation
+  -> authoritative dynamic Item ticking operation
+  -> supported Gen2 render-compatibility branches
+
+src/renderer/rendererCellLifecycle.ts
+  -> one explicit streamed Cell composition order
+  -> no prototype installation
+  -> no hidden startup-order authority
+```
+
+Do not restore application/runtime prototype replacement layers or renderer Cell lifecycle installers.
+
+## Renderer Cell lifecycle
+
+`WorldRenderer.loadCell()` invokes `runRendererCellLoadLifecycle()` directly. The accepted load order is:
+
+```text
+base-cell-realization
+  -> level0-surface-presentation
+  -> ordinary-casing-presentation
+  -> level0-region-presentation
+  -> schedule-nearby-arch-presentation
+  -> wall-junction-presentation
+  -> realize-canonical-arch-collision
+  -> fixture-lighting-attach
+  -> static-batching-dirty
+  -> runtime-derived-state-register
+  -> final-level0-materials
+  -> schedule-final-material-convergence
+```
+
+`WorldRenderer.unloadCell()` invokes `runRendererCellUnloadLifecycle()` directly. The accepted unload order is:
+
+```text
+runtime-derived-state-unregister
+  -> fixture-lighting-detach
+  -> base-cell-destroy
+  -> schedule-nearby-arch-presentation
+  -> realize-neighbor-arch-collision
+  -> static-batching-dirty
+```
+
+Neighbor-aware **visible** Arch reconstruction may remain deferred. Canonical A-A1 collision realization is synchronous before normal derived-index registration.
+
+## GenerationVersion / generation dispatch
+
+**Decision owner**
+
+```text
+src/world/types.ts
+  -> GenerationVersion type / address representation
+
+src/world/gen2Compatibility.ts
+  -> generationVersionFromPersisted()
+  -> isGen2Compatibility()
+  -> gen2ZoneForCell()
+```
+
+**Persistence owner**
+
+```text
+src/persistence/types.ts
+  -> save schema / migration
+  -> persisted GenerationVersion parsing through generationVersionFromPersisted()
+```
+
+**Generation realization**
+
+```text
+src/world/generator.ts
+  -> generateCell()
+       gen2    -> generateLegacyCell()
+       gen3-v1 -> generateGen3Cell()
+```
+
+`gen2` and `gen3-v1` are compatibility identities. Do not rename, collapse or reinterpret them.
+
+## Gen2 compatibility boundary
+
+Gen2 is **LEGACY / SUPPORTED**.
+
+```text
+src/world/gen2Compatibility.ts
+  -> compatibility guards / persisted-value interpretation
+
+src/world/generator.ts::generateLegacyCell()
+  -> frozen Gen2 descriptor generation
+
+src/world/architecture.ts
+  -> frozen Gen2 compatibility architecture path
+  -> historical BaselineArchitecturePilot* names are retained inside this frozen boundary
+
+src/renderer/WorldRenderer.ts
+  -> replaceLegacyFixtureMeshes()
+  -> replaceLegacyHoleFloor()
+  -> explicit Gen2 render compatibility only
+```
+
+New Gen3 behavior must not be routed through Gen2 compatibility. Gen2 compatibility must not become a second owner of Gen3 policy.
+
+## Level 0 presentation policy
+
+**Canonical decision owner**
+
+```text
+src/presentation/level0PresentationPolicy.ts
+```
+
+This owns migrated Level 0 policy decisions including:
+
+- M-C1 carpet treatment;
+- M-A1 structural finish;
+- CV-H1 visible depth palette;
+- M-F1 visible-panel appearance.
+
+**Structured definitions / PAU**
+
+```text
+src/presentation/definitions/*
+src/presentation/level0FeatureRepresentations.ts
+src/presentation/level0MaterialRepresentations.ts
+src/presentation/projectPresentationRegistry.ts
+src/presentation/materialRuntime.ts
+src/presentation/registry.ts
+```
+
+**Renderer-side policy realization/cache**
+
+```text
+src/renderer/level0PresentationMaterials.ts
+```
+
+Renderer stages may consume these resolvers repeatedly during lifecycle convergence; they must not independently redefine the policy.
+
+## M-W1 — shared Level 0 wallpaper
+
+**Decision / material source**
+
+```text
+src/presentation/definitions/level0-materials.json
+src/presentation/materialRuntime.ts
+src/renderer/ordinaryWallpaperRules.ts    # Ordinary-only A/B/C distribution, casing and outlet rules
+```
+
+**Visible realization**
+
+```text
+src/renderer/level0WallpaperPresentation.ts
+```
+
+The wallpaper presentation module is shared across eligible Ordinary, Pillar Field and Arch wall surfaces. Its durable filename reflects that responsibility. Ordinary-only casing/outlet eligibility remains intentionally separate and unchanged.
+
+**Asset preparation / image pipeline**
+
+```text
+src/renderer/ordinaryWallpaperAssets.ts
+src/renderer/presentationImageTextures.ts
+assets/definitions/library.json
+```
+
+Existing AssetIds and diagnostic/evidence compatibility names remain stable.
+
+## M-C1 — Level 0 carpet
+
+**Decision owner**
+
+```text
+src/presentation/level0PresentationPolicy.ts
+  -> resolveLevel0CarpetPresentation()
+  -> canonicalLevel0CarpetUv()
+```
+
+**Realization**
+
+```text
+src/renderer/level0PresentationMaterials.ts
+src/renderer/level0SurfacePresentation.ts
+src/renderer/finalLevel0MaterialPresentation.ts
+```
+
+`finalLevel0MaterialPresentation.ts` is a deliberate late convergence stage, not a semantic correction owner. It reapplies canonical policy to geometry that may be reconstructed late.
+
+Floor Condition visual contribution remains the accepted explicit no-op.
+
+## M-A1 — A-A1 structural finish
+
+**Decision owner**
+
+```text
+src/presentation/level0PresentationPolicy.ts
+  -> resolveLevel0ArchFinishPresentation()
+```
+
+**Realization / binding**
+
+```text
+src/renderer/level0PresentationMaterials.ts
+src/renderer/level0RegionPresentation.ts
+src/renderer/finalLevel0MaterialPresentation.ts
+```
+
+M-A1 owns pale structural finish only. It does not own A-A1 semantic role or collision.
+
+## A-A1 — Arch divider ownership
+
+### Semantic role / collision intent
+
+```text
+src/world/gen3ArchDividerSemantics.ts
+  -> ArchStructuralRole
+  -> archStructuralRole()
+  -> archSemanticWallOwnsFinalCollision()
+```
+
+This is the sole world-domain owner of A-A1 structural-role classification and semantic collision intent.
+
+### Visible presentation
+
+```text
+src/renderer/level0RegionPresentation.ts
+  -> neighbor-aware visible Arch-frame reconstruction
+
+src/renderer/level0PresentationMaterials.ts
+  -> consumes M-A1 finish policy
+
+src/renderer/finalLevel0MaterialPresentation.ts
+  -> late canonical material convergence after reconstruction
+```
+
+### Collision realization
+
+```text
+src/renderer/archDividerCollision.ts
+  -> descriptor/bay-driven final collider realization
+```
+
+PlayCanvas entity names, transforms and materials are not collision truth.
+
+### Derived collision indexing
+
+```text
+src/renderer/runtimePerformance.ts
+src/renderer/runtimeSpatialIndex.ts
+```
+
+These index canonical collider state. They do not decide A-A1 collision policy.
+
+The brute-force collision oracle in tests must remain independent of the runtime index.
+
+## Collision index
+
+**Semantic operation**
+
+```text
+src/renderer/WorldRenderer.ts::resolveMovement()
+  -> movementCollisionQueryBounds()
+  -> runtimeCollisionCandidates()
+  -> resolveCircleAgainstAabbs()
+```
+
+**Derived candidate index**
+
+```text
+src/renderer/runtimeSpatialIndex.ts
+src/renderer/runtimePerformance.ts
+```
+
+The index narrows candidates only. It must remain equivalent to the independent brute-force oracle.
+
+## Interaction index
+
+**Semantic operation**
+
+```text
+src/renderer/WorldRenderer.ts::closestInteraction()
+```
+
+**Canonical mutation points**
+
+```text
+WorldRenderer.addDroppedItem()
+WorldRenderer.removeInteraction()
+renderer Cell lifecycle registration/unregistration
+```
+
+**Derived index**
+
+```text
+src/renderer/runtimePerformance.ts
+src/renderer/runtimeSpatialIndex.ts
+```
+
+The index does not own interaction eligibility or interaction meaning.
+
+## Dynamic Item index / ticking
+
+**Semantic owner**
+
+```text
+src/renderer/WorldRenderer.ts::updateDynamicItems()
+```
+
+**Derived ticking membership / diagnostics**
+
+```text
+src/renderer/runtimePerformance.ts
+```
+
+Item identity, `instanceId`, origin lineage and persistence remain owned by the Item/persistence domain, not the runtime index.
+
+## CV-H1
+
+### Semantic carver / aperture ownership
+
+```text
+src/world/gen3.ts
+  -> Generation 3 hole/carver decisions and FloorPatchSpec aperture truth
+```
+
+### Visible depth policy
+
+```text
+src/presentation/level0PresentationPolicy.ts
+  -> resolveCvh1DepthPresentation()
+```
+
+### Visible depth realization
+
+```text
+src/renderer/level0RegionPresentation.ts
+src/renderer/level0PresentationMaterials.ts
+src/renderer/finalLevel0MaterialPresentation.ts
+```
+
+### Gen3 surviving floor construction
+
+```text
+src/renderer/cellBuilder.ts
+src/renderer/cvh1FloorSurface.ts
+```
+
+The indexed floor mesh consumes aperture truth and canonical M-C1 UV/material policy. It does not own carpet treatment.
+
+### Gen2 compatibility
+
+```text
+src/renderer/WorldRenderer.ts::replaceLegacyHoleFloor()
+```
+
+This branch is frozen compatibility only.
+
+## M-F1 visible panel
+
+**Visible appearance decision**
+
+```text
+src/presentation/level0PresentationPolicy.ts
+  -> resolveMFluorescentPanelPresentation()
+```
+
+**Stable visual identity / dimensions**
+
+```text
+src/renderer/fixtureVisualOwnership.ts
+  -> M_F1_PANEL_DIMENSIONS
+  -> mFluorescentFixtureIdentity()
+```
+
+**Gen3 base panel realization**
+
+```text
+src/renderer/cellBuilder.ts
+```
+
+**Gen2 visual compatibility**
+
+```text
+src/renderer/WorldRenderer.ts::replaceLegacyFixtureMeshes()
+```
+
+**Steady/flicker visual updates**
+
+```text
+src/renderer/fixtureLighting.ts
+  -> consumes canonical visible-panel policy
+```
+
+M-F1 visible presentation is intentionally distinct from physical lighting runtime.
+
+## M-F1 physical Omni / shadow / flicker runtime
+
+**World fixture/light law**
+
+```text
+src/world/lighting.ts
+```
+
+**Physical runtime realization and selection**
+
+```text
+src/renderer/fixtureLighting.ts
+```
+
+This owns the accepted physical-light runtime: Render Distance ceilings, distance-sorted selection, retained selection behavior, one-to-one active/shadowed Omni invariant, flicker and Blackout suppression. Do not move visible-panel material policy into this runtime.
+
+## Blackout
+
+**World/environment decision**
+
+```text
+src/world/gen3.ts
+src/world/lighting.ts
+```
+
+**Active runtime atmosphere / clear / fog / ambient application**
+
+```text
+src/renderer/renderSettings.ts
+src/renderer/renderSettingsRuntime.ts
+```
+
+**Fixture suppression / physical-light participation**
+
+```text
+src/renderer/fixtureLighting.ts
+```
+
+Blackout world truth is not a material-presentation override and is not authored by Studio.
+
+## Streaming
+
+**Application orchestration**
+
+```text
+src/app/ProjectNoclipGame.ts
+```
+
+**Scheduler / residency operations**
+
+```text
+src/renderer/streamingScheduler.ts
+```
+
+Streaming decides load/residency timing, not Cell semantics.
+
+## Visibility
+
+**Application orchestration**
+
+```text
+src/app/ProjectNoclipGame.ts
+```
+
+**Participation runtime**
+
+```text
+src/renderer/visibility/runtime.ts
+```
+
+Visibility controls participation of already-owned render state. It must not destroy semantic state or become a second streaming owner.
+
+## Static batching
+
+```text
+src/renderer/StaticWorldBatching.ts
+```
+
+Batching owns batching only. The renderer lifecycle marks batching dirty after canonical Cell presentation/collision/lights are composed. Batching must not install unrelated lifecycle behavior.
+
+## Level 0 Feature presentation
+
+```text
+src/world/gen3.ts
+  -> Feature generation / stable world identity
+
+src/presentation/level0FeatureRepresentations.ts
+src/presentation/registry.ts
+src/presentation/previewOverrides.ts
+  -> canonical / Studio-preview representation resolution
+
+src/renderer/level0FeaturePresentation.ts
+  -> PAU Feature representation -> PlayCanvas geometry/material adapter
+
+src/renderer/cellBuilder.ts
+  -> direct Feature dispatch during Cell construction
+```
+
+The removed `pauFeaturePresentationPilot.ts` installer architecture must not return. The remaining helper name `addLevel0PilotFeaturePresentation` is internal to the bounded Feature adapter and does not install runtime behavior; changing it would be local naming cleanup only, not an ownership change. Its module and responsibility are already durable.
+
+## Application orchestration
+
+```text
+src/app/ProjectNoclipGame.ts
+```
+
+The application explicitly calls narrow runtime operations. It is not extended by semantic prototype installers.
+
+Current operation modules include:
+
+```text
+src/renderer/renderSettingsRuntime.ts
+src/renderer/streamingScheduler.ts
+src/renderer/visibility/runtime.ts
+src/renderer/outletInteractionRuntime.ts
+```
+
+## Renderer diagnostics
+
+```text
+src/renderer/rendererRuntimeDiagnostics.ts
+```
+
+This is the one retained call-through wrapper. It wraps engine setup only to attach diagnostics and owns no product semantics. It is permitted because it is isolated instrumentation, not lifecycle or policy authority.
+
+Runtime counters / reconstructible derived state live in:
+
+```text
+src/renderer/runtimePerformance.ts
+```
+
+## Noclip Studio / privileged development path
 
 ```text
 npm run studio
   -> tools/studio/runner.mjs
        -> Vite game dev server
-       -> loopback tools/studio/server.mjs
-       -> tools/studio/client/*
-  -> src/dev/studioBridgeClient.ts (DEV only)
-  <-> explicit bridge commands
-  -> canonical src/presentation/* contracts
-```
+       -> Studio authoring server/client
 
-Studio privileged code is not a production runtime path.
-
-## Governance / provenance navigation
-
-```text
-work request
-  -> AGENTS.md
-       mandatory entrypoint + dynamic reading router
-  -> docs/WORK_RULES.md
-       engineering purity / semantic ownership / cleanup / decision challenges
-  -> docs/CODE_MAP.md + docs/TERMINOLOGY.md
-       implementation navigation + vocabulary
-
-content / source / fidelity change
-  -> docs/CONTENT_PROVENANCE.md
-       concept-level source / interpretation / originality ledger
-  -> docs/references/README.md
-       evidence and fidelity method
-  -> relevant docs/references/** pack
-       raw source evidence / provenance history
-  -> WORLD.md
-       accepted Project Noclip world truth
-  -> docs/VISION.md when design interpretation matters
-```
-
-`docs/CONTENT_PROVENANCE.md` does not replace reference packs, and reference packs do not own accepted world truth. `docs/WORK_RULES.md` does not replace target-specific architecture documents or ADRs; it governs how those owners are changed.
-
-## Canonical truth
-
-```text
-AGENTS.md                        mandatory work-routing entrypoint
-docs/WORK_RULES.md               engineering governance / cleanup law
-docs/CONTENT_PROVENANCE.md       concept-level provenance ledger
-docs/references/**               source evidence + fidelity extraction
-WORLD.md                         accepted world laws/content
-docs/VISION.md                   creative/product direction
-PROJECT.md                       product/architecture invariants
-src/world/types.ts               generated-data shapes and runtime IDs
-src/world/terminology.ts         short human addresses
-
-docs/PRESENTATION_ARCHITECTURE.md
-  PAU / LCG / NAL / Asset-slot / DevelopmentContext / ChangeReceipt contracts
-
-docs/NOCLIP_STUDIO.md
-  Studio workflow, security, structured visual-authoring boundary
-
-docs/VERIFICATION.md
-  verification architecture / evidence ownership
-
-docs/CODE_MAP.md                 implementation ownership/navigation only
-```
-
-## O-A1 / Ordinary Level 0
-
-```text
-Fields / Region         -> src/world/fields.ts + src/world/gen3.ts
-Topology                -> src/world/gen3SpaceTopologyDomain.ts
-Walls/openings          -> src/world/gen3SpaceTopologyBuild.ts
-Shared dimensions       -> src/world/gen3ArchitectureCore.ts
-Base entities           -> src/renderer/cellBuilder.ts
-Collision/legacy UV     -> src/renderer/level0Wallpaper.ts
-Base surface participant-> src/renderer/level0SurfacePresentation.ts
-Final supplied wallpaper-> src/renderer/ordinaryWallpaperPresentation.ts
-Lifecycle ordering      -> src/renderer/rendererCellLifecycle.ts
-```
-
-If architecture is wrong, inspect topology. If the world is right and only the visible finish is wrong, stay in presentation.
-
-## P-A1 / pillars
-
-```text
-Pillar Field affinity/depth -> src/world/fields.ts
-Pillar dimensions           -> src/world/gen3ArchitectureCore.ts
-All Gen3 pillar generation  -> src/world/gen3SpaceTopologyBuild.ts
-Base visible surface        -> src/renderer/level0SurfacePresentation.ts
-Final M-W1 wallpaper        -> src/renderer/ordinaryWallpaperPresentation.ts
-```
-
-Sparse Ordinary Level 0 pillars and Pillar Field pillars are generated by the same `addPillars()` system. Every eligible `column` with `materialId: level-0-wallpaper` consumes the same M-W1 material resolver. There is no separate stale Ordinary-pillar wallpaper owner.
-
-P-A1 geometry/placement remains read-only in Studio; its wallpaper-bearing presentation is authored through M-W1.
-
-## A-A1 / Arch Rooms
-
-```text
-Affinity                       -> src/world/fields.ts
-Shared dimensions              -> src/world/gen3ArchitectureCore.ts
-Divider/topology               -> src/world/gen3SpaceTopologyDomain.ts
-Semantic wall/route generation -> src/world/gen3SpaceTopologyBuild.ts
-Semantic roles + bay geometry  -> src/world/gen3ArchDividerSemantics.ts
-Canonical collision intent     -> src/world/gen3ArchDividerSemantics.ts
-Visible frame/curve realization-> src/renderer/level0RegionPresentation.ts
-Gameplay collider realization  -> src/renderer/archDividerCollision.ts
-Cell lifecycle ordering        -> src/renderer/rendererCellLifecycle.ts
-Derived collision indexing     -> src/renderer/runtimePerformance.ts
-                              + src/renderer/runtimeSpatialIndex.ts
-Final reconstructed finish     -> src/renderer/finalLevel0MaterialPresentation.ts
-```
-
-`src/world/gen3ArchDividerSemantics.ts` is the one authoritative A-A1 structural-role/semantic-geometry owner. It consumes existing deterministic `WallSpec` descriptors without re-keying or mutating world identity. Presentation consumes those roles/bays to build the accepted visible frame; it does not define gameplay collision semantics.
-
-`src/renderer/archDividerCollision.ts` synchronously realizes the final semantic collider set from canonical descriptors/bays before normal derived-index registration. PlayCanvas `Entity` names, render transforms and material instances are **not gameplay collision truth**. `runtimePerformance.ts` / `runtimeSpatialIndex.ts` own reconstructible derived indexing only; they never define A-A1 collision policy.
-
-The historical `src/renderer/archDividerRuntimeCorrection.ts` correction layer is retired/deleted. Its renderer-name-derived lower-panel collision path and lower-panel collision reconciliation microtask no longer exist. Neighbor-aware **visible** Arch reconstruction remains intentionally deferred in `level0RegionPresentation.ts`.
-
-A-A1 structural geometry remains world/code-owned. Its pale non-wallpaper visual finish is M-A1 and is structured-editable in Studio. Normal Arch Room walls remain M-W1.
-
-Arch-only Bucket/Open Paint Can Features:
-
-```text
-generation/stable world IDs
-  -> src/world/gen3SpaceTopologyBuild.ts
-canonical feature source
-  -> src/presentation/definitions/level0-features.json
-  -> scripts/build-presentation-definitions.mjs
-  -> src/presentation/generatedLevel0FeatureDefinitions.ts
-hydrated feature registry
-  -> src/presentation/level0FeatureRepresentations.ts
-renderer adapter
-  -> src/renderer/level0FeaturePresentation.ts
-  -> src/renderer/cellBuilder.ts direct Representation dispatch
-```
-
-## Level 0 visual material authoring
-
-Canonical material source and semantic resolver:
-
-```text
-src/presentation/definitions/level0-materials.json
-  -> scripts/build-presentation-definitions.mjs
-  -> src/presentation/generatedLevel0MaterialDefinitions.ts
-  -> src/presentation/level0MaterialRepresentations.ts
-  -> src/presentation/projectPresentationRegistry.ts
-  -> src/presentation/materialRuntime.ts
-  -> src/presentation/level0PresentationPolicy.ts
-```
-
-`src/presentation/level0PresentationPolicy.ts` is the canonical composition owner for the consolidated Level 0 policies below. `src/renderer/level0PresentationMaterials.ts` is a cached PlayCanvas realization consumer; it does not define competing semantic values.
-
-Material target ownership:
-
-```text
-M-W1 wallpaper
-  schema / Asset slots      -> level0-materials.json
-  deterministic family law -> src/renderer/ordinaryWallpaperRules.ts
-  canonical material resolver / walls + columns
-                           -> src/renderer/ordinaryWallpaperPresentation.ts
-  semantic scope           -> shared Ordinary + Pillar/P-A1 + normal Arch walls
-
-M-A1 Arch structural finish
-  schema                    -> level0-materials.json
-  canonical finish policy  -> src/presentation/level0PresentationPolicy.ts
-  A-A1 semantic roles      -> src/world/gen3ArchDividerSemantics.ts
-  cached material consumer -> src/renderer/level0PresentationMaterials.ts
-  visible geometry binding -> src/renderer/level0SurfacePresentation.ts
-                            + src/renderer/level0RegionPresentation.ts
-  deferred reapplication   -> src/renderer/finalLevel0MaterialPresentation.ts
-
-M-C1 carpet
-  schema                    -> level0-materials.json
-  base + Region + Condition -> src/presentation/level0PresentationPolicy.ts
-  world-phase / UV policy  -> src/presentation/level0PresentationPolicy.ts
-  cached material consumer -> src/renderer/level0PresentationMaterials.ts
-  synchronous application  -> src/renderer/level0SurfacePresentation.ts
-  deferred reapplication   -> src/renderer/finalLevel0MaterialPresentation.ts
-  CV-H1                     -> aperture removes floor only; surviving carpet remains M-C1
-
-M-C1 Condition contribution
-  current implemented IDs  -> damp-carpet / shallow-dry-carpet / deep-wet-carpet
-  current visual modifier  -> explicit no-op in src/presentation/level0PresentationPolicy.ts
-  PD-4                      -> frozen; no wet/dry/stain/gloss/color invention in cleanup
-
-M-CE1 ceiling
-  schema                    -> level0-materials.json
-  renderer                  -> src/renderer/level0SurfacePresentation.ts
-
-Casing appearance
-  schema                    -> level0-materials.json
-  renderer                  -> src/renderer/ordinaryCasingMaterialPresentation.ts
-  eligibility               -> current Ordinary-only behavior preserved pending PD-1
-
-Outlet appearance
-  schema                    -> level0-materials.json
-  renderer                  -> src/renderer/ordinaryWallpaperPresentation.ts
-  eligibility               -> current Ordinary-only behavior preserved pending PD-2
-  application dispatch      -> src/app/ProjectNoclipGame.ts
-  narrow outlet type guard  -> src/renderer/outletInteractionRuntime.ts
-
-M-F1 visible panel
-  schema                    -> level0-materials.json
-  canonical appearance     -> src/presentation/level0PresentationPolicy.ts
-  canonical visual identity / dimensions
-                            -> src/renderer/fixtureVisualOwnership.ts
-  base panel realization   -> src/renderer/cellBuilder.ts for Gen3 consuming canonical policy
-  Gen2 visual compatibility -> src/renderer/WorldRenderer.ts frozen replacement path
-  steady/flicker panel update
-                            -> src/renderer/fixtureLighting.ts consuming canonical policy
-  physical Omni/shadows    -> src/renderer/fixtureLighting.ts
-  physical flicker source  -> src/world/lighting.ts
-  PD-3                      -> frozen; current 32 / 64 / 96 / 128 ceilings and selection remain unchanged
-
-CV-H1 visible depth material
-  schema                    -> level0-materials.json
-  canonical palette policy -> src/presentation/level0PresentationPolicy.ts
-  cached material consumer -> src/renderer/level0PresentationMaterials.ts
-  depth geometry           -> src/renderer/level0RegionPresentation.ts
-  deferred reapplication   -> src/renderer/finalLevel0MaterialPresentation.ts
-```
-
-`finalLevel0MaterialPresentation.ts` is retained as a narrow lifecycle consumer because neighbor-aware visible A-A1 reconstruction is still deferred. It must reapply the same canonical resolved policy; it is not a last-writer semantic correction layer.
-
-M-F1 has one visible-panel semantic policy owner. `WorldRenderer` may realize a panel and `fixtureLighting` may update that same panel from fixture pulse state, but neither defines a second color/emission policy. Visible panel identity and physical-light runtime both derive from the same fixture group/index identity.
-
-## Image Asset treatment
-
-```text
-src/presentation/generatedAssetRegistry.ts
-  validated runtime NAL Asset metadata
-
-src/presentation/materialRuntime.ts
-  resolves canonical/preview material parameters + Asset slots
-
-src/renderer/presentationImageTextures.ts
-  fetch/hash/decode
-  brightness/contrast/saturation/rotation/flip
-  bounded derived PlayCanvas texture cache
-```
-
-Source images remain immutable. Runtime treatment is cached by Asset content hash + transform signature.
-
-M-W1 pattern size is canonical presentation data in `level0-materials.json`; do not restore a competing wallpaper tile-size constant in renderer rules.
-
-## PAU presentation metadata
-
-```text
-src/presentation/types.ts
-  Representation / Asset / material IDs
-  editable parameter + typed Asset-slot contracts
-
-src/presentation/registry.ts
-  binding validation + fallbacks
-
-src/presentation/definitions/level0-features.json
-  structured Feature pilot source
-
-src/presentation/definitions/level0-materials.json
-  structured Level 0 visual material source
-
-scripts/build-presentation-definitions.mjs
-  multi-source validation + generated typed modules
-
-src/presentation/level0FeatureRepresentations.ts
-src/presentation/level0MaterialRepresentations.ts
-  hydrate generated sources
-
-src/presentation/projectPresentationRegistry.ts
-  combined Studio-facing registry
-
-src/presentation/readOnlyPresentationMetadata.ts
-  only targets that still need code handoff
-
-src/presentation/previewOverrides.ts
-  temporary parameters + Asset slots + Representation bindings
-
-src/presentation/materialRuntime.ts
-  renderer-facing resolved material helpers
-
-src/presentation/level0PresentationPolicy.ts
-  canonical Level 0 material composition from resolved canonical/preview values
-
-src/presentation/developmentContext.ts
-  development-context-v1 including Asset-slot metadata/preview state
-
-src/presentation/changeReceipt.ts
-  change-receipt-v1 evidence contract
-```
-
-## Noclip Studio implementation
-
-```text
-npm run studio
-  -> tools/studio/runner.mjs
-
-Loopback backend / bridge / NAL
-  -> tools/studio/server.mjs
-  -> tools/studio/server-core.mjs
-
-Generic structured source Save/Revert
-  -> tools/studio/structured-authoring.mjs
-
-Canonical compiled PAU access
+canonical compiled PAU access
   -> tools/studio/canonical-cli.mjs
   -> tools/studio/canonical-client.mjs
 
@@ -415,218 +587,106 @@ Studio UI
   -> tools/studio/client/studio.js
   -> tools/studio/client/styles.css
 
-Game bridge
-  -> src/dev/studioBridgeProtocol.ts
+DEV game bridge
   -> src/dev/studioBridgeClient.ts
+  -> src/dev/worldLabStudioIntegration.ts
 
-Checks
-  -> tools/studio/check.mjs
-  -> tools/studio/smoke.mjs
-  -> tools/studio/validate-target.mjs
-  -> tests/studio-foundation.test.mjs
-  -> tests/dev9-6-studio-material-authoring.test.mjs
-
-Production boundary scan
+production boundary check
   -> scripts/check-production-studio-boundary.mjs
 ```
 
-World Lab = runtime QA/forcing. Studio = local source-backed presentation authoring/assets/diffs/validation. Studio never becomes a merge/push/deploy client.
+Studio privileged code is a DEV-only source-backed authoring path. It is not a production runtime path and never becomes a merge/push/deploy client.
 
-## NAL Asset Library
+World Lab = runtime QA/forcing. Studio = local presentation authoring/assets/diffs/validation.
 
-```text
-assets/source/{images,audio,meshes}/
-  source content
+## Verification / evidence ownership
 
-assets/definitions/*.json
-  semantic Asset definitions
-
-scripts/build-assets.mjs
-  validation + SHA-256 + runtime copy
-
-assets/generated/registry.json
-src/presentation/generatedAssetRegistry.ts
-  generated runtime registry
-
-public/assets/runtime/
-  generated runtime content
-```
-
-Studio Asset Library import still lives in `tools/studio/server-core.mjs`. Structured Material Asset binding lives in `tools/studio/structured-authoring.mjs` and is validated against type/Profile/role/runtime readiness.
-
-## Player Character / Avatar representation
+**Architecture and evidence contract**
 
 ```text
-PlayerCharacterProfile identity + creator choices
-  -> src/player-character/profile.ts
-local profile persistence
-  -> src/player-character/profileStore.ts
-New Game profile gate
-  -> src/player-character/newGameFlow.ts
-renderer-independent avatar contract
-  -> src/player-character/avatar.ts
-       AvatarAppearance mapping
-       AvatarDefinition / CharacterProfileId actor ownership
-       semantic Asset-slot requirements
-       humanoid rig contract
-       animation-state vocabulary
-       first/third/cinematic/remote visibility rules
-future live actor
-  -> AvatarRuntime [NOT IMPLEMENTED]
+docs/VERIFICATION.md
+scripts/verification-browser-runner.py
+scripts/verification-contract-tests.py
 ```
 
-`CharacterProfileId` is the future actor identity. It is not the Journey-local `characterId`, world seed, or Item Instance identity. `avatar.ts` owns representation requirements only and must stay free of PlayCanvas entities, WorldRenderer participation, camera, movement, collision and streaming behavior. See `docs/PLAYER_CHARACTER_IDENTITY.md` and `docs/PLAYER_AVATAR_REPRESENTATION.md`.
-
-Current NAL v1 can satisfy mesh/image Avatar slots. Humanoid animation clips require a future NAL animation-asset extension; do not hard-code filenames or import placeholder web assets to bypass that boundary.
-
-## CV-H1
+**Core Correctness**
 
 ```text
-Carver decision         -> src/world/gen3.ts / src/world/generator.ts
-Gen3 floor construction-> src/renderer/cellBuilder.ts
-Indexed floor mesh basis -> src/renderer/cvh1FloorSurface.ts
-Gen2 floor compatibility -> src/renderer/WorldRenderer.ts
-M-C1 surviving carpet  -> src/presentation/level0PresentationPolicy.ts
-Depth palette policy   -> src/presentation/level0PresentationPolicy.ts
-Depth geometry         -> src/renderer/level0RegionPresentation.ts
-Cached material bridge -> src/renderer/level0PresentationMaterials.ts
-Deferred reapplication -> src/renderer/finalLevel0MaterialPresentation.ts
-Lifecycle ordering      -> src/renderer/rendererCellLifecycle.ts
+.github/workflows/ci.yml
+  -> verification architecture contract
+  -> presentation/NAL build
+  -> Studio static check
+  -> strict TypeScript
+  -> deterministic/system suite
+  -> 10,000-Cell benchmark
+  -> production build / Studio production boundary
 ```
 
-Studio edits only visible depth/material values. Hole geography, lattice/aperture law, collision and navigation stay world-owned. CV-H1 owns the aperture/void/depth, never the surviving M-C1 carpet.
-
-## C-B1 Blackout
+**Feature Acceptance**
 
 ```text
-pressure/resolution -> src/world/fields.ts + src/world/gen3.ts
-fixture/world law   -> src/world/lighting.ts
-visible M-F1 panel  -> src/presentation/level0PresentationPolicy.ts
-physical lights     -> src/renderer/fixtureLighting.ts
-runtime render      -> src/app/ProjectNoclipGame.ts + src/renderer/renderSettingsRuntime.ts
+.github/workflows/feature-acceptance.yml
+  -> gameplay functional journey
+  -> Character Creator
+  -> Inventory UI
+  -> Studio authoring
 ```
 
-C-B1 remains read-only in Studio. Cleanup does not turn Blackout world law into material sliders, and Blackout continues to suppress local fixture generation/light work exactly as accepted.
-
-## Cell streaming / renderer lifecycle
+**Visual Regression**
 
 ```text
-movement/boundaries
-  -> src/app/ProjectNoclipGame.ts
-Render Distance
-  -> src/renderer/renderSettingsRuntime.ts + src/renderer/renderSettings.ts
-predictive residency work
-  -> src/renderer/streamingScheduler.ts / src/renderer/streamingPolicy.ts
-base Cell build/destroy
-  -> src/renderer/WorldRenderer.ts + src/renderer/cellBuilder.ts
-
-ONE Cell lifecycle ordering owner
-  -> src/renderer/rendererCellLifecycle.ts
-
-load order
-  -> base Cell realization
-  -> Level 0 surface presentation using canonical M-C1/M-A1 policy
-  -> current Ordinary casing presentation
-  -> current Region depth/A-A1 presentation + queued neighbor-aware visible Arch reconstruction
-  -> wall-junction presentation
-  -> synchronous canonical A-A1 collider realization from world semantics
-  -> M-F1 fixture attach using canonical visible panel identity
-  -> localized static-batching dirty signal
-  -> derived collision/interaction index registration / neighbor collision refresh
-  -> immediate canonical final Level 0 material reapplication
-  -> queued final material convergence using the same canonical policy
-
-unload order
-  -> derived collision/interaction index unregister
-  -> M-F1 fixture detach
-  -> base Cell entity destroy
-  -> queued neighbor-aware visible Arch presentation reconciliation
-  -> synchronous canonical neighbor A-A1 collision realization + derived-index refresh
-  -> localized static-batching dirty signal
-
-participants
-  -> src/renderer/level0SurfacePresentation.ts
-  -> src/renderer/ordinaryCasingMaterialPresentation.ts
-  -> src/renderer/level0RegionPresentation.ts
-  -> src/renderer/wallJunctionPresentation.ts
-  -> src/renderer/archDividerCollision.ts
-  -> src/renderer/fixtureLighting.ts
-  -> src/renderer/runtimePerformance.ts
-  -> src/renderer/runtimeSpatialIndex.ts
-  -> src/renderer/StaticWorldBatching.ts
-  -> src/renderer/finalLevel0MaterialPresentation.ts
+.github/workflows/visual-regression.yml
+  -> world
+  -> fidelity
+  -> wallpaper
+  -> CV-H1
+  -> flashlight + Blackout uniformity
 ```
 
-`rendererCellLifecycle.ts` owns ordering only; it does not own the participants' semantic policy. `StaticWorldBatching.ts` owns batching only and is dirtied explicitly by the lifecycle. It does not install Region, wall-junction, A-A1, fixture, runtime-index, or application systems.
-
-Wave 2 removed the A-A1 lower-panel collision reconciliation microtask because collision no longer depends on presentation completion. Wave 3 keeps the neighbor-aware visible Arch reconstruction microtask and final-material deferred convergence because geometry still appears at that deferred boundary; both consume the same canonical presentation policy rather than defining last-writer material values. Wave 4 leaves this Cell lifecycle intact while moving application/runtime/index behavior out of prototype-replacement ownership.
-
-Streaming owns Cell residency and unloading. A resident Cell is not automatically a render-participating Cell.
-
-## Generation 3 live Visibility participation — Phase 1
+**Renderer / Performance Diagnostics**
 
 ```text
-pure architectural topology
-  -> src/renderer/visibility/topologyAdapter.ts
-pure snapshot propagation
-  -> src/renderer/visibility/snapshot.ts
-  -> src/renderer/visibility/types.ts
-participation composition
-  -> src/renderer/visibility/participation.ts
-       CAMERA_VISIBLE
-       SAFETY_CORE
-       HYSTERESIS_RETAINED
-       PREDICTIVE
-       DISTANCE_FALLBACK
-       NON_PARTICIPATING
-live runtime operation
-  -> src/renderer/visibility/runtime.ts
-       updateVisibilityParticipation(game)
-application invocation
-  -> src/app/ProjectNoclipGame.ts
-       after explicit streaming residency reconciliation
-composition/bootstrap
-  -> src/main.ts
-       initializeRenderSettingsRuntime()
-       installFixtureLighting()
-       installStaticWorldBatching()
-       initializeRuntimePerformance()
-       installRendererCellLifecycle()
-       installRendererRuntimeDiagnostics()
+.github/workflows/renderer-diagnostics.yml
+  -> renderer profile
+  -> comparable runtime scenarios
 ```
 
-Phase 1 consumes the existing Generation 3 Visibility Snapshot and existing streaming predictor to decide which already-resident Cell roots participate in rendering. It does not own Cell destruction, cache eviction, generation identity, save identity, or a second prediction system.
+All blocking acceptance evidence must be tied to the exact candidate branch-head SHA.
 
-The legacy distance envelope remains a conservative residency/safety boundary. The one-Cell safety core, 500 ms hysteresis and fail-open distance fallback prevent false-negative visible geometry from becoming authoritative. Region Locate/large displacement invalidates prior participation immediately.
+## Permanent architecture / behavior contracts
 
-PlayCanvas frustum culling remains enabled and owns lower-level camera-facing culling. Topology visibility is all-direction architectural participation; it does not replace mesh frustum culling.
-
-Visibility-specific diagnostics are published as `window.__noclipVisibilityParticipationDiagnostics`. Verification must report `RESIDENT_CELLS`, `VISIBILITY_CELLS` and `RENDER_PARTICIPATING_CELLS` separately.
-
-These systems remain outside Studio visual material authoring.
-
-## Item / Inventory presentation
+Durable cleanup-era tests now use contract names rather than implementation-wave names:
 
 ```text
-Item Definition metadata -> src/items/definitions.ts
-Item Instance identity    -> src/items/types.ts + src/items/factory.ts
-Inventory domain ops      -> src/inventory/inventory.ts
-Presentation projection   -> src/ui/inventoryPresentation.ts
-Inventory dialog/actions  -> src/ui/InventorySurface.ts + src/ui/inventory.css
-HUD integration           -> src/ui/GameUI.ts
-Save/runtime adapter      -> src/app/ProjectNoclipGame.ts
-Persistence               -> src/persistence/*
-Contract notes            -> docs/INVENTORY_UI.md
+tests/level0-cleanup-equivalence.test.mjs
+tests/renderer-cell-lifecycle-contract.test.mjs
+tests/aa1-ownership-contract.test.mjs
+tests/level0-presentation-policy-contract.test.mjs
+tests/presentation-runtime-integration-contract.test.mjs
+tests/architecture-structural-metrics.test.mjs
+tests/runtime-ownership-contract.test.mjs
+tests/gen2-compatibility-boundary.test.mjs
+tests/aa1-collision-architecture.test.mjs
+tests/level0-wallpaper-contract.test.mjs
 ```
 
-UI keys and selection use `ItemInstance.instanceId`; Definition presentation data never replaces persistent object identity. Reorder dispatches the canonical `moveInstance()` operation rather than implementing container logic in UI code.
+Source-shape assertions are appropriate only where architecture/security/static shape is itself a governed contract. Historical mechanism spelling is not a correctness requirement.
 
-## Saves / stable identity
+## Stable compatibility surfaces
 
-```text
-src/persistence/*
-src/world/types.ts
-src/app/ProjectNoclipGame.ts
-```
+Do not rename or re-key stable identity/persistence surfaces merely to improve code aesthetics. This includes:
 
-Presentation/Asset edits, runtime ownership consolidation, derived indexes and render participation must not change save identity, generated IDs, seed results or geography.
+- `gen2`;
+- `gen3-v1`;
+- CharacterProfileId values/meaning;
+- Journey identity and journey-local `characterId` meaning;
+- Item `instanceId` and origin lineage;
+- Cell IDs / world addresses;
+- Gen2 shift components;
+- deterministic seed-domain strings;
+- stable presentation IDs;
+- AssetIds / MaterialIds / RepresentationIds;
+- persisted enum/string values;
+- evidence-schema keys still consumed by supported tooling.
+
+`run-character-aware-smoke.py` and supported legacy evidence aliases remain until concrete consumer inventory proves removal is safe and the compatibility contract explicitly allows it.

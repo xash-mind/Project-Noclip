@@ -1,4 +1,4 @@
-import type { OutletInteractionVisual } from './ordinaryWallpaperPresentation.js';
+import type { OutletInteractionVisual } from './level0WallpaperPresentation.js';
 import type { InteractionVisual } from './support.js';
 
 /** Runtime interaction shape visible to the application. Outlet eligibility and

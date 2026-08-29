@@ -27,7 +27,7 @@ function assignmentCount(source, pattern) {
   return (source.match(pattern) ?? []).length;
 }
 
-test('Wave 4 removes all six direct prototype replacements', () => {
+test('application and renderer semantic methods have no direct prototype replacements', () => {
   const applicationDirect = [
     /ProjectNoclipGame\.prototype\.setupEngine\s*=/g,
     /ProjectNoclipGame\.prototype\.updateStreaming\s*=/g,
@@ -43,7 +43,7 @@ test('Wave 4 removes all six direct prototype replacements', () => {
 
 test('ProjectNoclipGame explicitly orchestrates render setup, streaming frame lifecycle, visibility and outlet dispatch', () => {
   assert.match(gameSource, /setupRenderSettingsEngine\(this\)/);
-  assert.match(gameSource, /beginStreamingFrame\(this\)/);
+  assert.match(gameSource, /beginStreamingFrame\(this/);
   assert.match(gameSource, /finishStreamingFrame\(this, dt\);\s*updateVisibilityParticipation\(this, false\);/);
   assert.match(gameSource, /reconcileStreaming\(this, force, radiusOverride\);\s*updateVisibilityParticipation\(this, true\);/);
   assert.match(gameSource, /isOutletInteraction\(this\.interaction\).*Inspect outlet/s);
@@ -114,9 +114,8 @@ test('interaction index and dynamic ticking membership follow explicit canonical
   assert.equal(runtimePerformanceDiagnosticsSnapshot(renderer).tickingWorldItems, 0);
 });
 
-test('main composition keeps out-of-scope owners while removing Wave 4 installer order', () => {
-  assert.doesNotMatch(mainSource, /installRenderSettingsRuntime|installRuntimePerformance|installVisibilityParticipationRuntime|installOutletInteractionRuntime/);
-  assert.match(mainSource, /installRendererCellLifecycle\(\)/);
+test('startup composition has no semantic install-order authority and retains only isolated diagnostics wrapping', () => {
+  assert.doesNotMatch(mainSource, /installRenderSettingsRuntime|installRuntimePerformance|installVisibilityParticipationRuntime|installOutletInteractionRuntime|installRendererCellLifecycle/);
   assert.doesNotMatch(mainSource, /installPauFeaturePresentationPilot/);
   assert.match(cellBuilderSource, /addLevel0PilotFeaturePresentation/);
   assert.match(cellBuilderSource, /if \(presentation\) return presentation/);
@@ -125,7 +124,9 @@ test('main composition keeps out-of-scope owners while removing Wave 4 installer
 
   const lifecycleWrappers = assignmentCount(lifecycleSource, /WorldRenderer\.prototype\.(?:loadCell|unloadCell)\s*=/g);
   const diagnosticWrappers = assignmentCount(diagnosticsSource, /prototype\.[A-Za-z0-9_]+\s*=/g);
-  assert.equal(lifecycleWrappers, 2, 'Wave 1 Cell lifecycle owner must remain intact');
-  assert.equal(diagnosticWrappers, 1, 'renderer diagnostics stays isolated and out of Wave 4 scope');
-  assert.equal(lifecycleWrappers + diagnosticWrappers, 3, 'Wave 5 removes the PAU bridge while preserving the three legitimate call-through wrappers');
+  assert.equal(lifecycleWrappers, 0, 'Cell lifecycle must be invoked directly rather than installed');
+  assert.match(rendererSource, /runRendererCellLoadLifecycle\(this, descriptor/);
+  assert.match(rendererSource, /runRendererCellUnloadLifecycle\(this, cellId/);
+  assert.equal(diagnosticWrappers, 1, 'renderer diagnostics is the sole retained non-semantic call-through wrapper');
+  assert.equal(lifecycleWrappers + diagnosticWrappers, 1);
 });

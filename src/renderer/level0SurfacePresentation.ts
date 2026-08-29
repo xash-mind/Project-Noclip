@@ -2,7 +2,7 @@ import * as pc from 'playcanvas';
 import { materialAssetId, materialColor, materialNumber, materialString } from '../presentation/materialRuntime.js';
 import { archStructuralRole } from '../world/gen3ArchDividerSemantics.js';
 import { CELL_SIZE, type CellDescriptor, type PropSpec, type WallSpec } from '../world/types.js';
-import { applyLevel0WallpaperPresentation } from './ordinaryWallpaperPresentation.js';
+import { applyLevel0WallpaperPresentation } from './level0WallpaperPresentation.js';
 import { derivedPresentationTexture } from './presentationImageTextures.js';
 import { applyLevel0CarpetMaterials, level0ArchFinishMaterial } from './level0PresentationMaterials.js';
 import { WorldRenderer } from './WorldRenderer.js';

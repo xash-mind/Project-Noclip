@@ -18,7 +18,7 @@ const files = {
   surface: await readFile(new URL('../src/renderer/level0SurfacePresentation.ts', import.meta.url), 'utf8'),
   region: await readFile(new URL('../src/renderer/level0RegionPresentation.ts', import.meta.url), 'utf8'),
   final: await readFile(new URL('../src/renderer/finalLevel0MaterialPresentation.ts', import.meta.url), 'utf8'),
-  wallpaper: await readFile(new URL('../src/renderer/ordinaryWallpaperPresentation.ts', import.meta.url), 'utf8'),
+  wallpaper: await readFile(new URL('../src/renderer/level0WallpaperPresentation.ts', import.meta.url), 'utf8'),
   fixture: await readFile(new URL('../src/renderer/fixtureLighting.ts', import.meta.url), 'utf8')
 };
 
@@ -26,7 +26,7 @@ function matches(source, pattern) {
   return source.match(pattern) ?? [];
 }
 
-test('integrated Wave 3 + 4 structural metrics stay at accepted ownership counts', () => {
+test('runtime architecture stays within the final structural metric contract', () => {
   const directReplacementPatterns = [
     /ProjectNoclipGame\.prototype\.setupEngine\s*=/g,
     /ProjectNoclipGame\.prototype\.updateStreaming\s*=/g,
@@ -41,11 +41,11 @@ test('integrated Wave 3 + 4 structural metrics stay at accepted ownership counts
   );
   assert.equal(directReplacements, 0);
 
-  const callThroughWrappers =
-    matches(files.lifecycle, /const baseLoadCell = WorldRenderer\.prototype\.loadCell/g).length
-    + matches(files.lifecycle, /const baseUnloadCell = WorldRenderer\.prototype\.unloadCell/g).length
-    + matches(files.diagnostics, /const originalSetupEngine = prototype\.setupEngine/g).length;
-  assert.equal(callThroughWrappers, 3);
+  const retainedCallThroughWrappers = matches(files.diagnostics, /const originalSetupEngine = prototype\.setupEngine/g).length;
+  assert.equal(retainedCallThroughWrappers, 1);
+  assert.equal(matches(files.lifecycle, /WorldRenderer\.prototype\.(?:loadCell|unloadCell)/g).length, 0);
+  assert.match(files.worldRenderer, /runRendererCellLoadLifecycle\(this, descriptor/);
+  assert.match(files.worldRenderer, /runRendererCellUnloadLifecycle\(this, cellId/);
 
   const applicationRuntimeWrappers =
     matches(files.renderSettingsRuntime, /ProjectNoclipGame\.prototype/g).length
@@ -57,12 +57,13 @@ test('integrated Wave 3 + 4 structural metrics stay at accepted ownership counts
   const runtimeIndexMutationWrappers = matches(files.runtimePerformance, /WorldRenderer\.prototype\.(?:loadCell|unloadCell|removeInteraction|addDroppedItem)\s*=/g).length;
   assert.equal(runtimeIndexMutationWrappers, 0);
 
+  assert.equal(files.main.includes('installRendererCellLifecycle'), false);
   assert.equal(files.runtimePerformance.includes('baseResolveMovement'), false);
   assert.equal(files.runtimePerformance.includes('baseClosestInteraction'), false);
   assert.equal(files.runtimePerformance.includes('baseUpdateDynamicItems'), false);
 });
 
-test('integrated Level 0 semantic policy owners remain singular', () => {
+test('targeted Level 0 semantic policy owners remain singular', () => {
   assert.equal(matches(files.presentationPolicy, /export function resolveLevel0CarpetPresentation/g).length, 1);
   assert.equal(matches(files.presentationPolicy, /export function resolveLevel0ArchFinishPresentation/g).length, 1);
   assert.equal(matches(files.presentationPolicy, /export function resolveCvh1DepthPresentation/g).length, 1);
