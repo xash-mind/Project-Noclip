@@ -16,7 +16,7 @@ const surfaceSource = await readFile(new URL('../src/renderer/level0SurfacePrese
 const regionSource = await readFile(new URL('../src/renderer/level0RegionPresentation.ts', import.meta.url), 'utf8');
 const finalSource = await readFile(new URL('../src/renderer/finalLevel0MaterialPresentation.ts', import.meta.url), 'utf8');
 const materialSource = await readFile(new URL('../src/renderer/level0PresentationMaterials.ts', import.meta.url), 'utf8');
-const wallpaperSource = await readFile(new URL('../src/renderer/ordinaryWallpaperPresentation.ts', import.meta.url), 'utf8');
+const wallpaperSource = await readFile(new URL('../src/renderer/level0WallpaperPresentation.ts', import.meta.url), 'utf8');
 const casingSource = await readFile(new URL('../src/renderer/ordinaryCasingMaterialPresentation.ts', import.meta.url), 'utf8');
 const fixtureSource = await readFile(new URL('../src/renderer/fixtureLighting.ts', import.meta.url), 'utf8');
 const fixtureVisualSource = await readFile(new URL('../src/renderer/fixtureVisualOwnership.ts', import.meta.url), 'utf8');
@@ -96,7 +96,7 @@ test('M-A1 and CV-H1 depth semantic values resolve only from canonical presentat
   assert.match(finalSource, /cvh1DepthMaterial/);
 });
 
-test('Wave 3 policy and Wave 4 renderer now converge on one M-F1 visible-panel owner without changing PD-1/PD-2', () => {
+test('Level 0 policy and renderer converge on one M-F1 visible-panel owner without changing PD-1/PD-2', () => {
   assert.match(wallpaperSource, /pillar-field/);
   assert.match(wallpaperSource, /arch-rooms/);
   assert.match(wallpaperSource, /applyPillarWallpaper/);
