@@ -11,6 +11,7 @@ const WAVE5_BASE = '4c16a3770d7f29476626062cda6dd13850aa805b';
 test('matched runtime harness isolates scenarios under deterministic world controls', () => {
   assert.ok(matchedHarness.includes('fresh browser and fresh deterministic Journey per scenario'));
   assert.ok(matchedHarness.includes('driver = profiler.build_driver()'));
+  assert.ok(matchedHarness.includes('driver.set_script_timeout(max(120.0, SAMPLE_SECONDS + 60.0))'));
   assert.ok(matchedHarness.includes("FIXED_SEED = os.environ.get(\"NOCLIP_MATCHED_RUNTIME_SEED\", \"threshold-001\")"));
   assert.ok(matchedHarness.includes("FIXED_WORLD_DAY = float(os.environ.get(\"NOCLIP_MATCHED_RUNTIME_WORLD_DAY\", \"40\"))"));
   assert.ok(matchedHarness.includes("FIXED_EXPOSURE = float(os.environ.get(\"NOCLIP_MATCHED_RUNTIME_EXPOSURE\", \"10\"))"));
