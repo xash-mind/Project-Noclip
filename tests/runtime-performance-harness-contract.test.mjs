@@ -41,6 +41,7 @@ test('matched comparison keeps cleanup thresholds, validates like-for-like start
   assert.ok(comparator.includes('MEDIAN_LIMIT_PCT = 5.0'));
   assert.ok(comparator.includes('P95_LIMIT_PCT = 5.0'));
   assert.ok(comparator.includes('P99_LIMIT_PCT = 10.0'));
+  assert.ok(comparator.includes('THRESHOLD_EPSILON_PCT = 1e-9'));
   assert.ok(comparator.includes('MIN_MATCHED_RUNS = 5'));
   assert.ok(comparator.includes('MIN_FRAME_SAMPLES = 10'));
   assert.ok(comparator.includes('close_position(base_scenario["startSnapshot"], cand_scenario["startSnapshot"])'));
@@ -48,6 +49,7 @@ test('matched comparison keeps cleanup thresholds, validates like-for-like start
   assert.ok(comparator.includes('pair_deltas = [pct_delta(candidate, baseline)'));
   assert.ok(comparator.includes('"aggregation": "median-of-same-host-pair-deltas"'));
   assert.ok(comparator.includes('"deltaPct": median(pair_deltas)'));
+  assert.ok(comparator.includes('result["deltaPct"] <= limit + THRESHOLD_EPSILON_PCT'));
   assert.ok(comparator.includes('"independentMedianDeltaPct"'));
   assert.ok(comparator.includes('"matchedPairs": matched_pairs'));
   assert.ok(comparator.includes('PERFORMANCE_REGRESSION'));
