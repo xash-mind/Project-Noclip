@@ -32,17 +32,42 @@ def median(values: list[float]) -> float:
     return float(statistics.median(values))
 
 
-def metric_summary(candidate_values: list[float], baseline_values: list[float]) -> dict[str, Any]:
-    candidate_median = median(candidate_values)
+def metric_summary(
+    run_names: list[str],
+    candidate_values: list[float],
+    baseline_values: list[float],
+) -> dict[str, Any]:
+    pair_deltas = [pct_delta(candidate, baseline) for baseline, candidate in zip(baseline_values, candidate_values, strict=True)]
+    matched_pairs = [
+        {
+            "run": run_name,
+            "baseline": baseline,
+            "candidate": candidate,
+            "deltaPct": delta,
+        }
+        for run_name, baseline, candidate, delta in zip(
+            run_names,
+            baseline_values,
+            candidate_values,
+            pair_deltas,
+            strict=True,
+        )
+    ]
     baseline_median = median(baseline_values)
+    candidate_median = median(candidate_values)
     return {
+        "aggregation": "median-of-same-host-pair-deltas",
         "baselineMedian": baseline_median,
         "candidateMedian": candidate_median,
-        "deltaPct": pct_delta(candidate_median, baseline_median),
+        "independentMedianDeltaPct": pct_delta(candidate_median, baseline_median),
+        "deltaPct": median(pair_deltas),
         "baselineRange": [min(baseline_values), max(baseline_values)],
         "candidateRange": [min(candidate_values), max(candidate_values)],
+        "pairDeltaRangePct": [min(pair_deltas), max(pair_deltas)],
         "baselineRuns": baseline_values,
         "candidateRuns": candidate_values,
+        "pairDeltasPct": pair_deltas,
+        "matchedPairs": matched_pairs,
     }
 
 
@@ -87,6 +112,8 @@ def main() -> None:
             raise SystemExit(f"TEST_HARNESS_FAILURE: {run_name} renderer environments differ")
         if baseline.get("measurementContract") != candidate.get("measurementContract"):
             raise SystemExit(f"TEST_HARNESS_FAILURE: {run_name} measurement contracts differ")
+        if str(baseline.get("matchRunId")) != str(candidate.get("matchRunId")):
+            raise SystemExit(f"TEST_HARNESS_FAILURE: {run_name} match-run identities differ")
         contract = baseline.get("measurementContract", {})
         if expected_contract is None:
             expected_contract = contract
@@ -103,7 +130,11 @@ def main() -> None:
         if set(names) != set(candidate_scenarios) or set(names) != set(scenario_names):
             raise SystemExit(f"TEST_HARNESS_FAILURE: {run_name} scenario sets differ")
 
-        pair_record: dict[str, Any] = {"run": run_name, "scenarios": {}}
+        pair_record: dict[str, Any] = {
+            "run": run_name,
+            "matchRunId": baseline.get("matchRunId"),
+            "scenarios": {},
+        }
         for name in scenario_names:
             base_scenario = baseline_scenarios[name]
             cand_scenario = candidate_scenarios[name]
@@ -138,13 +169,14 @@ def main() -> None:
         "p95FrameTimeMs": P95_LIMIT_PCT,
         "p99FrameTimeMs": P99_LIMIT_PCT,
     }
+    run_names = [run_name for run_name, _, _ in pairs]
 
     for name in scenario_names:
         metric_results: dict[str, Any] = {}
         for metric, limit in metric_limits.items():
             baseline_values = [float(scenario_map(base)[name][metric]) for _, base, _ in pairs]
             candidate_values = [float(scenario_map(candidate)[name][metric]) for _, _, candidate in pairs]
-            result = metric_summary(candidate_values, baseline_values)
+            result = metric_summary(run_names, candidate_values, baseline_values)
             result["limitPct"] = limit
             result["pass"] = result["deltaPct"] <= limit
             metric_results[metric] = result
@@ -164,8 +196,9 @@ def main() -> None:
         }
 
     report = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "evidenceKind": "matched-runtime-comparison",
+        "aggregation": "median-of-same-host-pair-deltas",
         "baselineSha": args.baseline_sha,
         "candidateSha": args.candidate_sha,
         "matchedRuns": len(pairs),
