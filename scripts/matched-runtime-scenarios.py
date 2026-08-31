@@ -31,12 +31,12 @@ FIXED_NOW_MS = int(os.environ.get("NOCLIP_MATCHED_RUNTIME_NOW_MS", "178796160000
 FIXED_WORLD_DAY = float(os.environ.get("NOCLIP_MATCHED_RUNTIME_WORLD_DAY", "40"))
 FIXED_EXPOSURE = float(os.environ.get("NOCLIP_MATCHED_RUNTIME_EXPOSURE", "10"))
 SAMPLE_SECONDS = float(os.environ.get("NOCLIP_MATCHED_RUNTIME_SAMPLE_SECONDS", "45.0"))
-MIN_FRAME_SAMPLES = int(os.environ.get("NOCLIP_MATCHED_RUNTIME_MIN_FRAME_SAMPLES", "10"))
+MIN_FRAME_SAMPLES = int(os.environ.get("NOCLIP_MATCHED_RUNTIME_MIN_FRAME_SAMPLES", "100"))
 
 if SAMPLE_SECONDS < 2.0:
     raise SystemExit("TEST_HARNESS_FAILURE: matched sample duration must be at least 2 seconds")
-if MIN_FRAME_SAMPLES < 10:
-    raise SystemExit("TEST_HARNESS_FAILURE: matched runtime evidence requires at least 10 rAF samples per scenario")
+if MIN_FRAME_SAMPLES < 100:
+    raise SystemExit("TEST_HARNESS_FAILURE: matched p99 runtime evidence requires at least 100 rAF samples per scenario")
 
 
 def set_change_value(driver: Any, selector: str, value: str) -> None:
@@ -102,7 +102,7 @@ def run_one(
         if int(result.get("sampleCount", 0)) < MIN_FRAME_SAMPLES:
             raise SystemExit(
                 f"TEST_HARNESS_FAILURE: {name} produced {result.get('sampleCount', 0)} rAF samples "
-                f"during {SAMPLE_SECONDS:.1f}s; minimum is {MIN_FRAME_SAMPLES}"
+                f"during {SAMPLE_SECONDS:.1f}s; p99 evidence requires at least {MIN_FRAME_SAMPLES}"
             )
         result["configuredSeed"] = FIXED_SEED
         result["configuredNowMs"] = FIXED_NOW_MS
