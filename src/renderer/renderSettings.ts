@@ -50,6 +50,7 @@ export const DEEP_BLACKOUT_FOG = Object.freeze({ r: 0, g: 0, b: 0 });
 export const M_F1_LIGHT_SHADOW_SAFETY_CEILING = 128;
 export const RENDER_SETTINGS_STORAGE_KEY = 'project-noclip:render-settings:v1';
 export const RENDER_FRONTIER_CONCEALMENT_MARGIN_METERS = 1;
+export const RENDER_FRONTIER_MIN_FOG_END_METERS = 0.05;
 
 export const SHADOW_QUALITY_RESOLUTION: Readonly<Record<ShadowQuality, ShadowResolution>> = Object.freeze({
   low: 256,
@@ -187,7 +188,7 @@ export function fogEndForGuaranteedFrontier(
   if (nearestGuaranteedFrontierMeters === undefined || !Number.isFinite(nearestGuaranteedFrontierMeters)) return distance.fogEnd;
   return Math.min(
     distance.fogEnd,
-    Math.max(1, nearestGuaranteedFrontierMeters - distance.frontierConcealmentMargin)
+    Math.max(RENDER_FRONTIER_MIN_FOG_END_METERS, nearestGuaranteedFrontierMeters - distance.frontierConcealmentMargin)
   );
 }
 
@@ -210,7 +211,7 @@ export function level0FogForSettings(
   const colorMix = Math.pow(blackout, 1.4);
   const end = fogEndForGuaranteedFrontier(settings, nearestGuaranteedFrontierMeters);
   const canonicalLinkedStart = settings.fogBehavior === 'stronger' ? distance.fogStart * 0.78 : distance.fogStart;
-  const latestSafeStart = Math.max(0, end - 1);
+  const latestSafeStart = Math.max(0, end - RENDER_FRONTIER_MIN_FOG_END_METERS);
   const linkedStart = Math.min(canonicalLinkedStart, latestSafeStart);
   const blackoutStart = Math.min(latestSafeStart, Math.max(4.5, linkedStart * 0.62));
   return {
