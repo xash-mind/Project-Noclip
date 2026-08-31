@@ -29,6 +29,9 @@ export interface RenderSettingsQaBridge {
   resetRender(): ReturnType<typeof getRenderSettings>;
   resetLighting(): FixtureLightingQaOverrides;
   diagnostics(): ReturnType<typeof renderSettingsDiagnostics>;
+  enterLive(): boolean;
+  exitLive(): boolean;
+  live(): boolean;
 }
 
 declare global {
@@ -45,11 +48,18 @@ function labelPreset(value: RenderPreset): string {
   return `${value[0]!.toUpperCase()}${value.slice(1)}`;
 }
 
+function cycleSelect(select: HTMLSelectElement, values: readonly string[]): void {
+  const index = Math.max(0, values.indexOf(select.value));
+  select.value = values[(index + 1) % values.length]!;
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 export function installRenderSettingsLab(game: ProjectNoclipGame): void {
   const lab = document.querySelector<HTMLElement>('[data-ui="lab"]');
-  if (!lab || lab.querySelector('[data-lab-panel="render-settings"]')) return;
+  const uiRoot = document.querySelector<HTMLElement>('#ui-root');
+  if (!lab || !uiRoot || lab.querySelector('[data-lab-panel="render-settings"]')) return;
 
-  // The baseline is the device-local canonical renderer setting at DEV Lab
+  // The baseline is the device-local canonical renderer setting at runtime-QA
   // installation time. All controls below are transient overlays and reset to
   // this value without writing Journey state or localStorage.
   const canonicalSettings = getRenderSettings();
@@ -76,8 +86,8 @@ export function installRenderSettingsLab(game: ProjectNoclipGame): void {
   panel.dataset.labPanel = 'render-settings';
   panel.hidden = true;
   panel.innerHTML = `
-    <div class="lab-section-heading"><h3>Runtime graphics / performance</h3><span>DEV QA · ephemeral</span></div>
-    <p class="lab-copy">These controls experiment with presentation and M-F1 runtime participation only. They do not change world generation, fixture identity, Blackout truth, Journey saves, or the device's canonical renderer settings.</p>
+    <div class="lab-section-heading"><h3>Runtime graphics / performance</h3><span>runtime QA · ephemeral</span></div>
+    <p class="lab-copy render-settings-intro">These controls experiment with presentation and M-F1 runtime participation only. They do not change world generation, fixture identity, Blackout truth, Journey saves, or the device's canonical renderer settings.</p>
     <div class="render-settings-grid">
       <label class="full">Preset / Custom
         <select data-render-setting="preset">
@@ -121,10 +131,25 @@ export function installRenderSettingsLab(game: ProjectNoclipGame): void {
       </label>
       <button type="button" data-action="reset-render-experiment">Reset canonical render settings</button>
       <button type="button" data-action="reset-lighting-experiment">Reset lighting experiment</button>
+      <button type="button" class="full live-performance-enter" data-action="enter-live-performance">Enter Live Performance Test</button>
     </div>
     <p class="render-settings-note">Render Distance remains whole-Cell based. Fog owns atmosphere; streaming owns residency; visibility owns participation. If streamed coverage ever falls behind the requested envelope, the existing fog path clamps before the nearest unguaranteed Cell rather than revealing void.</p>
     <pre class="metrics render-diagnostics" data-ui="render-diagnostics"></pre>`;
   lab.appendChild(panel);
+  const panelAnchor = document.createComment('render-performance-panel-home');
+  panel.before(panelAnchor);
+
+  const liveOverlay = document.createElement('aside');
+  liveOverlay.className = 'render-live-overlay ui-panel';
+  liveOverlay.dataset.ui = 'render-live-overlay';
+  liveOverlay.hidden = true;
+  liveOverlay.innerHTML = `
+    <div class="render-live-header">
+      <div><strong>LIVE PERFORMANCE TEST</strong><small>World Lab QA · gameplay active</small></div>
+      <button type="button" data-action="exit-live-performance">Exit Live Test</button>
+    </div>
+    <p class="render-live-shortcuts">Desktop while pointer-locked: 1–4 distance · L active lights · K shadows · R render scale · H shadow resolution · P post · \` exit. WASD / Shift / mouse remain gameplay.</p>`;
+  uiRoot.appendChild(liveOverlay);
 
   const preset = panel.querySelector<HTMLSelectElement>('[data-render-setting="preset"]')!;
   const distance = panel.querySelector<HTMLSelectElement>('[data-render-setting="distance"]')!;
@@ -135,6 +160,7 @@ export function installRenderSettingsLab(game: ProjectNoclipGame): void {
   const shadowLights = panel.querySelector<HTMLSelectElement>('[data-render-setting="shadow-lights"]')!;
   const fog = panel.querySelector<HTMLSelectElement>('[data-render-setting="fog"]')!;
   const diagnostics = panel.querySelector<HTMLElement>('[data-ui="render-diagnostics"]')!;
+  let livePerformanceTest = false;
 
   const transientPreset = (value: Exclude<RenderPreset, 'custom'>): ReturnType<typeof getRenderSettings> =>
     setTransientRenderSettings(settingsForPreset(value));
@@ -163,6 +189,7 @@ export function installRenderSettingsLab(game: ProjectNoclipGame): void {
     diagnostics.textContent = [
       `Canonical preset: ${labelPreset(canonicalSettings.preset)}`,
       `Current preset: ${labelPreset(settings.preset)}${settings.preset === 'custom' ? ' (QA Custom)' : ''}`,
+      `Live test: ${livePerformanceTest ? 'ACTIVE · gameplay input enabled' : 'off'}`,
       `FPS: ${runtime.fps?.toFixed(1) ?? 'sampling'}`,
       `Frame time: ${runtime.frameTimeMs?.toFixed(2) ?? 'sampling'} ms`,
       `Draw calls: ${runtime.drawCalls ?? 'n/a'}`,
@@ -209,7 +236,7 @@ export function installRenderSettingsLab(game: ProjectNoclipGame): void {
   const selectTab = (selected: 'world' | 'render'): void => {
     const renderOpen = selected === 'render';
     for (const section of worldSections) section.hidden = renderOpen;
-    panel.hidden = !renderOpen;
+    if (!livePerformanceTest) panel.hidden = !renderOpen;
     for (const button of tabs.querySelectorAll<HTMLButtonElement>('[data-render-tab]')) {
       const active = button.dataset.renderTab === selected;
       button.classList.toggle('active', active);
@@ -217,8 +244,70 @@ export function installRenderSettingsLab(game: ProjectNoclipGame): void {
     }
     refreshDiagnostics();
   };
+
+  const enterLive = (): boolean => {
+    if (livePerformanceTest) return true;
+    livePerformanceTest = true;
+    panel.hidden = false;
+    panel.classList.add('live-performance-panel');
+    liveOverlay.hidden = false;
+    liveOverlay.appendChild(panel);
+    document.body.classList.add('performance-live-test');
+    // Close World Lab through its existing UI operation. ProjectNoclipGame then
+    // restores ordinary auto-render/input exactly as it does for a player close;
+    // the compact panel is outside World Lab and therefore does not change its
+    // canonical pause contract.
+    if (lab.classList.contains('visible')) lab.querySelector<HTMLButtonElement>('[data-action="close-lab"]')?.click();
+    refreshDiagnostics();
+    return livePerformanceTest && !lab.classList.contains('visible');
+  };
+
+  const exitLive = (): boolean => {
+    if (!livePerformanceTest) return false;
+    livePerformanceTest = false;
+    document.body.classList.remove('performance-live-test');
+    panel.classList.remove('live-performance-panel');
+    panelAnchor.parentNode?.insertBefore(panel, panelAnchor.nextSibling);
+    liveOverlay.hidden = true;
+    // Re-open World Lab via its existing input operation, restoring its normal
+    // paused inspection semantics, then return directly to Performance Lab.
+    if (!lab.classList.contains('visible')) document.querySelector<HTMLButtonElement>('[data-action="touch-lab"]')?.click();
+    selectTab('render');
+    return !livePerformanceTest && lab.classList.contains('visible');
+  };
+
+  panel.querySelector('[data-action="enter-live-performance"]')?.addEventListener('click', () => enterLive());
+  liveOverlay.querySelector('[data-action="exit-live-performance"]')?.addEventListener('click', () => exitLive());
   tabs.querySelector<HTMLButtonElement>('[data-render-tab="world"]')?.addEventListener('click', () => selectTab('world'));
   tabs.querySelector<HTMLButtonElement>('[data-render-tab="render"]')?.addEventListener('click', () => selectTab('render'));
+
+  // Pointer lock intentionally leaves the mouse unavailable for desktop UI.
+  // Live-test shortcuts keep the same canonical controls usable while WASD,
+  // Shift and mouse-look remain untouched gameplay inputs. Touch users can tap
+  // the compact controls directly while the normal touch HUD remains active.
+  window.addEventListener('keydown', (event) => {
+    if (!livePerformanceTest) return;
+    if (event.code === 'Backquote') {
+      event.preventDefault(); event.stopImmediatePropagation(); exitLive(); return;
+    }
+    const distanceByDigit: Partial<Record<string, RenderDistanceLevel>> = {
+      Digit1: 'low', Digit2: 'medium', Digit3: 'high', Digit4: 'ultra'
+    };
+    const renderDistance = distanceByDigit[event.code];
+    if (renderDistance) {
+      event.preventDefault(); event.stopImmediatePropagation(); transientPatch({ renderDistance }); return;
+    }
+    const cycles: Partial<Record<string, [HTMLSelectElement, readonly string[]]>> = {
+      KeyL: [activeLights, ['', '32', '64', '96', '128']],
+      KeyK: [shadowLights, ['', '0', '16', '32', '48', '64', '96', '128']],
+      KeyR: [renderScale, ['0.5', '0.67', '0.75', '1']],
+      KeyH: [shadowResolution, ['256', '512', '1024']],
+      KeyP: [postProcessing, ['off', 'low', 'full']]
+    };
+    const cycle = cycles[event.code];
+    if (!cycle) return;
+    event.preventDefault(); event.stopImmediatePropagation(); cycleSelect(cycle[0], cycle[1]);
+  }, true);
 
   onRenderSettingsChanged((settings) => {
     applyRenderSettingsToGame(game, settings);
@@ -233,7 +322,10 @@ export function installRenderSettingsLab(game: ProjectNoclipGame): void {
     lighting: (value) => setFixtureLightingQaOverrides(value),
     resetRender,
     resetLighting: () => resetFixtureLightingQaOverrides(),
-    diagnostics: () => renderSettingsDiagnostics(game)
+    diagnostics: () => renderSettingsDiagnostics(game),
+    enterLive,
+    exitLive,
+    live: () => livePerformanceTest
   };
 
   syncControls();

@@ -3,7 +3,6 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const settingsModule = await import('../.test-dist/src/renderer/renderSettings.js');
-const runtimeModule = await import('../.test-dist/src/renderer/renderSettingsRuntime.js');
 const { CELL_SIZE } = await import('../.test-dist/src/world/types.js');
 
 const fixtureSource = await readFile(new URL('../src/renderer/fixtureLighting.ts', import.meta.url), 'utf8');
@@ -20,22 +19,22 @@ const {
   fogEndForGuaranteedFrontier,
   getRenderSettings,
   level0FogForSettings,
+  nearestGuaranteedRenderFrontierMeters,
   setRenderSettings,
   setTransientRenderSettings,
   settingsForPreset
 } = settingsModule;
-const { nearestGuaranteedRenderFrontierMeters } = runtimeModule;
 
 function loadedSquare(radius, missing = []) {
   const excluded = new Set(missing.map(([x, z]) => `${x}:${z}`));
-  const loaded = new Map();
+  const loaded = new Set();
   for (let x = -radius; x <= radius; x += 1) {
     for (let z = -radius; z <= radius; z += 1) {
       const id = `${x}:${z}`;
-      if (!excluded.has(id)) loaded.set(id, { id });
+      if (!excluded.has(id)) loaded.add(id);
     }
   }
-  return { loaded };
+  return loaded;
 }
 
 test('visible fog horizons stay one metre inside whole-Cell active envelopes for every preset', () => {
@@ -56,10 +55,16 @@ test('camera-aware frontier safety clamps fog before missing requested coverage 
   for (const preset of ['low', 'medium', 'high', 'ultra']) {
     const settings = settingsForPreset(preset);
     const radius = RENDER_DISTANCE_PROFILES[preset].loadRadius;
-    const missing = [[radius, 0]];
-    const renderer = loadedSquare(radius, missing);
+    const loaded = loadedSquare(radius, [[radius, 0]]);
     for (const playerX of [0, CELL_SIZE / 2 - 1, CELL_SIZE / 2 - 0.1]) {
-      const frontier = nearestGuaranteedRenderFrontierMeters(renderer, 0, 0, playerX, 0, settings);
+      const frontier = nearestGuaranteedRenderFrontierMeters(
+        settings,
+        0,
+        0,
+        playerX,
+        0,
+        (cellX, cellZ) => loaded.has(`${cellX}:${cellZ}`)
+      );
       assert.equal(typeof frontier, 'number');
       const fog = level0FogForSettings(settings, 0, frontier);
       assert.ok(fog.end < frontier, `${preset} fog ${fog.end} must be opaque before missing Cell begins at ${frontier}`);
@@ -72,20 +77,41 @@ test('fully loaded requested coverage keeps canonical fog stable instead of pump
   for (const preset of ['low', 'medium', 'high', 'ultra']) {
     const settings = settingsForPreset(preset);
     const radius = RENDER_DISTANCE_PROFILES[preset].loadRadius;
-    const renderer = loadedSquare(radius);
+    const loaded = loadedSquare(radius);
     for (const [x, z] of [[0, 0], [6.5, 0], [-6.5, 6.5]]) {
-      const frontier = nearestGuaranteedRenderFrontierMeters(renderer, 0, 0, x, z, settings);
+      const frontier = nearestGuaranteedRenderFrontierMeters(
+        settings,
+        0,
+        0,
+        x,
+        z,
+        (cellX, cellZ) => loaded.has(`${cellX}:${cellZ}`)
+      );
       assert.equal(frontier, undefined);
       assert.equal(level0FogForSettings(settings, 0, frontier).end, RENDER_DISTANCE_PROFILES[preset].fogEnd);
     }
   }
 });
 
+test('startup/partial residency safety is camera-aware without changing whole-Cell preset meaning', () => {
+  const settings = settingsForPreset('ultra');
+  const loaded = loadedSquare(2);
+  const centerFrontier = nearestGuaranteedRenderFrontierMeters(settings, 0, 0, 0, 0, (x, z) => loaded.has(`${x}:${z}`));
+  const boundaryFrontier = nearestGuaranteedRenderFrontierMeters(settings, 0, 0, 6.9, 0, (x, z) => loaded.has(`${x}:${z}`));
+  assert.equal(centerFrontier, 35);
+  assert.equal(boundaryFrontier, 28.1);
+  assert.equal(RENDER_DISTANCE_PROFILES.ultra.loadRadius, 4);
+  assert.ok(fogEndForGuaranteedFrontier(settings, centerFrontier) < centerFrontier);
+  assert.ok(fogEndForGuaranteedFrontier(settings, boundaryFrontier) < boundaryFrontier);
+});
+
 test('Blackout keeps the same frontier clamp while atmosphere still reaches canonical deep black', () => {
   const settings = settingsForPreset('high');
   const frontier = 24;
   const ordinary = level0FogForSettings(settings, 0, frontier);
+  const partial = level0FogForSettings(settings, 0.55, frontier);
   const blackout = level0FogForSettings(settings, 1, frontier);
+  assert.equal(ordinary.end, partial.end);
   assert.equal(ordinary.end, blackout.end);
   assert.ok(ordinary.end < frontier);
   assert.deepEqual(blackout.color, DEEP_BLACKOUT_FOG);
@@ -116,23 +142,39 @@ test('World Lab lighting experiments stay inside fixture participation and prese
   assert.doesNotMatch(fixtureSource, /descriptor\.lightGroups\s*=/);
 });
 
-test('performance lab overrides are DEV-only, ephemeral, resettable and outside save/generation contracts', () => {
-  assert.match(mainSource, /if \(import\.meta\.env\.DEV\)[\s\S]*import\('\.\/ui\/renderSettingsLab\.js'\)/);
-  assert.doesNotMatch(mainSource, /^import .*renderSettingsLab/m);
+test('runtime QA bridge remains available to accepted production-preview verification while privileged Studio stays DEV-only', () => {
+  assert.match(mainSource, /^import \{ installRenderSettingsLab \} from '\.\/ui\/renderSettingsLab\.js';/m);
+  assert.match(mainSource, /installRegionDepthLab\(game\);[\s\S]*installRenderSettingsLab\(game\);/);
+  assert.match(mainSource, /if \(import\.meta\.env\.DEV\)[\s\S]*studioBridgeClient[\s\S]*worldLabStudioIntegration/);
   assert.match(labSource, /setTransientRenderSettings/);
   assert.match(labSource, /resetFixtureLightingQaOverrides/);
   assert.match(labSource, /reset-render-experiment/);
   assert.match(labSource, /reset-lighting-experiment/);
   assert.match(labSource, /Max active M-F1 Omnis/);
   assert.match(labSource, /Max shadow-casting M-F1 Omnis/);
+  assert.doesNotMatch(labSource, /studioBridgeClient|ChangeReceipt|preview-parameters|Save-to-Project/);
   assert.doesNotMatch(labSource, /setRenderSettings|patchRenderSettings|applyRenderPreset/);
   assert.doesNotMatch(labSource, /persistence|SaveData|generationVersion/);
   assert.doesNotMatch(persistenceSource, /maxActiveLights|maxShadowCastingLights|renderScale|shadowResolution/);
 });
 
+test('Live Performance Test reuses one control panel and restores normal World Lab semantics on exit', () => {
+  assert.match(labSource, /data-action="enter-live-performance"/);
+  assert.match(labSource, /dataset\.ui = 'render-live-overlay'/);
+  assert.match(labSource, /liveOverlay\.appendChild\(panel\)/);
+  assert.match(labSource, /data-action="close-lab"/);
+  assert.match(labSource, /panelAnchor\.parentNode\?\.insertBefore\(panel, panelAnchor\.nextSibling\)/);
+  assert.match(labSource, /data-action="touch-lab"/);
+  assert.match(labSource, /Digit1: 'low'.*Digit4: 'ultra'/s);
+  assert.match(labSource, /KeyL:[\s\S]*KeyK:[\s\S]*KeyR:[\s\S]*KeyH:[\s\S]*KeyP:/);
+  assert.doesNotMatch(labSource, /prototype|ProjectNoclipGame as unknown as|toggleLab\s*=|paused\s*=/);
+});
+
 test('frontier concealment reads streaming coverage without taking streaming or visibility ownership', () => {
-  assert.match(runtimeSource, /renderer\.loaded\.has\(`\$\{x\}:\$\{z\}`\)/);
-  assert.match(runtimeSource, /nearestGuaranteedRenderFrontierMeters/);
+  const frontierReader = runtimeSource.match(/function currentGuaranteedFrontier[\s\S]*?\n}\n\nfunction applyLevel0Atmosphere/)?.[0];
+  assert.ok(frontierReader, 'missing canonical runtime frontier reader');
+  assert.match(frontierReader, /nearestGuaranteedRenderFrontierMeters\([\s\S]*renderer\.loaded\.has\(`\$\{cellX\}:\$\{cellZ\}`\)/);
+  assert.doesNotMatch(frontierReader, /\.loadCell\(|\.unloadCell\(|setRendererParticipatingCells\(/);
   assert.match(runtimeSource, /level0FogForSettings\(settings, state\.blackoutStrength, guaranteedFrontier\)/);
-  assert.doesNotMatch(runtimeSource, /loadCell\(|unloadCell\(|setRendererParticipatingCells\(/);
+  assert.match(runtimeSource, /state\.updateStreaming\(false\)/);
 });

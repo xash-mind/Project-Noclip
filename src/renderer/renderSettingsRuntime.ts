@@ -5,13 +5,14 @@ import type { SaveData } from '../persistence/types.js';
 import { calculateExposureDay, calculateWorldDay } from '../simulation/timeline.js';
 import { sampleGen3Environment } from '../world/gen3.js';
 import type { LightFieldSample } from '../world/lighting.js';
-import { CELL_SIZE, type CellDescriptor, type WorldTuning } from '../world/types.js';
+import type { CellDescriptor, WorldTuning } from '../world/types.js';
 import type { WorldRenderer } from './WorldRenderer.js';
 import {
   getRenderSettings,
   initializeRenderSettings,
   level0AmbientForBlackout,
   level0FogForSettings,
+  nearestGuaranteedRenderFrontierMeters,
   rendererParticipatingCellIds,
   renderDistanceProfile,
   type RenderDistanceLevel,
@@ -114,52 +115,18 @@ function applyPostProcessing(frame: CameraFrame | undefined, settings: RenderSet
   frame.update();
 }
 
-function distanceToCellBounds(cellX: number, cellZ: number, playerX: number, playerZ: number): number {
-  const half = CELL_SIZE / 2;
-  const minX = cellX * CELL_SIZE - half;
-  const maxX = cellX * CELL_SIZE + half;
-  const minZ = cellZ * CELL_SIZE - half;
-  const maxZ = cellZ * CELL_SIZE + half;
-  const dx = playerX < minX ? minX - playerX : playerX > maxX ? playerX - maxX : 0;
-  const dz = playerZ < minZ ? minZ - playerZ : playerZ > maxZ ? playerZ - maxZ : 0;
-  return Math.hypot(dx, dz);
-}
-
-/**
- * Returns the nearest boundary at which canonical active coverage is not yet
- * guaranteed. Streaming remains the residency owner: this is a read-only
- * atmosphere safety query over its already-loaded Cell set.
- */
-export function nearestGuaranteedRenderFrontierMeters(
-  renderer: Pick<WorldRenderer, 'loaded'>,
-  centerCellX: number,
-  centerCellZ: number,
-  playerX: number,
-  playerZ: number,
-  settings: RenderSettings
-): number | undefined {
-  const radius = renderDistanceProfile(settings).loadRadius;
-  let nearest = Number.POSITIVE_INFINITY;
-  for (let x = centerCellX - radius; x <= centerCellX + radius; x += 1) {
-    for (let z = centerCellZ - radius; z <= centerCellZ + radius; z += 1) {
-      if (renderer.loaded.has(`${x}:${z}`)) continue;
-      nearest = Math.min(nearest, distanceToCellBounds(x, z, playerX, playerZ));
-    }
-  }
-  return Number.isFinite(nearest) ? nearest : undefined;
-}
-
 function currentGuaranteedFrontier(game: ProjectNoclipGame, settings: RenderSettings): number | undefined {
   const state = access(game);
   if (!state.renderer || !state.camera || !state.currentCell) return undefined;
   const position = state.camera.getPosition();
+  const renderer = state.renderer;
   return nearestGuaranteedRenderFrontierMeters(
-    state.renderer,
+    settings,
     state.currentCell.address.cellX,
     state.currentCell.address.cellZ,
     position.x,
     position.z,
-    settings
+    (cellX, cellZ) => renderer.loaded.has(`${cellX}:${cellZ}`)
   );
 }
 
@@ -339,14 +306,14 @@ export function renderSettingsDiagnostics(game: ProjectNoclipGame): {
   const participatingCells = participatingIds?.length;
   const retainedCells = renderer?.loadedCellCount ?? 0;
   const position = state.camera?.getPosition();
-  const nearestGuaranteedFrontierMeters = renderer && state.currentCell && position
+  const nearestFrontier = renderer && state.currentCell && position
     ? nearestGuaranteedRenderFrontierMeters(
-      renderer,
+      settings,
       state.currentCell.address.cellX,
       state.currentCell.address.cellZ,
       position.x,
       position.z,
-      settings
+      (cellX, cellZ) => renderer.loaded.has(`${cellX}:${cellZ}`)
     )
     : undefined;
   return {
@@ -365,7 +332,7 @@ export function renderSettingsDiagnostics(game: ProjectNoclipGame): {
     renderScale: settings.renderScale,
     ...(fog ? { fogStart: fog.start, fogEnd: fog.end } : {}),
     canonicalFogEnd: profile.fogEnd,
-    ...(nearestGuaranteedFrontierMeters === undefined ? {} : { nearestGuaranteedFrontierMeters }),
+    ...(nearestFrontier === undefined ? {} : { nearestGuaranteedFrontierMeters: nearestFrontier }),
     frontierSafetyClamped: Boolean(fog && fog.end < profile.fogEnd - 0.0001)
   };
 }

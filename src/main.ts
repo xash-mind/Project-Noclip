@@ -8,6 +8,7 @@ import { installRendererRuntimeDiagnostics } from './renderer/rendererRuntimeDia
 import { initializeRuntimePerformanceDiagnostics } from './renderer/runtimePerformance.js';
 import { mountDevelopmentVersionIndicator } from './ui/DevelopmentVersionIndicator.js';
 import { installRegionDepthLab } from './ui/regionDepthLab.js';
+import { installRenderSettingsLab } from './ui/renderSettingsLab.js';
 
 initializeRenderSettingsRuntime();
 installFixtureLighting();
@@ -19,13 +20,14 @@ mountDevelopmentVersionIndicator();
 void prepareOrdinaryWallpaperAssets().then(async () => {
   const game = new ProjectNoclipGame();
   installRegionDepthLab(game);
+  // World Lab runtime QA remains available to accepted production-preview
+  // verification. It is non-privileged and cannot author project source.
+  installRenderSettingsLab(game);
   if (import.meta.env.DEV) {
     void Promise.all([
-      import('./ui/renderSettingsLab.js'),
       import('./dev/studioBridgeClient.js'),
       import('./dev/worldLabStudioIntegration.js')
-    ]).then(([renderLab, bridge, worldLab]) => {
-      renderLab.installRenderSettingsLab(game);
+    ]).then(([bridge, worldLab]) => {
       bridge.installStudioBridgeClient(game);
       worldLab.installWorldLabStudioIntegration();
     }).catch((error) => console.warn('[Noclip Studio] local DEV tooling unavailable', error));

@@ -180,6 +180,41 @@ function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
+function distanceToCellBounds(cellX: number, cellZ: number, playerX: number, playerZ: number): number {
+  const half = CELL_SIZE / 2;
+  const minX = cellX * CELL_SIZE - half;
+  const maxX = cellX * CELL_SIZE + half;
+  const minZ = cellZ * CELL_SIZE - half;
+  const maxZ = cellZ * CELL_SIZE + half;
+  const dx = playerX < minX ? minX - playerX : playerX > maxX ? playerX - maxX : 0;
+  const dz = playerZ < minZ ? minZ - playerZ : playerZ > maxZ ? playerZ - maxZ : 0;
+  return Math.hypot(dx, dz);
+}
+
+/**
+ * Pure fog/frontier contract. Streaming remains the residency owner and supplies
+ * only a read-only membership query; this owner computes how near missing
+ * requested coverage is from the current camera position.
+ */
+export function nearestGuaranteedRenderFrontierMeters(
+  settingsOrLevel: RenderSettings | RenderDistanceLevel,
+  centerCellX: number,
+  centerCellZ: number,
+  playerX: number,
+  playerZ: number,
+  cellIsLoaded: (cellX: number, cellZ: number) => boolean
+): number | undefined {
+  const radius = renderDistanceProfile(settingsOrLevel).loadRadius;
+  let nearest = Number.POSITIVE_INFINITY;
+  for (let x = centerCellX - radius; x <= centerCellX + radius; x += 1) {
+    for (let z = centerCellZ - radius; z <= centerCellZ + radius; z += 1) {
+      if (cellIsLoaded(x, z)) continue;
+      nearest = Math.min(nearest, distanceToCellBounds(x, z, playerX, playerZ));
+    }
+  }
+  return Number.isFinite(nearest) ? nearest : undefined;
+}
+
 export function fogEndForGuaranteedFrontier(
   settingsOrLevel: RenderSettings | RenderDistanceLevel,
   nearestGuaranteedFrontierMeters?: number
