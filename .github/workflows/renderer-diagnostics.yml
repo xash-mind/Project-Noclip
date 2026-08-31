@@ -53,6 +53,15 @@ jobs:
               --screenshot-policy functional-tolerant \
               scripts/renderer-diagnostics-smoke.py
           test -s artifacts/renderer-diagnostics/current/renderer-diagnostics.json
+          NOCLIP_BASE_URL="http://127.0.0.1:4173" \
+          NOCLIP_SURFACE_FUSION_ARTIFACTS="artifacts/renderer-diagnostics/surface-fusion" \
+            python scripts/verification-browser-runner.py \
+              --task surface-fusion-diagnostic \
+              --category RENDERER_PERFORMANCE_DIAGNOSTICS \
+              --artifact-dir artifacts/renderer-diagnostics/surface-fusion-verification \
+              --screenshot-policy functional-tolerant \
+              scripts/surface-fusion-diagnostic.py
+          test -s artifacts/renderer-diagnostics/surface-fusion/report.json
       - if: always()
         uses: actions/upload-artifact@v4
         with:
