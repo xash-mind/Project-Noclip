@@ -10,7 +10,7 @@ MEDIAN_LIMIT_PCT = 5.0
 P95_LIMIT_PCT = 5.0
 P99_LIMIT_PCT = 10.0
 MIN_MATCHED_RUNS = 5
-MIN_FRAME_SAMPLES = 10
+MIN_FRAME_SAMPLES = 100
 POSITION_TOLERANCE_METERS = 0.05
 THRESHOLD_EPSILON_PCT = 1e-9
 
@@ -121,7 +121,10 @@ def main() -> None:
         elif contract != expected_contract:
             raise SystemExit(f"TEST_HARNESS_FAILURE: {run_name} does not match the other pair contracts")
         if int(contract.get("minimumFrameSamples", 0)) < MIN_FRAME_SAMPLES:
-            raise SystemExit(f"TEST_HARNESS_FAILURE: {run_name} minimum frame-sample contract is too small")
+            raise SystemExit(
+                f"TEST_HARNESS_FAILURE: {run_name} minimum frame-sample contract cannot resolve p99; "
+                f"requires at least {MIN_FRAME_SAMPLES} samples"
+            )
 
         baseline_scenarios = scenario_map(baseline)
         candidate_scenarios = scenario_map(candidate)
@@ -140,9 +143,15 @@ def main() -> None:
             base_scenario = baseline_scenarios[name]
             cand_scenario = candidate_scenarios[name]
             if int(base_scenario.get("sampleCount", 0)) < MIN_FRAME_SAMPLES:
-                raise SystemExit(f"TEST_HARNESS_FAILURE: {run_name} baseline {name} has only {base_scenario.get('sampleCount')} rAF samples")
+                raise SystemExit(
+                    f"TEST_HARNESS_FAILURE: {run_name} baseline {name} has only {base_scenario.get('sampleCount')} rAF samples; "
+                    f"p99 evidence requires at least {MIN_FRAME_SAMPLES}"
+                )
             if int(cand_scenario.get("sampleCount", 0)) < MIN_FRAME_SAMPLES:
-                raise SystemExit(f"TEST_HARNESS_FAILURE: {run_name} candidate {name} has only {cand_scenario.get('sampleCount')} rAF samples")
+                raise SystemExit(
+                    f"TEST_HARNESS_FAILURE: {run_name} candidate {name} has only {cand_scenario.get('sampleCount')} rAF samples; "
+                    f"p99 evidence requires at least {MIN_FRAME_SAMPLES}"
+                )
             if not close_position(base_scenario["startSnapshot"], cand_scenario["startSnapshot"]):
                 raise SystemExit(
                     f"TEST_HARNESS_FAILURE: {run_name} {name} starts differ: "
