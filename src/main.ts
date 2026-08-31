@@ -8,7 +8,6 @@ import { installRendererRuntimeDiagnostics } from './renderer/rendererRuntimeDia
 import { initializeRuntimePerformanceDiagnostics } from './renderer/runtimePerformance.js';
 import { mountDevelopmentVersionIndicator } from './ui/DevelopmentVersionIndicator.js';
 import { installRegionDepthLab } from './ui/regionDepthLab.js';
-import { installRenderSettingsLab } from './ui/renderSettingsLab.js';
 
 initializeRenderSettingsRuntime();
 installFixtureLighting();
@@ -20,15 +19,16 @@ mountDevelopmentVersionIndicator();
 void prepareOrdinaryWallpaperAssets().then(async () => {
   const game = new ProjectNoclipGame();
   installRegionDepthLab(game);
-  installRenderSettingsLab(game);
   if (import.meta.env.DEV) {
     void Promise.all([
+      import('./ui/renderSettingsLab.js'),
       import('./dev/studioBridgeClient.js'),
       import('./dev/worldLabStudioIntegration.js')
-    ]).then(([bridge, worldLab]) => {
+    ]).then(([renderLab, bridge, worldLab]) => {
+      renderLab.installRenderSettingsLab(game);
       bridge.installStudioBridgeClient(game);
       worldLab.installWorldLabStudioIntegration();
-    }).catch((error) => console.warn('[Noclip Studio] local bridge unavailable', error));
+    }).catch((error) => console.warn('[Noclip Studio] local DEV tooling unavailable', error));
   }
   await game.initialize();
   const params = new URLSearchParams(window.location.search);
