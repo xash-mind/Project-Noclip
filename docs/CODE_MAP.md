@@ -70,9 +70,9 @@ Do not restore application/runtime prototype replacement layers or renderer Cell
 base-cell-realization
   -> level0-surface-presentation
   -> ordinary-casing-presentation
+  -> level0-static-surface-assembly
   -> level0-region-presentation
   -> schedule-nearby-arch-presentation
-  -> wall-junction-presentation
   -> realize-canonical-arch-collision
   -> fixture-lighting-attach
   -> static-batching-dirty
@@ -93,6 +93,23 @@ runtime-derived-state-unregister
 ```
 
 Neighbor-aware **visible** Arch reconstruction may remain deferred. Canonical A-A1 collision realization is synchronous before normal derived-index registration.
+
+## Level 0 static surface assembly
+
+**Visible topology owner**
+
+```text
+src/renderer/level0StaticSurfaceAssembly.ts
+  -> canonical Gen3 per-Cell wall-surface topology assembly
+  -> consumes already-resolved wallpaper/material presentation
+  -> fuses only contiguous compatible static wallpaper surfaces within one streamed Cell
+  -> recomputes canonical M-W1 world-space UV phase for consolidated runs
+
+src/renderer/wallJunctionGeometry.ts
+  -> pure T-junction presentation geometry consumed by the surface assembler
+```
+
+Surface assembly owns render topology only. It does not rewrite world descriptors, own collision, span arbitrary streamed Cells, reconstruct A-A1, alter CV-H1 aperture truth, or replace static batching. The former standalone wall-junction presentation stage is retired; T-junction clipping is part of the one canonical wall-surface assembly path.
 
 ## GenerationVersion / generation dispatch
 
@@ -198,9 +215,10 @@ src/renderer/ordinaryWallpaperRules.ts    # Ordinary-only A/B/C distribution, ca
 
 ```text
 src/renderer/level0WallpaperPresentation.ts
+src/renderer/level0StaticSurfaceAssembly.ts  # compatible per-Cell topology consolidation + world-space UV reapplication
 ```
 
-The wallpaper presentation module is shared across eligible Ordinary, Pillar Field and Arch wall surfaces. Its durable filename reflects that responsibility. Ordinary-only casing/outlet eligibility remains intentionally separate and unchanged.
+The wallpaper presentation module is shared across eligible Ordinary, Pillar Field and Arch wall surfaces. Its durable filename reflects that responsibility. Ordinary-only casing/outlet eligibility remains intentionally separate and unchanged. Surface assembly may consolidate compatible already-presented wall pieces, but it does not redefine wallpaper family/material policy.
 
 **Asset preparation / image pipeline**
 
@@ -230,7 +248,7 @@ src/renderer/level0SurfacePresentation.ts
 src/renderer/finalLevel0MaterialPresentation.ts
 ```
 
-`finalLevel0MaterialPresentation.ts` is a deliberate late convergence stage, not a semantic correction owner. It reapplies canonical policy to geometry that may be reconstructed late.
+`finalLevel0MaterialPresentation.ts` is a deliberate late convergence stage, not a semantic correction owner. It reapplies the same canonical policy to geometry that may be reconstructed late.
 
 Floor Condition visual contribution remains the accepted explicit no-op.
 
@@ -517,7 +535,7 @@ Visibility controls participation of already-owned render state. It must not des
 src/renderer/StaticWorldBatching.ts
 ```
 
-Batching owns batching only. The renderer lifecycle marks batching dirty after canonical Cell presentation/collision/lights are composed. Batching must not install unrelated lifecycle behavior.
+Batching owns batching only. The renderer lifecycle marks batching dirty after canonical Cell presentation/collision/lights are composed. Surface assembly runs earlier and may reduce the number of compatible per-Cell render surfaces presented to batching; it does not allocate, reconcile, or span batch ownership. Batching must not install unrelated lifecycle behavior.
 
 ## Level 0 Feature presentation
 
@@ -660,6 +678,8 @@ Durable cleanup-era tests now use contract names rather than implementation-wave
 ```text
 tests/level0-cleanup-equivalence.test.mjs
 tests/renderer-cell-lifecycle-contract.test.mjs
+tests/level0-static-surface-assembly.test.mjs
+tests/wall-junction-geometry.test.mjs
 tests/aa1-ownership-contract.test.mjs
 tests/level0-presentation-policy-contract.test.mjs
 tests/presentation-runtime-integration-contract.test.mjs

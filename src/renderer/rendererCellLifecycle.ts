@@ -3,6 +3,7 @@ import { realizeNearbyArchCollision } from './archDividerCollision.js';
 import { applyFinalLevel0Materials, scheduleFinalLevel0MaterialsAfterArchReconstruction } from './finalLevel0MaterialPresentation.js';
 import { attachFixtureLights, detachCellFixtures } from './fixtureLighting.js';
 import { applyLevel0RegionPresentation, scheduleNearbyArchPresentation } from './level0RegionPresentation.js';
+import { assembleLevel0StaticSurfaces } from './level0StaticSurfaceAssembly.js';
 import { applyLevel0SurfacePresentation } from './level0SurfacePresentation.js';
 import { applyOrdinaryCasingMaterialPresentation } from './ordinaryCasingMaterialPresentation.js';
 import {
@@ -11,7 +12,6 @@ import {
   unregisterRuntimeCellState
 } from './runtimePerformance.js';
 import { markStaticWorldBatchingDirty } from './StaticWorldBatching.js';
-import { applyWallJunctionPresentation } from './wallJunctionPresentation.js';
 import type { WorldRenderer } from './WorldRenderer.js';
 
 /**
@@ -22,9 +22,9 @@ export const RENDERER_CELL_LOAD_ORDER = Object.freeze([
   'base-cell-realization',
   'level0-surface-presentation',
   'ordinary-casing-presentation',
+  'level0-static-surface-assembly',
   'level0-region-presentation',
   'schedule-nearby-arch-presentation',
-  'wall-junction-presentation',
   'realize-canonical-arch-collision',
   'fixture-lighting-attach',
   'static-batching-dirty',
@@ -71,9 +71,11 @@ export function runRendererCellLoadLifecycle(
 
   applyLevel0SurfacePresentation(renderer, visual);
   applyOrdinaryCasingMaterialPresentation(renderer, descriptor);
-  if (!alreadyLoaded) applyLevel0RegionPresentation(renderer, visual);
+  if (!alreadyLoaded) {
+    assembleLevel0StaticSurfaces(visual);
+    applyLevel0RegionPresentation(renderer, visual);
+  }
   scheduleNearbyArchPresentation(renderer, descriptor);
-  applyWallJunctionPresentation(visual);
 
   const affectedArchCells = realizeNearbyArchCollision(renderer, descriptor);
   syncAlreadyIndexedArchNeighbors(renderer, affectedArchCells, descriptor.id, alreadyLoaded);
