@@ -485,6 +485,8 @@ Also block for:
 
 When hosted Chromium / SwiftShader variance is near a threshold, collect at least three matched samples per SHA and compare medians. A noisy single result is neither a regression nor a pass.
 
+Matched percentile evidence must also resolve the percentile being enforced. Because p99 is a blocking metric, every matched candidate/baseline scenario evidence file must contain at least 100 measured rAF frame intervals. Fewer than 100 samples is `TEST_HARNESS_FAILURE`, not a performance pass or regression. Do not reduce the 45-second scenario workload, product graphics/workload, matched pairing, aggregation, or the 5% / 5% / 10% thresholds to satisfy this evidence floor.
+
 ## Screenshot policies
 
 Browser runner screenshot policy expresses the evidence role:

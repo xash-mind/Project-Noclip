@@ -189,7 +189,7 @@ jobs:
             NOCLIP_MATCHED_RUNTIME_ARTIFACTS="$ARTIFACT_ROOT/candidate" \
             NOCLIP_MATCHED_RUNTIME_RUN_ID="$PAIR" \
             NOCLIP_MATCHED_RUNTIME_SAMPLE_SECONDS="45.0" \
-            NOCLIP_MATCHED_RUNTIME_MIN_FRAME_SAMPLES="10" \
+            NOCLIP_MATCHED_RUNTIME_MIN_FRAME_SAMPLES="100" \
               python "$CANDIDATE_DIR/scripts/matched-runtime-scenarios.py"
           }
 
@@ -201,7 +201,7 @@ jobs:
             NOCLIP_MATCHED_RUNTIME_ARTIFACTS="$ARTIFACT_ROOT/baseline" \
             NOCLIP_MATCHED_RUNTIME_RUN_ID="$PAIR" \
             NOCLIP_MATCHED_RUNTIME_SAMPLE_SECONDS="45.0" \
-            NOCLIP_MATCHED_RUNTIME_MIN_FRAME_SAMPLES="10" \
+            NOCLIP_MATCHED_RUNTIME_MIN_FRAME_SAMPLES="100" \
               python "$CANDIDATE_DIR/scripts/matched-runtime-scenarios.py"
           }
 

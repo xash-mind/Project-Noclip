@@ -21,9 +21,9 @@ test('matched runtime harness isolates scenarios under deterministic world contr
   assert.ok(matchedHarness.includes("(\"arch-rooms\", [(\"arch-rooms\", \"core\")], False, False)"));
 });
 
-test('matched runtime harness refuses low-resolution percentile evidence without reducing product workload', () => {
-  assert.ok(matchedHarness.includes('MIN_FRAME_SAMPLES < 10'));
-  assert.ok(matchedHarness.includes("TEST_HARNESS_FAILURE: matched runtime evidence requires at least 10 rAF samples per scenario"));
+test('matched runtime harness refuses under-resolved p99 evidence without reducing product workload', () => {
+  assert.ok(matchedHarness.includes('MIN_FRAME_SAMPLES < 100'));
+  assert.ok(matchedHarness.includes('TEST_HARNESS_FAILURE: matched p99 runtime evidence requires at least 100 rAF samples per scenario'));
   assert.ok(matchedHarness.includes('requestedSampleSeconds'));
   assert.ok(matchedHarness.includes('minimumFrameSamples'));
   for (const forbidden of [
@@ -43,7 +43,8 @@ test('matched comparison keeps cleanup thresholds, validates like-for-like start
   assert.ok(comparator.includes('P99_LIMIT_PCT = 10.0'));
   assert.ok(comparator.includes('THRESHOLD_EPSILON_PCT = 1e-9'));
   assert.ok(comparator.includes('MIN_MATCHED_RUNS = 5'));
-  assert.ok(comparator.includes('MIN_FRAME_SAMPLES = 10'));
+  assert.ok(comparator.includes('MIN_FRAME_SAMPLES = 100'));
+  assert.ok(comparator.includes('p99 evidence requires at least'));
   assert.ok(comparator.includes('close_position(base_scenario["startSnapshot"], cand_scenario["startSnapshot"])'));
   assert.ok(comparator.includes('str(baseline.get("matchRunId")) != str(candidate.get("matchRunId"))'));
   assert.ok(comparator.includes('pair_deltas = [pct_delta(candidate, baseline)'));
@@ -61,7 +62,7 @@ test('renderer diagnostics executes five same-host Wave 5/Wave 6 pairs with the 
   assert.ok(workflow.includes('git worktree add --detach "$BASE_DIR" "$NOCLIP_WAVE5_PERFORMANCE_BASE_SHA"'));
   assert.ok(workflow.includes('python "$CANDIDATE_DIR/scripts/matched-runtime-scenarios.py"'));
   assert.ok(workflow.includes('NOCLIP_MATCHED_RUNTIME_SAMPLE_SECONDS="45.0"'));
-  assert.ok(workflow.includes('NOCLIP_MATCHED_RUNTIME_MIN_FRAME_SAMPLES="10"'));
+  assert.ok(workflow.includes('NOCLIP_MATCHED_RUNTIME_MIN_FRAME_SAMPLES="100"'));
   assert.ok(workflow.includes('if (( PAIR % 2 == 1 )); then'));
   assert.ok(workflow.includes('run_candidate'));
   assert.ok(workflow.includes('run_baseline'));
