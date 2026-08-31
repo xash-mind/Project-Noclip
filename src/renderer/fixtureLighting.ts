@@ -57,8 +57,14 @@ interface RendererFixtureState {
   lastSelectionCeiling?: number;
 }
 
+export interface FixtureLightingQaOverrides {
+  maxActiveLights?: number;
+  maxShadowCastingLights?: number;
+}
+
 const states = new WeakMap<WorldRenderer, RendererFixtureState>();
 let installed = false;
+let qaOverrides: FixtureLightingQaOverrides = {};
 
 export interface FixtureLightingDiagnostics {
   lightsCreated: number;
@@ -72,6 +78,7 @@ export interface FixtureLightingDiagnostics {
   selectionCandidateScans: number;
   inactiveFixtureSkips: number;
   shadowResolutionChanges: number;
+  shadowParticipationWrites: number;
   panelMaterialWrites: number;
   intensityWrites: number;
   enabledWrites: number;
@@ -92,6 +99,7 @@ const fixtureDiagnostics: FixtureLightingDiagnostics = {
   selectionCandidateScans: 0,
   inactiveFixtureSkips: 0,
   shadowResolutionChanges: 0,
+  shadowParticipationWrites: 0,
   panelMaterialWrites: 0,
   intensityWrites: 0,
   enabledWrites: 0,
@@ -99,6 +107,29 @@ const fixtureDiagnostics: FixtureLightingDiagnostics = {
   updateMs: 0,
   maxUpdateMs: 0
 };
+
+function qaCeiling(value: number | undefined): number | undefined {
+  if (value === undefined || !Number.isFinite(value)) return undefined;
+  return Math.max(0, Math.min(MAX_ACTIVE_FIXTURE_LIGHTS, Math.round(value)));
+}
+
+/** Runtime-only QA participation override. No fixture/world identity is changed. */
+export function setFixtureLightingQaOverrides(overrides: FixtureLightingQaOverrides): FixtureLightingQaOverrides {
+  qaOverrides = {
+    ...(qaCeiling(overrides.maxActiveLights) === undefined ? {} : { maxActiveLights: qaCeiling(overrides.maxActiveLights) }),
+    ...(qaCeiling(overrides.maxShadowCastingLights) === undefined ? {} : { maxShadowCastingLights: qaCeiling(overrides.maxShadowCastingLights) })
+  };
+  return fixtureLightingQaOverridesSnapshot();
+}
+
+export function resetFixtureLightingQaOverrides(): FixtureLightingQaOverrides {
+  qaOverrides = {};
+  return {};
+}
+
+export function fixtureLightingQaOverridesSnapshot(): FixtureLightingQaOverrides {
+  return { ...qaOverrides };
+}
 
 export function fixtureLightingDiagnosticsSnapshot(): FixtureLightingDiagnostics {
   return { ...fixtureDiagnostics };
@@ -405,8 +436,11 @@ function updateFixtureLighting(
   const state = stateFor(renderer);
   const settings = getRenderSettings();
   const renderDistanceCeiling = renderDistanceProfile(settings).lightShadowSafetyCeiling;
-  const maxActiveLights = Math.min(MAX_ACTIVE_FIXTURE_LIGHTS, renderDistanceCeiling);
+  const canonicalActiveCeiling = Math.min(MAX_ACTIVE_FIXTURE_LIGHTS, renderDistanceCeiling);
+  const maxActiveLights = qaOverrides.maxActiveLights ?? canonicalActiveCeiling;
+  const maxShadowCastingLights = Math.min(maxActiveLights, qaOverrides.maxShadowCastingLights ?? maxActiveLights);
   const selectedIds = selectedFixtureIds(renderer, state, playerX, playerZ, maxActiveLights);
+  const shadowedIds = new Set([...selectedIds].slice(0, maxShadowCastingLights));
   const groupPulses = new Map<string, number>();
 
   const pulseFor = (group: LightGroupSpec): number => {
@@ -452,9 +486,6 @@ function updateFixtureLighting(
       }
     }
     if (!light) continue;
-    // Color/range/cast/bias/normal-offset are invariant for this runtime and
-    // are set once at creation. Rewriting them for every fixture every frame
-    // created steady-state CPU/device churn without changing visible output.
     if (light.shadowResolution !== settings.shadowResolution) {
       light.shadowResolution = settings.shadowResolution;
       fixtureDiagnostics.shadowResolutionChanges += 1;
@@ -463,6 +494,22 @@ function updateFixtureLighting(
         fixtureDiagnostics.shadowDirtyMarks += 1;
       }
     }
+
+    // Production keeps one shadow per selected M-F1 Omni. World Lab may
+    // temporarily cap shadow participation independently; the override changes
+    // only this runtime component flag and never fixture generation/identity.
+    const desiredCastShadows = qaOverrides.maxShadowCastingLights === undefined
+      ? true
+      : selected && shadowedIds.has(runtime.id);
+    if (light.castShadows !== desiredCastShadows) {
+      light.castShadows = desiredCastShadows;
+      fixtureDiagnostics.shadowParticipationWrites += 1;
+      if (desiredCastShadows && !runtime.shadowDirty) {
+        runtime.shadowDirty = true;
+        fixtureDiagnostics.shadowDirtyMarks += 1;
+      }
+    }
+
     const intensity = selected ? runtime.group.intensity * pulse * FIXTURE_LIGHT_INTENSITY_MULTIPLIER : 0;
     if (Math.abs(light.intensity - intensity) > 0.000001) {
       light.intensity = intensity;
@@ -474,7 +521,7 @@ function updateFixtureLighting(
       fixtureDiagnostics.enabledWrites += 1;
     }
 
-    if (selected && runtime.group.state !== 'off' && pulse > 0.001 && runtime.shadowDirty) {
+    if (light.castShadows && selected && runtime.group.state !== 'off' && pulse > 0.001 && runtime.shadowDirty) {
       light.shadowUpdateMode = pc.SHADOWUPDATE_THISFRAME;
       fixtureDiagnostics.shadowUpdateRequests += 1;
       runtime.shadowDirty = false;

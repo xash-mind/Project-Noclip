@@ -12,7 +12,10 @@ import {
   initializeRenderSettings,
   level0AmbientForBlackout,
   level0FogForSettings,
+  nearestGuaranteedRenderFrontierMeters,
+  rendererParticipatingCellIds,
   renderDistanceProfile,
+  type RenderDistanceLevel,
   type RenderSettings
 } from './renderSettings.js';
 
@@ -61,6 +64,13 @@ interface GameRuntimeAccess {
   updateStreaming(force?: boolean, radiusOverride?: number): void;
 }
 
+interface RuntimeFrameTiming {
+  frameTimeMs: number;
+  fps: number;
+}
+
+const frameTimings = new WeakMap<ProjectNoclipGame, RuntimeFrameTiming>();
+
 function access(game: ProjectNoclipGame): GameRuntimeAccess {
   return game as unknown as GameRuntimeAccess;
 }
@@ -105,11 +115,27 @@ function applyPostProcessing(frame: CameraFrame | undefined, settings: RenderSet
   frame.update();
 }
 
+function currentGuaranteedFrontier(game: ProjectNoclipGame, settings: RenderSettings): number | undefined {
+  const state = access(game);
+  if (!state.renderer || !state.camera || !state.currentCell) return undefined;
+  const position = state.camera.getPosition();
+  const renderer = state.renderer;
+  return nearestGuaranteedRenderFrontierMeters(
+    settings,
+    state.currentCell.address.cellX,
+    state.currentCell.address.cellZ,
+    position.x,
+    position.z,
+    (cellX, cellZ) => renderer.loaded.has(`${cellX}:${cellZ}`)
+  );
+}
+
 function applyLevel0Atmosphere(game: ProjectNoclipGame, settings: RenderSettings): void {
   const state = access(game);
   if (!state.app) return;
   const ambient = level0AmbientForBlackout(state.blackoutStrength);
-  const fog = level0FogForSettings(settings, state.blackoutStrength);
+  const guaranteedFrontier = currentGuaranteedFrontier(game, settings);
+  const fog = level0FogForSettings(settings, state.blackoutStrength, guaranteedFrontier);
   const scene = modernScene(state.app);
   scene.ambientLight = new pc.Color(ambient.r, ambient.g, ambient.b);
   scene.fog.type = pc.FOG_LINEAR;
@@ -119,7 +145,7 @@ function applyLevel0Atmosphere(game: ProjectNoclipGame, settings: RenderSettings
   const cameraComponent = (state.camera as unknown as { camera?: CameraAccess } | undefined)?.camera;
   if (cameraComponent) {
     cameraComponent.clearColor = new pc.Color(fog.color.r, fog.color.g, fog.color.b);
-    cameraComponent.farClip = fog.end + 2;
+    cameraComponent.farClip = fog.end + 0.5;
   }
 }
 
@@ -128,6 +154,14 @@ function applyRenderQuality(game: ProjectNoclipGame, settings: RenderSettings): 
   if (!state.app) return;
   applyRenderScale(state.app, settings);
   applyPostProcessing(state.cameraFrame, settings);
+}
+
+function recordFrameTiming(game: ProjectNoclipGame, dt: number): void {
+  if (!(dt > 0) || !Number.isFinite(dt)) return;
+  const sample = dt * 1000;
+  const previous = frameTimings.get(game)?.frameTimeMs;
+  const frameTimeMs = previous === undefined ? sample : previous * 0.85 + sample * 0.15;
+  frameTimings.set(game, { frameTimeMs, fps: 1000 / frameTimeMs });
 }
 
 /** Device-local render settings initialization. Installs no application methods. */
@@ -166,7 +200,7 @@ export function setupRenderSettingsEngine(game: ProjectNoclipGame): void {
   camera.addComponent('camera', {
     clearColor: new pc.Color(fog.color.r, fog.color.g, fog.color.b),
     nearClip: 0.05,
-    farClip: fog.end + 2,
+    farClip: fog.end + 0.5,
     fov: 73,
     frustumCulling: true
   });
@@ -196,7 +230,10 @@ export function setupRenderSettingsEngine(game: ProjectNoclipGame): void {
   state.cameraFrame = cameraFrame;
   state.flashlight = flashlight;
   applyRenderQuality(game, settings);
-  app.on('update', (dt) => state.update(Math.min(dt, 0.05)));
+  app.on('update', (dt) => {
+    recordFrameTiming(game, dt);
+    state.update(Math.min(dt, 0.05));
+  });
   app.start();
   window.addEventListener('resize', () => app.resizeCanvas());
 }
@@ -235,15 +272,27 @@ export function applyRenderSettingsToGame(game: ProjectNoclipGame, settings = ge
 }
 
 export function renderSettingsDiagnostics(game: ProjectNoclipGame): {
+  fps?: number;
+  frameTimeMs?: number;
   activeCells: number;
   retainedCells: number;
+  participatingCells?: number;
+  loadedButNotParticipatingCells?: number;
+  currentCell?: string;
   activeOmnis: number;
   shadowedOmnis: number;
   drawCalls?: number;
+  renderDistance: RenderDistanceLevel;
+  renderScale: number;
   fogStart?: number;
   fogEnd?: number;
+  canonicalFogEnd: number;
+  nearestGuaranteedFrontierMeters?: number;
+  frontierSafetyClamped: boolean;
 } {
   const state = access(game);
+  const settings = getRenderSettings();
+  const profile = renderDistanceProfile(settings);
   const renderer = state.renderer as (WorldRenderer & {
     activeRealtimeFixtureLightCount?: number;
     shadowedRealtimeFixtureLightCount?: number;
@@ -252,12 +301,38 @@ export function renderSettingsDiagnostics(game: ProjectNoclipGame): {
   for (const visual of renderer?.loaded.values() ?? []) if (visual.root.enabled) activeCells += 1;
   const drawCalls = (state.app as unknown as { stats?: { drawCalls?: { total?: number } } } | undefined)?.stats?.drawCalls?.total;
   const fog = state.app ? modernScene(state.app).fog : undefined;
+  const timing = frameTimings.get(game);
+  const participatingIds = renderer ? rendererParticipatingCellIds(renderer) : undefined;
+  const participatingCells = participatingIds?.length;
+  const retainedCells = renderer?.loadedCellCount ?? 0;
+  const position = state.camera?.getPosition();
+  const nearestFrontier = renderer && state.currentCell && position
+    ? nearestGuaranteedRenderFrontierMeters(
+      settings,
+      state.currentCell.address.cellX,
+      state.currentCell.address.cellZ,
+      position.x,
+      position.z,
+      (cellX, cellZ) => renderer.loaded.has(`${cellX}:${cellZ}`)
+    )
+    : undefined;
   return {
+    ...(timing ? { fps: timing.fps, frameTimeMs: timing.frameTimeMs } : {}),
     activeCells,
-    retainedCells: renderer?.loadedCellCount ?? 0,
+    retainedCells,
+    ...(participatingCells === undefined ? {} : {
+      participatingCells,
+      loadedButNotParticipatingCells: Math.max(0, retainedCells - participatingCells)
+    }),
+    ...(state.currentCell ? { currentCell: state.currentCell.id } : {}),
     activeOmnis: renderer?.activeRealtimeFixtureLightCount ?? 0,
     shadowedOmnis: renderer?.shadowedRealtimeFixtureLightCount ?? 0,
     ...(typeof drawCalls === 'number' ? { drawCalls } : {}),
-    ...(fog ? { fogStart: fog.start, fogEnd: fog.end } : {})
+    renderDistance: settings.renderDistance,
+    renderScale: settings.renderScale,
+    ...(fog ? { fogStart: fog.start, fogEnd: fog.end } : {}),
+    canonicalFogEnd: profile.fogEnd,
+    ...(nearestFrontier === undefined ? {} : { nearestGuaranteedFrontierMeters: nearestFrontier }),
+    frontierSafetyClamped: Boolean(fog && fog.end < profile.fogEnd - 0.0001)
   };
 }
