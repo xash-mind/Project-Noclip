@@ -134,11 +134,15 @@ Current independent jobs:
 renderer-profile
   -> scripts/renderer-diagnostics-smoke.py
   -> artifacts/renderer-diagnostics/current/renderer-diagnostics.json
+  -> scripts/surface-fusion-diagnostic.py
+  -> artifacts/renderer-diagnostics/surface-fusion/report.json
 
 runtime-scenarios
   -> scripts/profile-runtime-scenarios.py
   -> artifacts/runtime-diagnostics/runtime-performance-evidence.json
 ```
+
+The surface-fusion diagnostic is a functional-tolerant exact-head diagnostic inside the existing renderer-profile owner. It compares canonical Low, Low semantics with render scale temporarily forced to 1.0, and canonical High at the same deterministic Ordinary viewpoint, then captures representative Pillar Field, Arch Room and A-A1 evidence plus surface-assembly counters. It does not redefine preset values or visual acceptance policy.
 
 This lane owns comparable runtime evidence, renderer diagnostics and performance-regression classification. It does not redefine world or presentation correctness.
 
@@ -281,6 +285,8 @@ Cleanup-era permanent tests use durable contract names:
 ```text
 tests/level0-cleanup-equivalence.test.mjs
 tests/renderer-cell-lifecycle-contract.test.mjs
+tests/level0-static-surface-assembly.test.mjs
+tests/wall-junction-geometry.test.mjs
 tests/aa1-ownership-contract.test.mjs
 tests/level0-presentation-policy-contract.test.mjs
 tests/presentation-runtime-integration-contract.test.mjs
@@ -307,13 +313,13 @@ Current post-cleanup targets:
 DIRECT_RUNTIME_PROTOTYPE_REPLACEMENTS = 0
 APPLICATION_RUNTIME_WRAPPERS          = 0
 RUNTIME_INDEX_MUTATION_WRAPPERS       = 0
-RETAINED_CALL_THROUGH_WRAPPERS        <= 2
+RETAINED_CALL_THROUGH_WRAPPERS        = 1
 IMPLICIT_INSTALL_ORDER_DEPENDENCIES   = 0
 DUPLICATE_POLICY_OWNER_GROUPS         = 0
 ACTIVE_SEMANTIC_CORRECTION_LAYERS     = 0
 ```
 
-The current permitted retained call-through wrapper is renderer diagnostics around engine setup. It is non-semantic instrumentation and must remain isolated from product policy/lifecycle authority.
+The one permitted retained call-through wrapper is renderer diagnostics around engine setup. It is non-semantic instrumentation and must remain isolated from product policy/lifecycle authority.
 
 Metric definitions must not be manipulated to improve the count. Combining wrappers, hiding callbacks behind another mechanism, or introducing a generic event/plugin framework is not acceptable closure.
 
@@ -337,6 +343,25 @@ It verifies:
 - startup does not own lifecycle through installer order.
 
 It intentionally does **not** require a particular microtask spelling when the contract is simply that a named convergence stage is deferred.
+
+## Static surface / junction verification
+
+Durable contracts include:
+
+```text
+tests/level0-static-surface-assembly.test.mjs
+tests/wall-junction-geometry.test.mjs
+```
+
+They protect:
+
+- compatible coplanar wallpaper surfaces fuse only within one streamed Cell;
+- material, opening, corner, interaction and Region boundaries stop fusion;
+- split wallpaper pieces are clipped independently inside the semantic T-junction envelope;
+- world-space wallpaper UV phase is recomputed from the canonical wallpaper rule after consolidation;
+- A-A1 and CV-H1 remain outside surface-fusion ownership;
+- collision remains descriptor/canonical-collider owned;
+- the standalone wall-junction correction lifecycle does not return.
 
 ## A-A1 collision verification
 
