@@ -47,9 +47,9 @@ test('M-F1 canonical housing and diffuser stay inside the accepted fixture envel
   assert.equal(first.housing.indices.length / 3, 32, 'housing is one clean 16-quad ring/tray mesh');
   assert.equal(first.diffuser.indices.length / 3, 2, 'diffuser is one independently addressable quad');
 
-  assertBounds(first.housing, [-1.1, -0.04, -0.19], [1.1, 0.04, 0.19]);
+  assertBounds(first.housing.bounds, [-1.1, -0.04, -0.19], [1.1, 0.04, 0.19]);
   assertBounds(
-    first.diffuser,
+    first.diffuser.bounds,
     [-1.1 + M_F1_HOUSING_FRAME_WIDTH, -0.04 + M_F1_DIFFUSER_RECESS, -0.19 + M_F1_HOUSING_FRAME_WIDTH],
     [1.1 - M_F1_HOUSING_FRAME_WIDTH, -0.04 + M_F1_DIFFUSER_RECESS, 0.19 - M_F1_HOUSING_FRAME_WIDTH]
   );
