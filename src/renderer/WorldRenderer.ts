@@ -5,9 +5,8 @@ import { resolveMFluorescentPanelPresentation } from '../presentation/level0Pres
 import { sampleLightField, type LightFieldSample } from '../world/lighting.js';
 import { CELL_SIZE, type CellDescriptor, type FloorPatchSpec } from '../world/types.js';
 import { cvh1FloorSurfaceMesh } from './cvh1FloorSurface.js';
-import { createMFluorescentFixtureVisual } from './fixtureVisualGeometry.js';
-import { isMFluorescentPanelVisualName, M_F1_PANEL_DIMENSIONS, mFluorescentFixtureIdentity } from './fixtureVisualOwnership.js';
 import { ZONE_PROFILES } from '../world/zones.js';
+import { M_F1_PANEL_DIMENSIONS, mFluorescentFixtureIdentity } from './fixtureVisualOwnership.js';
 import { registerObjectCatalogShowcaseHost, type ObjectCatalogEntry } from './objectCatalog.js';
 import {
   recordRuntimeCollisionQuery,
@@ -71,12 +70,6 @@ export class WorldRenderer {
   }
 
   private box(name: string, parent: pc.Entity, position: [number, number, number], scale: [number, number, number], boxMaterial: pc.StandardMaterial, rotationY = 0): pc.Entity {
-    if (isMFluorescentPanelVisualName(name)) {
-      const canonical = M_F1_PANEL_DIMENSIONS;
-      const dimensionsMatch = scale.every((value, index) => Math.abs(value - canonical[index]!) <= 1e-8);
-      if (!dimensionsMatch) throw new Error(`M-F1 panel ${name} requested non-canonical dimensions ${scale.join('x')}`);
-      return createMFluorescentFixtureVisual(this.app, parent, name, position, rotationY, boxMaterial).panel;
-    }
     const entity = new pc.Entity(name);
     entity.addComponent('render', { type: 'box' });
     entity.setLocalPosition(position[0], position[1], position[2]);
