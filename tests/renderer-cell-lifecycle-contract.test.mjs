@@ -11,9 +11,9 @@ const lifecycleSource = await readFile(new URL('../src/renderer/rendererCellLife
 const rendererSource = await readFile(new URL('../src/renderer/WorldRenderer.ts', import.meta.url), 'utf8');
 const batchingSource = await readFile(new URL('../src/renderer/StaticWorldBatching.ts', import.meta.url), 'utf8');
 const surfaceSource = await readFile(new URL('../src/renderer/level0SurfacePresentation.ts', import.meta.url), 'utf8');
+const assemblySource = await readFile(new URL('../src/renderer/level0StaticSurfaceAssembly.ts', import.meta.url), 'utf8');
 const casingSource = await readFile(new URL('../src/renderer/ordinaryCasingMaterialPresentation.ts', import.meta.url), 'utf8');
 const regionSource = await readFile(new URL('../src/renderer/level0RegionPresentation.ts', import.meta.url), 'utf8');
-const wallSource = await readFile(new URL('../src/renderer/wallJunctionPresentation.ts', import.meta.url), 'utf8');
 const collisionSource = await readFile(new URL('../src/renderer/archDividerCollision.ts', import.meta.url), 'utf8');
 const fixtureSource = await readFile(new URL('../src/renderer/fixtureLighting.ts', import.meta.url), 'utf8');
 const finalMaterialSource = await readFile(new URL('../src/renderer/finalLevel0MaterialPresentation.ts', import.meta.url), 'utf8');
@@ -22,9 +22,9 @@ const mainSource = await readFile(new URL('../src/main.ts', import.meta.url), 'u
 
 const lifecycleParticipants = [
   surfaceSource,
+  assemblySource,
   casingSource,
   regionSource,
-  wallSource,
   collisionSource,
   fixtureSource,
   finalMaterialSource,
@@ -37,9 +37,9 @@ test('one explicit renderer lifecycle owns the accepted synchronous Cell load or
     'base-cell-realization',
     'level0-surface-presentation',
     'ordinary-casing-presentation',
+    'level0-static-surface-assembly',
     'level0-region-presentation',
     'schedule-nearby-arch-presentation',
-    'wall-junction-presentation',
     'realize-canonical-arch-collision',
     'fixture-lighting-attach',
     'static-batching-dirty',
@@ -50,9 +50,9 @@ test('one explicit renderer lifecycle owns the accepted synchronous Cell load or
   assert.ok(lifecycleSource.includes('realizeBaseCell();'));
   assert.ok(lifecycleSource.includes('applyLevel0SurfacePresentation(renderer, visual)'));
   assert.ok(lifecycleSource.includes('applyOrdinaryCasingMaterialPresentation(renderer, descriptor)'));
+  assert.ok(lifecycleSource.includes('assembleLevel0StaticSurfaces(visual)'));
   assert.ok(lifecycleSource.includes('applyLevel0RegionPresentation(renderer, visual)'));
   assert.ok(lifecycleSource.includes('scheduleNearbyArchPresentation(renderer, descriptor)'));
-  assert.ok(lifecycleSource.includes('applyWallJunctionPresentation(visual)'));
   assert.ok(lifecycleSource.includes('realizeNearbyArchCollision(renderer, descriptor)'));
   assert.ok(lifecycleSource.includes('syncAlreadyIndexedArchNeighbors(renderer, affectedArchCells, descriptor.id, alreadyLoaded)'));
   assert.ok(lifecycleSource.includes('attachFixtureLights(renderer, visual)'));
@@ -110,10 +110,11 @@ test('A-A1 collision is synchronous while visible Arch and final-material conver
   assert.match(finalMaterialSource, /export function scheduleFinalLevel0MaterialsAfterArchReconstruction/);
   assert.equal(collisionSource.includes('scheduleNearbyArchCollisionReconciliation'), false);
   assert.equal(collisionSource.includes('WorldRenderer.prototype'), false);
+  const assembly = lifecycleSource.indexOf('assembleLevel0StaticSurfaces(visual)');
   const collision = lifecycleSource.indexOf('realizeNearbyArchCollision(renderer, descriptor)');
   const register = lifecycleSource.indexOf('registerRuntimeCellState(renderer, descriptor)');
   const finalSchedule = lifecycleSource.indexOf('scheduleFinalLevel0MaterialsAfterArchReconstruction(renderer, descriptor)');
-  assert.ok(collision >= 0 && register > collision && finalSchedule > register);
+  assert.ok(assembly >= 0 && collision > assembly && register > collision && finalSchedule > register);
 });
 
 test('application startup installs facilities only; renderer lifecycle is a direct dependency', () => {
