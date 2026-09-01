@@ -26,6 +26,7 @@ export interface RenderDistanceProfile {
   worstCaseRetainedCells: number;
   fogStart: number;
   fogEnd: number;
+  frontierConcealmentMargin: number;
   lightShadowSafetyCeiling: number;
 }
 
@@ -48,6 +49,8 @@ export const ORDINARY_LEVEL0_FOG = Object.freeze({ r: 0.166, g: 0.157, b: 0.078 
 export const DEEP_BLACKOUT_FOG = Object.freeze({ r: 0, g: 0, b: 0 });
 export const M_F1_LIGHT_SHADOW_SAFETY_CEILING = 128;
 export const RENDER_SETTINGS_STORAGE_KEY = 'project-noclip:render-settings:v1';
+export const RENDER_FRONTIER_CONCEALMENT_MARGIN_METERS = 1;
+export const RENDER_FRONTIER_MIN_FOG_END_METERS = 0.05;
 
 export const SHADOW_QUALITY_RESOLUTION: Readonly<Record<ShadowQuality, ShadowResolution>> = Object.freeze({
   low: 256,
@@ -80,7 +83,7 @@ function distanceProfile(level: RenderDistanceLevel): RenderDistanceProfile {
   const loadRadius = LOAD_RADII[level];
   const retentionRadius = loadRadius + 1;
   const renderBoundary = loadRadius * CELL_SIZE;
-  const fogEnd = Math.max(8, renderBoundary - 1);
+  const fogEnd = Math.max(8, renderBoundary - RENDER_FRONTIER_CONCEALMENT_MARGIN_METERS);
   const fogStart = Math.max(7, fogEnd - (CELL_SIZE + 1));
   return Object.freeze({
     level,
@@ -91,6 +94,7 @@ function distanceProfile(level: RenderDistanceLevel): RenderDistanceProfile {
     worstCaseRetainedCells: squareCellCount(retentionRadius),
     fogStart,
     fogEnd,
+    frontierConcealmentMargin: RENDER_FRONTIER_CONCEALMENT_MARGIN_METERS,
     lightShadowSafetyCeiling: lightShadowCeilingForRadius(loadRadius)
   });
 }
@@ -176,6 +180,53 @@ function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
+function distanceToCellBounds(cellX: number, cellZ: number, playerX: number, playerZ: number): number {
+  const half = CELL_SIZE / 2;
+  const minX = cellX * CELL_SIZE - half;
+  const maxX = cellX * CELL_SIZE + half;
+  const minZ = cellZ * CELL_SIZE - half;
+  const maxZ = cellZ * CELL_SIZE + half;
+  const dx = playerX < minX ? minX - playerX : playerX > maxX ? playerX - maxX : 0;
+  const dz = playerZ < minZ ? minZ - playerZ : playerZ > maxZ ? playerZ - maxZ : 0;
+  return Math.hypot(dx, dz);
+}
+
+/**
+ * Pure fog/frontier contract. Streaming remains the residency owner and supplies
+ * only a read-only membership query; this owner computes how near missing
+ * requested coverage is from the current camera position.
+ */
+export function nearestGuaranteedRenderFrontierMeters(
+  settingsOrLevel: RenderSettings | RenderDistanceLevel,
+  centerCellX: number,
+  centerCellZ: number,
+  playerX: number,
+  playerZ: number,
+  cellIsLoaded: (cellX: number, cellZ: number) => boolean
+): number | undefined {
+  const radius = renderDistanceProfile(settingsOrLevel).loadRadius;
+  let nearest = Number.POSITIVE_INFINITY;
+  for (let x = centerCellX - radius; x <= centerCellX + radius; x += 1) {
+    for (let z = centerCellZ - radius; z <= centerCellZ + radius; z += 1) {
+      if (cellIsLoaded(x, z)) continue;
+      nearest = Math.min(nearest, distanceToCellBounds(x, z, playerX, playerZ));
+    }
+  }
+  return Number.isFinite(nearest) ? nearest : undefined;
+}
+
+export function fogEndForGuaranteedFrontier(
+  settingsOrLevel: RenderSettings | RenderDistanceLevel,
+  nearestGuaranteedFrontierMeters?: number
+): number {
+  const distance = renderDistanceProfile(settingsOrLevel);
+  if (nearestGuaranteedFrontierMeters === undefined || !Number.isFinite(nearestGuaranteedFrontierMeters)) return distance.fogEnd;
+  return Math.min(
+    distance.fogEnd,
+    Math.max(RENDER_FRONTIER_MIN_FOG_END_METERS, nearestGuaranteedFrontierMeters - distance.frontierConcealmentMargin)
+  );
+}
+
 export function level0AmbientForBlackout(blackoutStrength: number): { r: number; g: number; b: number } {
   const visible = Math.pow(1 - clamp01(blackoutStrength), 1.7);
   return {
@@ -185,15 +236,22 @@ export function level0AmbientForBlackout(blackoutStrength: number): { r: number;
   };
 }
 
-export function level0FogForSettings(settings: RenderSettings, blackoutStrength: number): Level0FogProfile {
+export function level0FogForSettings(
+  settings: RenderSettings,
+  blackoutStrength: number,
+  nearestGuaranteedFrontierMeters?: number
+): Level0FogProfile {
   const distance = renderDistanceProfile(settings);
   const blackout = clamp01(blackoutStrength);
   const colorMix = Math.pow(blackout, 1.4);
-  const linkedStart = settings.fogBehavior === 'stronger' ? distance.fogStart * 0.78 : distance.fogStart;
-  const blackoutStart = Math.max(4.5, linkedStart * 0.62);
+  const end = fogEndForGuaranteedFrontier(settings, nearestGuaranteedFrontierMeters);
+  const canonicalLinkedStart = settings.fogBehavior === 'stronger' ? distance.fogStart * 0.78 : distance.fogStart;
+  const latestSafeStart = Math.max(0, end - RENDER_FRONTIER_MIN_FOG_END_METERS);
+  const linkedStart = Math.min(canonicalLinkedStart, latestSafeStart);
+  const blackoutStart = Math.min(latestSafeStart, Math.max(4.5, linkedStart * 0.62));
   return {
     start: linkedStart + (blackoutStart - linkedStart) * blackout,
-    end: distance.fogEnd,
+    end,
     color: {
       r: ORDINARY_LEVEL0_FOG.r + (DEEP_BLACKOUT_FOG.r - ORDINARY_LEVEL0_FOG.r) * colorMix,
       g: ORDINARY_LEVEL0_FOG.g + (DEEP_BLACKOUT_FOG.g - ORDINARY_LEVEL0_FOG.g) * colorMix,
@@ -226,11 +284,21 @@ export function getRenderSettings(): RenderSettings {
   return { ...currentSettings };
 }
 
-export function setRenderSettings(settings: RenderSettings, storage: Pick<Storage, 'setItem'> | undefined = typeof localStorage === 'undefined' ? undefined : localStorage): RenderSettings {
+function publishRenderSettings(settings: RenderSettings): RenderSettings {
   currentSettings = sanitizeRenderSettings(settings);
-  try { storage?.setItem(RENDER_SETTINGS_STORAGE_KEY, JSON.stringify(currentSettings)); } catch { /* device-local persistence is best effort */ }
   for (const listener of listeners) listener({ ...currentSettings });
   return { ...currentSettings };
+}
+
+export function setRenderSettings(settings: RenderSettings, storage: Pick<Storage, 'setItem'> | undefined = typeof localStorage === 'undefined' ? undefined : localStorage): RenderSettings {
+  const sanitized = sanitizeRenderSettings(settings);
+  try { storage?.setItem(RENDER_SETTINGS_STORAGE_KEY, JSON.stringify(sanitized)); } catch { /* device-local persistence is best effort */ }
+  return publishRenderSettings(sanitized);
+}
+
+/** Applies an ephemeral runtime/QA value without writing device settings or Journey state. */
+export function setTransientRenderSettings(settings: RenderSettings): RenderSettings {
+  return publishRenderSettings(settings);
 }
 
 export function applyRenderPreset(preset: Exclude<RenderPreset, 'custom'>): RenderSettings {

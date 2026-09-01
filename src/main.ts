@@ -20,6 +20,8 @@ mountDevelopmentVersionIndicator();
 void prepareOrdinaryWallpaperAssets().then(async () => {
   const game = new ProjectNoclipGame();
   installRegionDepthLab(game);
+  // World Lab runtime QA remains available to accepted production-preview
+  // verification. It is non-privileged and cannot author project source.
   installRenderSettingsLab(game);
   if (import.meta.env.DEV) {
     void Promise.all([
@@ -28,7 +30,7 @@ void prepareOrdinaryWallpaperAssets().then(async () => {
     ]).then(([bridge, worldLab]) => {
       bridge.installStudioBridgeClient(game);
       worldLab.installWorldLabStudioIntegration();
-    }).catch((error) => console.warn('[Noclip Studio] local bridge unavailable', error));
+    }).catch((error) => console.warn('[Noclip Studio] local DEV tooling unavailable', error));
   }
   await game.initialize();
   const params = new URLSearchParams(window.location.search);
