@@ -52,14 +52,11 @@ def build_driver() -> webdriver.Chrome:
     if binary:
         options.binary_location = binary
     driver = webdriver.Chrome(options=options)
-    # Screenshot commands on GitHub's software renderer can take longer than
-    # Selenium's default HTTP timeout even when the frame itself is healthy.
-    # Keep this local to the visual-evidence harness rather than changing game
-    # timing or renderer policy.
     try:
         driver.command_executor._client_config.timeout = 30
     except (AttributeError, TypeError):
         pass
+    driver.set_script_timeout(30)
     return driver
 
 
@@ -98,18 +95,54 @@ def move_look(driver: webdriver.Chrome, movement_x: int, movement_y: int) -> Non
     )
 
 
+def capture_canvas_png(driver: webdriver.Chrome) -> bytes:
+    value = driver.execute_async_script("""
+      const done=arguments[0], canvas=document.querySelector('#game-canvas');
+      if(!canvas){done({error:'missing canvas'});return;}
+      requestAnimationFrame(()=>canvas.toBlob((blob)=>{
+        if(!blob){done({error:'canvas.toBlob returned null'});return;}
+        const reader=new FileReader();
+        reader.onerror=()=>done({error:String(reader.error)});
+        reader.onload=()=>done(String(reader.result));
+        reader.readAsDataURL(blob);
+      },'image/png'));
+    """)
+    if isinstance(value, dict):
+        raise AssertionError(value)
+    header, encoded = str(value).split(",", 1)
+    if "image/png" not in header:
+        raise AssertionError(header)
+    return base64.b64decode(encoded)
+
+
 def capture_required(driver: webdriver.Chrome, path: Path) -> None:
+    # CV-H1 requires blocking screenshot evidence, but GitHub's software
+    # renderer has reproducibly stalled inside ChromeDriver's whole-viewport
+    # /screenshot endpoint. Capture the actual game canvas first using the same
+    # WebGL-toBlob path already used by the Blackout visual lane; this preserves
+    # rendered-pixel evidence instead of weakening the screenshot requirement.
     last_error: Exception | None = None
-    for attempt in range(3):
+    try:
+        png = capture_canvas_png(driver)
+        if png:
+            path.write_bytes(png)
+            if path.stat().st_size > 1024:
+                return
+    except Exception as error:
+        last_error = error
+
+    # Retain independent browser fallbacks for environments where canvas export
+    # is unavailable. Do not extend timeouts merely to force hosted Chrome green.
+    for attempt in range(2):
         try:
             png = driver.get_screenshot_as_png()
             if png:
                 path.write_bytes(png)
                 if path.stat().st_size > 1024:
                     return
-        except Exception as error:  # Selenium exposes renderer timeouts as several concrete subclasses.
+        except Exception as error:
             last_error = error
-        if attempt == 1:
+        if attempt == 0:
             try:
                 encoded = driver.execute_cdp_cmd(
                     "Page.captureScreenshot",

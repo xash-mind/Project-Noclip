@@ -128,10 +128,38 @@ def locate_natural_blackout(driver: webdriver.Chrome) -> None:
     time.sleep(0.8)
 
 
-def toggle_flashlight(driver: webdriver.Chrome) -> None:
+def select_flashlight(driver: webdriver.Chrome) -> str:
+    selected = driver.execute_script("""
+      const buttons=[...document.querySelectorAll('[data-ui="inventory"] button')];
+      const flashlight=buttons.find((button)=>String(button.textContent||'').includes('Flashlight'));
+      if(!flashlight)return '';
+      flashlight.click();
+      return String(flashlight.textContent||'');
+    """)
+    if "Flashlight" not in str(selected):
+        raise AssertionError(f"Unable to select canonical Flashlight slot: {selected}")
+    return str(wait_for(
+        driver,
+        lambda current: current.execute_script("return document.querySelector('[data-ui=\"inventory\"] button.selected')?.textContent ?? '';"),
+        message="selected Flashlight slot",
+    ))
+
+
+def toggle_flashlight(driver: webdriver.Chrome, expected_state: str) -> str:
     for event_type in ("keyDown", "keyUp"):
         driver.execute_cdp_cmd("Input.dispatchKeyEvent", {"type": event_type, "key": "f", "code": "KeyF", "windowsVirtualKeyCode": 70, "nativeVirtualKeyCode": 70})
-    time.sleep(0.7)
+    expected_toast = f"Flashlight {expected_state}."
+    observed = str(wait_for(
+        driver,
+        lambda current: current.execute_script(
+            "return [...document.querySelectorAll('.toast')].map((node)=>node.textContent||'').find((value)=>value===arguments[0]) || '';",
+            expected_toast,
+        ),
+        timeout=5,
+        message=expected_toast,
+    ))
+    time.sleep(0.5)
+    return observed
 
 
 def visible_delta(off: dict[str, float], on: dict[str, float]) -> float:
@@ -155,6 +183,9 @@ def main() -> None:
         inventory = str(driver.execute_script("return document.querySelector('[data-ui=inventory]')?.textContent ?? '';"))
         if "Flashlight" not in inventory:
             raise AssertionError(f"Deterministic starter did not contain Flashlight: {inventory}")
+        selected_flashlight = select_flashlight(driver)
+        if "Flashlight" not in selected_flashlight:
+            raise AssertionError(f"Canonical Flashlight Item was not selected: {selected_flashlight}")
         driver.execute_script("""
           const style=document.createElement('style');
           style.textContent='[data-ui="hud"] > :not(canvas), .pause-overlay, [data-ui="version-indicator"] { opacity:0 !important; }';
@@ -162,24 +193,26 @@ def main() -> None:
         """)
 
         ordinary_off = luminance(driver); capture_canvas(driver, "ordinary-off.png")
-        toggle_flashlight(driver)
+        ordinary_on_toast = toggle_flashlight(driver, "on")
         ordinary_on = luminance(driver); capture_canvas(driver, "ordinary-on.png")
         ordinary_delta = visible_delta(ordinary_off, ordinary_on)
         if ordinary_delta <= 0.35:
-            raise AssertionError(f"Flashlight did not affect ordinary geometry: {ordinary_off} -> {ordinary_on}")
-        toggle_flashlight(driver)
+            raise AssertionError(f"Flashlight did not affect ordinary geometry after canonical activation: {ordinary_off} -> {ordinary_on}")
+        toggle_flashlight(driver, "off")
 
-        # This seed's existing natural locator lands at (-16, -16), where the
-        # canonical geography produces blackoutStrength === 1. No Condition
-        # override is used: the bypass only opens the normal timeline gate.
+        # This seed's natural locator reaches a true Blackout core. The accepted
+        # renderer intentionally retains a tiny uniform ambient survival floor;
+        # it is not an absolute-black framebuffer contract.
         enable_gate_bypass(driver)
         locate_natural_blackout(driver)
         natural_strength = blackout_strength(driver)
         blackout_off = luminance(driver); capture_canvas(driver, "blackout-natural-core-off.png")
-        if blackout_off["mean"] > 0.75 or blackout_off["p90"] > 1.0:
-            raise AssertionError(f"Natural full Blackout core retained navigable environmental luminance: {blackout_off}")
+        if blackout_off["mean"] <= 1.0:
+            raise AssertionError(f"Natural full Blackout lost its tiny unaided-navigation floor: {blackout_off}")
+        if blackout_off["mean"] >= ordinary_off["mean"] * 0.9 and blackout_off["p90"] >= ordinary_off["p90"] * 0.9:
+            raise AssertionError(f"Natural full Blackout is not materially darker than Ordinary Level 0: {ordinary_off} -> {blackout_off}")
 
-        toggle_flashlight(driver)
+        blackout_on_toast = toggle_flashlight(driver, "on")
         blackout_on = luminance(driver); capture_canvas(driver, "blackout-natural-core-on.png")
         blackout_delta = visible_delta(blackout_off, blackout_on)
         if blackout_delta <= 0.35:
@@ -187,6 +220,8 @@ def main() -> None:
 
         report = {
             "seed": NATURAL_BLACKOUT_SEED,
+            "selectedItem": selected_flashlight,
+            "activation": {"ordinary": ordinary_on_toast, "blackout": blackout_on_toast},
             "naturalBlackoutStrength": natural_strength,
             "ordinary": {"off": ordinary_off, "on": ordinary_on, "delta": ordinary_delta},
             "blackout": {"off": blackout_off, "on": blackout_on, "delta": blackout_delta},

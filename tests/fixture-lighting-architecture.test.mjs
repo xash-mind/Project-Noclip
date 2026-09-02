@@ -5,6 +5,7 @@ import test from 'node:test';
 const appSource = await readFile(new URL('../src/app/ProjectNoclipGame.ts', import.meta.url), 'utf8');
 const fixtureLightingSource = await readFile(new URL('../src/renderer/fixtureLighting.ts', import.meta.url), 'utf8');
 const batchingSource = await readFile(new URL('../src/renderer/StaticWorldBatching.ts', import.meta.url), 'utf8');
+const lifecycleSource = await readFile(new URL('../src/renderer/rendererCellLifecycle.ts', import.meta.url), 'utf8');
 const runtimeSource = await readFile(new URL('../src/renderer/renderSettingsRuntime.ts', import.meta.url), 'utf8');
 
 const { generateCell } = await import('../.test-dist/src/world/generator.js');
@@ -57,7 +58,11 @@ test('every active M-F1 Omni retains its own shadow while its luminous diffuser 
   assert.ok(fixtureLightingSource.includes('FIXTURE_EMITTER_CLEARANCE'));
   assert.ok(fixtureLightingSource.includes('markFixtureShadowsDirtyNearCell'));
   assert.equal(fixtureLightingSource.includes('markFixtureShadowsDirty(state)'), false);
-  assert.ok(batchingSource.includes('installFixtureLighting()'));
+  assert.ok(lifecycleSource.includes('attachFixtureLights(renderer, visual)'));
+  assert.ok(lifecycleSource.includes('detachCellFixtures(renderer, cellId, descriptor)'));
+  assert.equal(fixtureLightingSource.includes('WorldRenderer.prototype.loadCell'), false);
+  assert.equal(fixtureLightingSource.includes('WorldRenderer.prototype.unloadCell'), false);
+  assert.equal(batchingSource.includes('installFixtureLighting'), false);
 });
 
 test('M-F1 panel ownership resolves the real visible panel and keeps it out of the static batch', () => {
@@ -75,11 +80,15 @@ test('M-F1 panel ownership resolves the real visible panel and keeps it out of t
   assert.equal(findMFluorescentPanelVisualIndex(currentCellBuilderPanels, -3.4, 2.4), 2);
   assert.equal(findMFluorescentPanelVisualIndex(currentCellBuilderPanels, 4.3, 4.3), -1);
 
-  assert.ok(fixtureLightingSource.includes('const panels = reconcileFixturePanels(state, visual)'));
+  assert.ok(fixtureLightingSource.includes("descriptor.world.generationVersion === 'gen2'"));
+  assert.ok(fixtureLightingSource.includes('reconcileFixturePanels(state, visual)'));
+  assert.ok(fixtureLightingSource.includes('canonicalFixturePanels(visual)'));
+  assert.ok(fixtureLightingSource.includes('Missing canonical M-F1 panel'));
   assert.ok(fixtureLightingSource.includes('const panel = matched ?? addFixturePanelVisual'));
-  assert.ok(fixtureLightingSource.includes('panel.name = `${group.id}:fixture:${fixtureIndex}`'));
+  assert.ok(fixtureLightingSource.includes('const identity = mFluorescentFixtureIdentity(group.id, fixtureIndex)'));
+  assert.ok(fixtureLightingSource.includes('panel.name = identity.panelName'));
   assert.ok(fixtureLightingSource.includes('if (!claimed.has(candidate)) candidate.destroy()'));
-  assert.ok(fixtureLightingSource.includes('const mesh = panels.get(id)'));
+  assert.ok(fixtureLightingSource.includes('const mesh = panels.get(identity.id)'));
 
   assert.ok(batchingSource.includes('if (isMFluorescentPanelVisualName(entity.name))'));
   assert.ok(batchingSource.includes('entity.render.batchGroupId = -1'));
@@ -94,7 +103,7 @@ test('M-F1 diffuser and Omni consume one canonical continuous pulse in the same 
   assert.equal(flickerCalls.length, 1, 'fixture renderer must have one flicker sampling path');
   assert.ok(fixtureLightingSource.includes('const groupPulses = new Map<string, number>()'));
   assert.ok(fixtureLightingSource.includes('const pulse = pulseFor(runtime.group)'));
-  assert.ok(fixtureLightingSource.includes('fixtureMaterial(state, runtime.descriptor, runtime.group, pulse)'));
+  assert.ok(fixtureLightingSource.includes('fixturePanelMaterial(state, runtime.descriptor, runtime.group, pulse)'));
   assert.ok(fixtureLightingSource.includes('runtime.group.intensity * pulse * FIXTURE_LIGHT_INTENSITY_MULTIPLIER'));
   assert.ok(fixtureLightingSource.includes("if (group.state === 'off') return 0"));
   assert.ok(fixtureLightingSource.includes('return lightFlickerValue(group, elapsedSeconds, reducedFlicker)'));
@@ -126,6 +135,7 @@ test('generated Blackout cells still own no M-F1 light groups', () => {
   assert.equal(cell.world.blackoutStrength, 1);
   assert.ok(fixtureLightingSource.includes('for (const candidate of available)'));
   assert.ok(fixtureLightingSource.includes('candidate.destroy()'));
+  assert.ok(fixtureLightingSource.includes("descriptor.world.generationVersion === 'gen2'"));
 });
 
 test('eye adaptation stays bounded and recovers from light much faster than darkness', () => {

@@ -10,16 +10,18 @@ import { getRenderSettings, renderDistanceProfile, setRendererRenderScope } from
 
 import {
   STREAMING_SCHEDULER_PROFILE,
+  predictiveVelocitySample,
   predictiveWarmCoordinates,
   streamingFrameCanRunHeavyWork
 } from './streamingPolicy.js';
 export {
   STREAMING_SCHEDULER_PROFILE,
+  predictiveVelocitySample,
   predictiveWarmCoordinates,
   streamingFrameCanRunHeavyWork,
   streamingRetentionDisposition
 } from './streamingPolicy.js';
-export type { StreamingRetentionDisposition, WarmCoordinate } from './streamingPolicy.js';
+export type { PredictiveVelocitySample, StreamingRetentionDisposition, WarmCoordinate } from './streamingPolicy.js';
 
 interface RenderControl { autoRender: boolean; renderNextFrame: boolean; }
 interface CameraAccess { getPosition(): { x: number; z: number }; }
@@ -37,7 +39,6 @@ interface GameStreamingAccess {
   refreshLightField(): void;
   notifyRegionEntry(): void;
 }
-interface RuntimePrototype { update(this: ProjectNoclipGame, dt: number): void; }
 type JobKind = 'prepare' | 'refresh' | 'unload';
 interface StreamJob {
   key: string; kind: JobKind; x: number; z: number; priority: number; serial: number; notBefore: number; predictive: boolean;
@@ -68,6 +69,12 @@ export interface StreamingDiagnostics {
   lastHeavyOperation?: { kind: JobKind | 'required-current'; x: number; z: number; durationMs: number };
   lastUpdateMs: number;
   maxUpdateMs: number;
+  predictiveSpeedMetersPerSecond: number;
+  predictiveDirectionX: number;
+  predictiveDirectionZ: number;
+  predictiveDiscontinuities: number;
+  predictiveStops: number;
+  jobSelectionScans: number;
 }
 interface SchedulerState {
   jobs: Map<string, StreamJob>;
@@ -82,10 +89,10 @@ interface SchedulerState {
   frameActive: boolean;
   frameHeavyOperations: number;
   frameHeavyMs: number;
+  frameStartedAtMs?: number;
 }
 
 const states = new WeakMap<ProjectNoclipGame, SchedulerState>();
-let installed = false;
 
 function access(game: ProjectNoclipGame): GameStreamingAccess { return game as unknown as GameStreamingAccess; }
 function now(): number { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
@@ -93,7 +100,8 @@ function createDiagnostics(): StreamingDiagnostics {
   return {
     queueDepth: 0, queueDepthPeak: 0, predictiveWarmLoads: 0, coldBoundaryLoads: 0, generatedCells: 0, loadedCells: 0, refreshedCells: 0, unloadedCells: 0,
     lastBoundaryFrameMs: 0, maxBoundaryFrameMs: 0, generateMs: 0, cellRendererMs: 0, cellRefreshMs: 0, cellUnloadMs: 0, boundaryReconcileMs: 0, regionRefreshMs: 0,
-    lastHeavyOperations: 0, maxHeavyOperations: 0, lastHeavyMs: 0, maxHeavyMs: 0, heavyBudgetDeferrals: 0, heavyBudgetOverruns: 0, lastUpdateMs: 0, maxUpdateMs: 0
+    lastHeavyOperations: 0, maxHeavyOperations: 0, lastHeavyMs: 0, maxHeavyMs: 0, heavyBudgetDeferrals: 0, heavyBudgetOverruns: 0, lastUpdateMs: 0, maxUpdateMs: 0,
+    predictiveSpeedMetersPerSecond: 0, predictiveDirectionX: 0, predictiveDirectionZ: 0, predictiveDiscontinuities: 0, predictiveStops: 0, jobSelectionScans: 0
   };
 }
 function stateFor(game: ProjectNoclipGame): SchedulerState {
@@ -162,6 +170,23 @@ function enqueue(scheduler: SchedulerState, kind: JobKind, x: number, z: number,
 }
 function cancel(scheduler: SchedulerState, kind: JobKind, x: number, z: number): void {
   scheduler.jobs.delete(`${kind}:${x}:${z}`);
+}
+function clearPredictiveJobs(scheduler: SchedulerState): void {
+  for (const job of scheduler.jobs.values()) if (job.predictive) scheduler.jobs.delete(job.key);
+}
+function resetPrediction(game: ProjectNoclipGame): void {
+  const state = access(game);
+  const scheduler = stateFor(game);
+  const position = state.camera?.getPosition();
+  scheduler.lastX = position?.x;
+  scheduler.lastZ = position?.z;
+  scheduler.directionX = 0;
+  scheduler.directionZ = 0;
+  scheduler.diagnostics.predictiveSpeedMetersPerSecond = 0;
+  scheduler.diagnostics.predictiveDirectionX = 0;
+  scheduler.diagnostics.predictiveDirectionZ = 0;
+  clearPredictiveJobs(scheduler);
+  predictiveWarmCoordinates(state.currentCellX, state.currentCellZ, renderDistanceProfile(getRenderSettings()).loadRadius, 0, 0);
 }
 function enableForScope(game: ProjectNoclipGame, descriptor: CellDescriptor): void {
   const state = access(game);
@@ -232,8 +257,10 @@ function runHeavyOperation(
 ): boolean {
   const scheduler = stateFor(game);
   if (scheduler.frameActive && !streamingFrameCanRunHeavyWork(scheduler.frameHeavyOperations, scheduler.frameHeavyMs)) {
-    if (!required) scheduler.diagnostics.heavyBudgetDeferrals += 1;
-    return false;
+    if (!required) {
+      scheduler.diagnostics.heavyBudgetDeferrals += 1;
+      return false;
+    }
   }
   const start = now();
   operation();
@@ -255,39 +282,54 @@ function processOneJob(game: ProjectNoclipGame): void {
     return;
   }
   const timestamp = now();
-  const eligible = [...scheduler.jobs.values()]
-    .filter((job) => job.notBefore <= timestamp)
-    .sort((left, right) => left.priority - right.priority || left.serial - right.serial);
-  const job = eligible[0];
+  let job: StreamJob | undefined;
+  for (const candidate of scheduler.jobs.values()) {
+    scheduler.diagnostics.jobSelectionScans += 1;
+    if (candidate.notBefore > timestamp) continue;
+    if (!job || candidate.priority < job.priority || (candidate.priority === job.priority && candidate.serial < job.serial)) job = candidate;
+  }
   if (!job) { publish(game); return; }
   const ran = runHeavyOperation(game, job.kind, job.x, job.z, false, () => {
-    if (job.kind === 'prepare') prepareCell(game, job.x, job.z, job.predictive);
-    else if (job.kind === 'refresh') refreshCell(game, job.x, job.z);
-    else unloadCell(game, job.x, job.z);
+    if (job?.kind === 'prepare') prepareCell(game, job.x, job.z, job.predictive);
+    else if (job?.kind === 'refresh') refreshCell(game, job.x, job.z);
+    else if (job) unloadCell(game, job.x, job.z);
   });
   if (ran) scheduler.jobs.delete(job.key);
   publish(game);
 }
-function warmAhead(game: ProjectNoclipGame): void {
+function warmAhead(game: ProjectNoclipGame, dt: number): void {
   const state = access(game);
   const scheduler = stateFor(game);
   if (!state.renderer || !state.save || !state.camera) return;
   const position = state.camera.getPosition();
+  let velocityX = 0;
+  let velocityZ = 0;
   if (scheduler.lastX !== undefined && scheduler.lastZ !== undefined) {
-    const dx = position.x - scheduler.lastX;
-    const dz = position.z - scheduler.lastZ;
-    if (Math.hypot(dx, dz) > 0.005) {
-      scheduler.directionX = scheduler.directionX * 0.65 + dx * 0.35;
-      scheduler.directionZ = scheduler.directionZ * 0.65 + dz * 0.35;
+    const sample = predictiveVelocitySample(scheduler.lastX, scheduler.lastZ, position.x, position.z, dt);
+    if (sample.discontinuity) {
+      scheduler.diagnostics.predictiveDiscontinuities += 1;
+    } else {
+      velocityX = sample.x;
+      velocityZ = sample.z;
     }
   }
   scheduler.lastX = position.x;
   scheduler.lastZ = position.z;
+  const previousSpeed = Math.hypot(scheduler.directionX, scheduler.directionZ);
+  scheduler.directionX = velocityX;
+  scheduler.directionZ = velocityZ;
+  const speed = Math.hypot(velocityX, velocityZ);
+  if (previousSpeed >= STREAMING_SCHEDULER_PROFILE.predictiveMinimumSpeedMetersPerSecond
+    && speed < STREAMING_SCHEDULER_PROFILE.predictiveMinimumSpeedMetersPerSecond) scheduler.diagnostics.predictiveStops += 1;
+  scheduler.diagnostics.predictiveSpeedMetersPerSecond = speed;
+  scheduler.diagnostics.predictiveDirectionX = velocityX;
+  scheduler.diagnostics.predictiveDirectionZ = velocityZ;
+
   const profile = renderDistanceProfile(getRenderSettings());
-  // Recompute predictive work from the latest motion vector; stale reversal work
-  // may not grow the queue behind the player.
-  for (const job of [...scheduler.jobs.values()]) if (job.predictive) scheduler.jobs.delete(job.key);
-  for (const coordinate of predictiveWarmCoordinates(state.currentCellX, state.currentCellZ, profile.loadRadius, scheduler.directionX, scheduler.directionZ)) {
+  // Predictive jobs are a projection of the latest authoritative velocity.
+  // Reversal/stop therefore cancels stale work behind the player immediately.
+  clearPredictiveJobs(scheduler);
+  for (const coordinate of predictiveWarmCoordinates(state.currentCellX, state.currentCellZ, profile.loadRadius, velocityX, velocityZ)) {
     const id = `${coordinate.x}:${coordinate.z}`;
     if (!state.renderer.loaded.has(id)) enqueue(scheduler, 'prepare', coordinate.x, coordinate.z, 60 + coordinate.priority, 0, true);
     cancel(scheduler, 'unload', coordinate.x, coordinate.z);
@@ -312,6 +354,7 @@ function forceReconcile(game: ProjectNoclipGame, radius: number, retentionRadius
   const scheduler = stateFor(game);
   if (!state.save || !state.renderer) return;
   scheduler.jobs.clear();
+  resetPrediction(game);
   const desired = new Set<string>();
   for (let x = state.currentCellX - radius; x <= state.currentCellX + radius; x += 1) {
     for (let z = state.currentCellZ - radius; z <= state.currentCellZ + radius; z += 1) {
@@ -374,7 +417,7 @@ export function reconcileStreaming(game: ProjectNoclipGame, force = false, radiu
       if (visual) {
         // A retained/active Cell descriptor cannot change while it remains loaded:
         // shift epochs advance only on actual unload. Reusing it avoids flooding the
-        // per-frame queue with 48 deterministic no-op descriptor refreshes per step.
+        // per-frame queue with deterministic no-op descriptor refreshes.
         visual.root.enabled = true;
       } else {
         const directionLength = Math.hypot(scheduler.directionX, scheduler.directionZ) || 1;
@@ -384,7 +427,6 @@ export function reconcileStreaming(game: ProjectNoclipGame, force = false, radiu
       }
     }
   }
-
 
   for (const [id, visual] of [...state.renderer.loaded.entries()]) {
     if (desired.has(id)) continue;
@@ -403,37 +445,41 @@ export function reconcileStreaming(game: ProjectNoclipGame, force = false, radiu
   finishReconcile(game);
 }
 
-export function installStreamingScheduler(prototype: RuntimePrototype): void {
-  if (installed) return;
-  installed = true;
-  const originalUpdate = prototype.update;
-  prototype.update = function streamingScheduledUpdate(this: ProjectNoclipGame, dt: number): void {
-    const scheduler = stateFor(this);
-    const state = access(this);
-    const frameStart = now();
-    scheduler.frameActive = true;
-    scheduler.frameHeavyOperations = 0;
-    scheduler.frameHeavyMs = 0;
-    // Boundary safety gets first admission. A required current-Cell load therefore
-    // cannot stack on top of an already-run queued heavy operation in this frame.
-    originalUpdate.call(this, dt);
-    processOneJob(this);
-    warmAhead(this);
-    scheduler.frameActive = false;
-    scheduler.diagnostics.lastHeavyOperations = scheduler.frameHeavyOperations;
-    scheduler.diagnostics.maxHeavyOperations = Math.max(scheduler.diagnostics.maxHeavyOperations, scheduler.frameHeavyOperations);
-    scheduler.diagnostics.lastHeavyMs = scheduler.frameHeavyMs;
-    const updateMs = now() - frameStart;
-    scheduler.diagnostics.lastUpdateMs = updateMs;
-    scheduler.diagnostics.maxUpdateMs = Math.max(scheduler.diagnostics.maxUpdateMs, updateMs);
-    const changedCell = scheduler.lastCellX !== undefined
-      && (scheduler.lastCellX !== state.currentCellX || scheduler.lastCellZ !== state.currentCellZ);
-    if (changedCell) {
-      scheduler.diagnostics.lastBoundaryFrameMs = updateMs;
-      scheduler.diagnostics.maxBoundaryFrameMs = Math.max(scheduler.diagnostics.maxBoundaryFrameMs, updateMs);
-    }
-    scheduler.lastCellX = state.currentCellX;
-    scheduler.lastCellZ = state.currentCellZ;
-    publish(this);
-  };
+/** Called by ProjectNoclipGame before its authoritative per-frame work. */
+export function beginStreamingFrame(game: ProjectNoclipGame): void {
+  const scheduler = stateFor(game);
+  scheduler.frameStartedAtMs = now();
+  scheduler.frameActive = true;
+  scheduler.frameHeavyOperations = 0;
+  scheduler.frameHeavyMs = 0;
+}
+
+/**
+ * Called by ProjectNoclipGame after movement/simulation. Boundary safety has
+ * already received first admission; prediction is refreshed before one queued
+ * heavy job so stop/reversal/teleport cannot execute stale predictive work.
+ */
+export function finishStreamingFrame(game: ProjectNoclipGame, dt: number): void {
+  const scheduler = stateFor(game);
+  const state = access(game);
+  const frameStart = scheduler.frameStartedAtMs ?? now();
+  warmAhead(game, dt);
+  processOneJob(game);
+  scheduler.frameActive = false;
+  scheduler.frameStartedAtMs = undefined;
+  scheduler.diagnostics.lastHeavyOperations = scheduler.frameHeavyOperations;
+  scheduler.diagnostics.maxHeavyOperations = Math.max(scheduler.diagnostics.maxHeavyOperations, scheduler.frameHeavyOperations);
+  scheduler.diagnostics.lastHeavyMs = scheduler.frameHeavyMs;
+  const updateMs = now() - frameStart;
+  scheduler.diagnostics.lastUpdateMs = updateMs;
+  scheduler.diagnostics.maxUpdateMs = Math.max(scheduler.diagnostics.maxUpdateMs, updateMs);
+  const changedCell = scheduler.lastCellX !== undefined
+    && (scheduler.lastCellX !== state.currentCellX || scheduler.lastCellZ !== state.currentCellZ);
+  if (changedCell) {
+    scheduler.diagnostics.lastBoundaryFrameMs = updateMs;
+    scheduler.diagnostics.maxBoundaryFrameMs = Math.max(scheduler.diagnostics.maxBoundaryFrameMs, updateMs);
+  }
+  scheduler.lastCellX = state.currentCellX;
+  scheduler.lastCellZ = state.currentCellZ;
+  publish(game);
 }

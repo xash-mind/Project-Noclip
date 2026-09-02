@@ -40,7 +40,8 @@
   letter-spacing: 0.04em;
 }
 
-.render-settings-grid label.full {
+.render-settings-grid label.full,
+.render-settings-grid button.full {
   grid-column: 1 / -1;
 }
 
@@ -66,12 +67,106 @@
   white-space: pre-wrap;
 }
 
+.render-live-overlay {
+  position: fixed;
+  z-index: 70;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: min(410px, calc(100vw - 1.5rem));
+  max-height: calc(100vh - 1.5rem);
+  overflow: auto;
+  padding: 0.8rem;
+  background: rgba(11, 11, 8, 0.91);
+  border: 1px solid rgba(235, 221, 145, 0.38);
+  backdrop-filter: blur(7px);
+}
+
+.render-live-overlay[hidden] {
+  display: none;
+}
+
+.render-live-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  margin-bottom: 0.55rem;
+}
+
+.render-live-header > div {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.render-live-header strong {
+  color: #fff4bd;
+  font-size: 0.76rem;
+  letter-spacing: 0.09em;
+}
+
+.render-live-header small,
+.render-live-shortcuts {
+  color: rgba(225, 215, 166, 0.64);
+  font-size: 0.62rem;
+  line-height: 1.35;
+}
+
+.render-live-shortcuts {
+  margin: 0 0 0.65rem;
+}
+
+.live-performance-panel {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.live-performance-panel .render-settings-intro,
+.live-performance-panel .render-settings-note,
+.live-performance-panel .live-performance-enter {
+  display: none;
+}
+
+.live-performance-panel .render-settings-grid {
+  gap: 0.45rem;
+}
+
+.live-performance-panel .render-settings-grid label {
+  font-size: 0.64rem;
+}
+
+.live-performance-panel .render-settings-grid select {
+  padding: 0.38rem;
+}
+
+.live-performance-panel .render-diagnostics {
+  max-height: 15rem;
+  overflow: auto;
+  font-size: 0.62rem;
+}
+
+.performance-live-test [data-action="touch-lab"] {
+  display: none !important;
+}
+
 @media (max-width: 720px) {
   .render-settings-grid {
     grid-template-columns: 1fr;
   }
 
-  .render-settings-grid label.full {
+  .render-settings-grid label.full,
+  .render-settings-grid button.full {
     grid-column: auto;
+  }
+
+  .render-live-overlay {
+    top: 0.4rem;
+    right: 0.4rem;
+    width: min(340px, calc(100vw - 0.8rem));
+    max-height: calc(100vh - 0.8rem);
+  }
+
+  .live-performance-panel .render-settings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

@@ -1,0 +1,132 @@
+name: Project Noclip Visual Regression
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  visual-regression:
+    name: visual-${{ matrix.task }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      matrix:
+        task:
+          - world
+          - fidelity
+          - wallpaper
+          - cvh1
+          - flashlight
+    env:
+      NOCLIP_BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      NOCLIP_PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - run: python -m pip install --disable-pip-version-check selenium==4.46.0
+      - name: Resolve deterministic visual targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$NOCLIP_BRANCH_HEAD_SHA"
+          mkdir -p artifacts/visual-regression/targets
+          npx tsc -p tsconfig.test.json
+          node scripts/visual-targets.mjs > artifacts/visual-regression/targets/targets.json
+      - name: Run isolated blocking visual acceptance
+        shell: bash
+        env:
+          NOCLIP_VISUAL_TASK: ${{ matrix.task }}
+        run: |
+          set -euo pipefail
+          npm run preview > "/tmp/noclip-visual-${NOCLIP_VISUAL_TASK}.log" 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; cat "/tmp/noclip-visual-${NOCLIP_VISUAL_TASK}.log" || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/ >/dev/null; then break; fi
+            if [ "$attempt" -eq 30 ]; then echo "Preview server did not become ready" >&2; exit 1; fi
+            sleep 1
+          done
+          base="artifacts/visual-regression/${NOCLIP_VISUAL_TASK}"
+          mkdir -p "$base"
+          case "$NOCLIP_VISUAL_TASK" in
+            world)
+              NOCLIP_VISUAL_TARGETS="artifacts/visual-regression/targets/targets.json" \
+              NOCLIP_VISUAL_ARTIFACTS="$base/evidence" \
+                python scripts/verification-browser-runner.py \
+                  --task visual-world \
+                  --category VISUAL_REGRESSION \
+                  --artifact-dir "$base/verification" \
+                  --screenshot-policy blocking \
+                  scripts/run-character-aware-smoke.py scripts/visual-smoke.py
+              ;;
+            fidelity)
+              NOCLIP_FIDELITY_ARTIFACTS="$base/evidence" \
+                python scripts/verification-browser-runner.py \
+                  --task visual-fidelity \
+                  --category VISUAL_REGRESSION \
+                  --artifact-dir "$base/verification" \
+                  --screenshot-policy blocking \
+                  scripts/run-character-aware-smoke.py scripts/fidelity-smoke.py
+              ;;
+            wallpaper)
+              NOCLIP_WALLPAPER_ARTIFACTS="$base/evidence" \
+                python scripts/verification-browser-runner.py \
+                  --task visual-wallpaper-materials \
+                  --category VISUAL_REGRESSION \
+                  --artifact-dir "$base/verification" \
+                  --screenshot-policy blocking \
+                  scripts/run-character-aware-smoke.py scripts/wallpaper-presentation-smoke.py
+              ;;
+            cvh1)
+              NOCLIP_CVH1_ARTIFACTS="$base/evidence" \
+                python scripts/verification-browser-runner.py \
+                  --task visual-cvh1 \
+                  --category VISUAL_REGRESSION \
+                  --artifact-dir "$base/verification" \
+                  --screenshot-policy blocking \
+                  scripts/run-character-aware-smoke.py scripts/cvh1-floor-smoke.py
+              ;;
+            flashlight)
+              NOCLIP_FLASHLIGHT_ARTIFACTS="$base/evidence" \
+                python scripts/verification-browser-runner.py \
+                  --task visual-blackout-lighting \
+                  --category VISUAL_REGRESSION \
+                  --artifact-dir "$base/verification" \
+                  --screenshot-policy blocking \
+                  scripts/run-character-aware-smoke.py scripts/flashlight-smoke.py
+              NOCLIP_BLACKOUT_UNIFORMITY_ARTIFACTS="$base/uniformity-evidence" \
+                python scripts/verification-browser-runner.py \
+                  --task visual-blackout-uniformity \
+                  --category VISUAL_REGRESSION \
+                  --artifact-dir "$base/uniformity-verification" \
+                  --screenshot-policy blocking \
+                  scripts/run-character-aware-smoke.py scripts/blackout-uniformity-smoke.py
+              ;;
+            *)
+              echo "Unknown visual task: $NOCLIP_VISUAL_TASK" >&2
+              exit 2
+              ;;
+          esac
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-${{ matrix.task }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            artifacts/visual-regression/${{ matrix.task }}
+            artifacts/visual-regression/targets
+          if-no-files-found: warn
+          retention-days: 30

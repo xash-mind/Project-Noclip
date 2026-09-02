@@ -8,24 +8,33 @@
     "moduleResolution": "NodeNext"
   },
   "include": [
-    "src/app/blackoutRendering.ts",
     "src/audio/**/*.ts",
     "src/world/**/*.ts",
     "src/items/**/*.ts",
     "src/inventory/**/*.ts",
     "src/input/**/*.ts",
     "src/persistence/types.ts",
+    "src/player-character/profile.ts",
+    "src/player-character/avatar.ts",
+    "src/player-character/profileStore.ts",
+    "src/player-character/newGameFlow.ts",
     "src/simulation/**/*.ts",
     "src/physics/**/*.ts",
     "src/presentation/**/*.ts",
+    "src/ui/inventoryPresentation.ts",
     "src/playcanvas-compat.d.ts",
     "src/renderer/objectCatalog.ts",
+    "src/renderer/archDividerRuntimeCorrection.ts",
     "src/renderer/fixtureVisualOwnership.ts",
+    "src/renderer/finalLevel0MaterialPresentation.ts",
     "src/renderer/level0Wallpaper.ts",
     "src/renderer/level0RegionPresentation.ts",
     "src/renderer/ordinaryWallpaperRules.ts",
     "src/renderer/renderSettings.ts",
+    "src/renderer/rendererCellLifecycle.ts",
+    "src/renderer/runtimeSpatialIndex.ts",
     "src/renderer/streamingPolicy.ts",
-    "src/renderer/wallJunctionGeometry.ts"
+    "src/renderer/wallJunctionGeometry.ts",
+    "src/renderer/visibility/**/*.ts"
   ]
 }

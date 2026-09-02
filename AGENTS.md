@@ -1,36 +1,45 @@
 # Agent Instructions — Project Noclip
 
-## Required reading
+## Required reading and automatic routing
 
-For routine work, read only what is needed to orient accurately. For a bounded `LOOK`, `AUDIT`, or `CHANGE`, use the fast-path contract below before broadening scope.
+Project Noclip uses targeted retrieval, not ritual reading.
 
-1. `AGENTS.md`
-2. `docs/CODE_MAP.md`
-3. `docs/TERMINOLOGY.md`
-4. The named TARGET's authoritative implementation and directly relevant tests
-5. `PROJECT.md`, `STATUS.md`, or `WORLD.md` only when product state, release state, or world rules materially constrain the TARGET
-6. Relevant Issues/PRs only when the TARGET is tracked there, implementation intent is ambiguous, current code conflicts with recorded decisions, or historical reasoning is necessary
-7. `docs/VISION.md` when product direction or world-law interpretation matters
-8. Relevant shared playbook in `xash-mind/project-operations` when it materially applies
+For every `CHANGE` or `RELEASE`, always read:
+
+1. `AGENTS.md`;
+2. `docs/WORK_RULES.md`;
+3. `docs/CODE_MAP.md`;
+4. `docs/TERMINOLOGY.md`;
+5. the named TARGET's authoritative implementation and directly relevant tests.
+
+Then add **only** the documents required by the target and risk:
+
+- **WORLD / GENERATION / CONTENT / REGION / MATERIAL / CONDITION / FEATURE:** read `WORLD.md`; read `docs/VISION.md` only when product direction or world-law interpretation matters.
+- **VISUAL / AUDIO / CANON / WIKI / SOURCE / FIDELITY / EXTERNAL CONTENT:** read `docs/CONTENT_PROVENANCE.md`, `docs/references/README.md`, the relevant `docs/references/**` pack, `WORLD.md`, and `docs/VISION.md` when design interpretation matters.
+- **PERSISTENCE / IDENTITY / SAVE:** read the relevant persistence/identity contracts and direct migration/save callers; add `STATUS.md` or `WORLD.md` only where accepted release/world state materially constrains the target.
+- **ARCHITECTURE / CLEANUP / OWNERSHIP:** read the relevant sections of `docs/WORK_RULES.md`, `docs/CODE_MAP.md`, relevant ADRs, and direct callers/dependencies. Do not broaden into unrelated architecture.
+- **VERIFICATION:** read `docs/VERIFICATION.md` and the directly relevant workflow/test/harness ownership.
+- **PRODUCT / RELEASE STATE:** read `PROJECT.md` and/or `STATUS.md` only when the requested decision depends on those facts.
+- **ISSUES / PR HISTORY:** read relevant Issues/PRs only when the target is tracked there, implementation intent is ambiguous, current code conflicts with recorded decisions, or historical reasoning is necessary.
+- **SHARED OPERATIONS:** read a relevant playbook in `xash-mind/project-operations` only when it materially applies to the requested mode.
+
+For `LOOK` and `AUDIT`, use the smallest subset needed to answer accurately; `docs/WORK_RULES.md` is required when the task evaluates ownership, architecture, cleanup, or governance even if no write is planned.
 
 `docs/CURRENT_STATE.md` remains a historical iteration snapshot. `STATUS.md` is the compact accepted current state going forward. `WORLD.md` is the canonical human-facing world vocabulary/content catalog and must distinguish implemented, registered, legacy and planned content. `src/world/terminology.ts` is the typed registry for short human addresses; those aliases never replace runtime/save identity.
 
-## Fast-path work contract
+Normal Project Noclip work therefore follows this fast path:
 
-Normal Project Noclip work optimizes for targeted retrieval rather than repeatedly reconstructing the whole project.
-
-- Start bounded work from `AGENTS.md`, `docs/CODE_MAP.md`, `docs/TERMINOLOGY.md`, the named TARGET's authoritative implementation, and its directly relevant tests.
-- Read `PROJECT.md`, `STATUS.md`, or `WORLD.md` only when the TARGET depends on product state, release state, or world rules.
-- Read Issues/PRs only when the TARGET is tracked by one, intent is ambiguous, code conflicts with recorded decisions, or historical reasoning is genuinely necessary.
-- Do not inspect unrelated Issues, PRs, historical audits, reference ledgers, providers, or deployment state as routine ceremony.
-- Do not perform a whole-project reconciliation for a bounded `CHANGE`. `TARGET: PROJECT` is required for genuinely project-wide work.
-- Trust `docs/CODE_MAP.md` for navigation unless implementation evidence shows it is stale. If stale in the touched area, fix it with the change.
-- Reuse accepted world rules from `WORLD.md`; do not reopen raw reference evidence unless sources conflict or the user explicitly requests reference work.
-- Verify incrementally: cheapest TARGET-specific checks while editing, risk-proportional subsystem verification at the completed CHANGE boundary, and the complete required release verification at RELEASE. Do not rerun complete browser/benchmark/release suites after every internal edit.
-- Do not query Vercel, Notion, or other providers unless the current MODE actually requires their state.
-- Notion synchronization happens only after accepted facts change. It is not part of routine code navigation.
-- Prefer one coherent GitHub read/search covering several needed facts over serial one-file discovery when tooling permits.
-- Once ownership and constraints are established, act instead of continuing exploratory reading without a concrete unresolved question.
+- establish the TARGET's semantic owner from `docs/CODE_MAP.md` and direct implementation;
+- load only the dynamic constraints relevant to that owner;
+- do not inspect unrelated Issues, PRs, historical audits, raw reference ledgers, providers, or deployment state as routine ceremony;
+- do not perform a whole-project reconciliation for a bounded `CHANGE`; `TARGET: PROJECT` is required for genuinely project-wide work;
+- trust `docs/CODE_MAP.md` for navigation unless implementation evidence shows it is stale; if stale in the touched area, fix it with the change;
+- reuse accepted world rules from `WORLD.md`; reopen raw reference evidence when the provenance/fidelity routing above requires it, sources conflict, or the user explicitly requests reference work;
+- verify incrementally: cheapest TARGET-specific checks while editing, risk-proportional subsystem verification at the completed `CHANGE` boundary, and complete required release verification at `RELEASE`;
+- do not query Vercel, Notion, or other providers unless the current MODE actually requires their state;
+- Notion synchronization happens only after accepted facts change; it is not part of routine code navigation;
+- prefer one coherent GitHub read/search covering several needed facts over serial one-file discovery when tooling permits;
+- once ownership and constraints are established, act instead of continuing exploratory reading without a concrete unresolved question.
 
 **Principle: READ ONLY ENOUGH TO ESTABLISH SAFE OWNERSHIP AND CONSTRAINTS, THEN ACT. Escalate to broader reconciliation only when evidence conflicts.**
 
@@ -76,32 +85,23 @@ Use `TARGET`, optional `OBSERVATIONS`, `CHANGE` (CHANGE mode), `PRESERVE`, and `
 
 Acceptance vocabulary is intentionally small: `PASS`, `PASS WITH GAP`, `FAIL`, `UNVERIFIED`. A required `FAIL` or `UNVERIFIED` blocks RELEASE. Temporary defect IDs may use `<target>-D#`; they are disposable tracking labels, not permanent world IDs.
 
-**A bounded CHANGE prompt defines WHAT may change. This cleanliness contract defines HOW that changed area must be left.**
+**A bounded CHANGE prompt defines WHAT may change. `docs/WORK_RULES.md` defines HOW that changed area must be left.**
 
-## Codebase cleanliness contract
+## Engineering governance
 
-Every implementation run must leave the touched area at least as clean as it found it. These rules automatically apply to all Project Noclip `CHANGE` and `RELEASE` work; prompts do not need to restate them.
+`docs/WORK_RULES.md` is the single detailed authority for Project Noclip engineering purity, semantic ownership, patch-on-patch avoidance, dead-code handling, dependency direction, cleanup equivalence, efficiency, decision challenges, existing-rule challenges, and cleanup completion.
 
-Agents must:
+Do not recreate those detailed laws in prompts or parallel repository documents. The mandatory consequences for every `CHANGE` and `RELEASE` are:
 
-- use `docs/CODE_MAP.md` and `docs/TERMINOLOGY.md` to establish ownership before editing;
-- extend existing authoritative modules instead of creating parallel implementations of the same world law, deterministic rule, concept, constant, or renderer responsibility;
-- keep one obvious owner for meaningful world-law constants and separate them from renderer tuning, test thresholds, and developer-tool defaults;
-- avoid permanent release-number names (`dev#`, `followup`, `correction`, `temporary`) for accepted long-term systems; retain historical names only where they are genuine compatibility/stable identity or historical records;
-- remove dead code created or exposed by the change when safely provable, while avoiding speculative repository-wide cleanup during a bounded feature task;
-- classify suspicious code as `KEEP`, `CLEAN`, `CONSOLIDATE`, `REMOVE`, `LEGACY`, or `INVESTIGATE LATER` rather than guessing;
-- preserve compatibility code unless removal is explicitly proven safe, and keep Gen2 compatibility isolated from Gen3;
-- never rename persisted IDs, deterministic seed-domain identities, save identity, or short-address aliases merely for cosmetic consistency;
-- keep deterministic world state renderer-independent where the current architecture intends it;
-- keep modules focused without creating god-files or abstraction-for-abstraction's-sake;
-- prefer explicit domain types where they materially narrow contracts; avoid type complexity with no practical benefit;
-- delete syntax-narration comments and keep comments that explain world-law rationale, deterministic/save constraints, ownership boundaries, compatibility, performance, fidelity, or non-obvious navigation/collision requirements;
-- never weaken tests merely to make refactoring easier; add regression coverage when fixing a defect that could realistically return;
-- treat stale comments and docs as defects when touching the affected area;
-- update `docs/CODE_MAP.md` when ownership or file structure changes;
-- update `docs/TERMINOLOGY.md` and `src/world/terminology.ts` when canonical concepts or short addresses change;
-- update `WORLD.md` only when world rules/content actually change or when correcting stale documentation to already-accepted current truth;
-- run risk-proportional verification before considering the touched area clean.
+- establish the semantic owner before editing;
+- change the authoritative owner rather than a downstream symptom where safely possible;
+- do not introduce a parallel owner or permanent corrective stack;
+- preserve supported compatibility, stable identity, accepted behavior, and risk-proportional verification;
+- challenge a requested or existing rule when implementation evidence demonstrates material architectural/product/provenance harm, using the decision protocol in `docs/WORK_RULES.md` rather than silently changing product direction;
+- update navigation, terminology, world truth, and provenance only when the truth owned by those documents changed;
+- include the required `PROVENANCE_IMPACT=<NONE|REVIEWED|UPDATED|BLOCKED>` plus a short factual reason in the final handoff.
+
+Content/source/fidelity work is automatically routed through `docs/CONTENT_PROVENANCE.md` and the relevant reference pack by the reading model above. Engineering-only work may report `PROVENANCE_IMPACT=NONE` without broad reference research when no provenance-triggering content changed.
 
 ## Explicit non-goals for the current phase
 
@@ -144,6 +144,7 @@ When accepted work adds, removes, renames, reclassifies, or materially changes a
 
 - update `WORLD.md` in the same pull request;
 - update `src/world/terminology.ts` and `docs/TERMINOLOGY.md` when a durable short address, Architecture Pattern, or code-facing term changes;
+- follow the content/provenance routing in `docs/WORK_RULES.md`; content/source changes cannot silently skip provenance review;
 - preserve explicit status (`Implemented`, `Registered`, `Legacy`, `Planned`, or `None implemented`);
 - never claim a registered exit destination is a playable Level;
 - never silently relabel legacy `ZoneId`/archetype/component implementation as completed Gen-3 Regions/Variants/Fields;
@@ -166,7 +167,7 @@ Run the layers relevant to the change, including:
 - Fresh-browser and direct-refresh checks for deployments
 - First-time-user UX, readable feedback, keyboard/focus, reduced motion, and flashing/flicker safety where UI or presentation is affected
 
-Do not weaken timeline gates or deterministic tests simply to expose content or make a failing change pass. Use developer tooling for controlled verification. Verification is proportional to changed risk; do not add unrelated test categories merely to increase ceremony.
+Do not weaken timeline gates or deterministic tests simply to expose content or make a failing change pass. Use developer tooling for controlled verification. Verification is proportional to changed risk; do not add unrelated test categories merely to increase ceremony. `docs/VERIFICATION.md` owns the detailed verification architecture and evidence boundaries.
 
 ## GitHub records and final Notion closure
 
@@ -182,4 +183,4 @@ Do not weaken timeline gates or deterministic tests simply to expose content or 
 
 ## Human escalation
 
-Surface a clear decision instead of guessing when work requires product-direction changes, paid infrastructure, account ownership, destructive production data changes, moderation/privacy policy, official content, or acceptance of material security/data-loss risk.
+Surface a clear decision instead of guessing when work requires product-direction changes, paid infrastructure, account ownership, destructive production data changes, moderation/privacy policy, official content, or acceptance of material security/data-loss risk. The engineering challenge protocols in `docs/WORK_RULES.md` do not authorize an agent to alter disputed product/world direction without explicit approval.

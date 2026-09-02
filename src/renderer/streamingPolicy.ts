@@ -3,6 +3,8 @@ export const STREAMING_SCHEDULER_PROFILE = Object.freeze({
   maxHeavyJobsPerFrame: 1,
   unloadGraceMs: 1200,
   predictiveExtraRings: 1,
+  predictiveMinimumSpeedMetersPerSecond: 0.08,
+  predictiveDiscontinuityMeters: 2,
   maxQueueDepth: 256
 });
 
@@ -14,18 +16,50 @@ export function streamingRetentionDisposition(distance: number, loadRadius: numb
 }
 
 export interface WarmCoordinate { x: number; z: number; priority: number; }
+export interface PredictiveVelocitySample { x: number; z: number; discontinuity: boolean; }
+let latestPrediction: readonly WarmCoordinate[] = [];
+
+export function latestPredictiveWarmCoordinates(): readonly WarmCoordinate[] {
+  return latestPrediction.map((coordinate) => ({ ...coordinate }));
+}
+
+/**
+ * Converts world-space motion into the streaming scheduler's authoritative
+ * prediction signal. Direction magnitude is metres/second rather than metres
+ * per render frame, so the same movement has the same meaning at 30-240 Hz.
+ */
+export function predictiveVelocitySample(
+  previousX: number,
+  previousZ: number,
+  nextX: number,
+  nextZ: number,
+  dtSeconds: number
+): PredictiveVelocitySample {
+  const dx = nextX - previousX;
+  const dz = nextZ - previousZ;
+  const displacement = Math.hypot(dx, dz);
+  if (displacement > STREAMING_SCHEDULER_PROFILE.predictiveDiscontinuityMeters) {
+    return { x: 0, z: 0, discontinuity: true };
+  }
+  if (!(dtSeconds > 0) || displacement <= 0.000001) return { x: 0, z: 0, discontinuity: false };
+  return { x: dx / dtSeconds, z: dz / dtSeconds, discontinuity: false };
+}
+
 export function predictiveWarmCoordinates(
   centerX: number,
   centerZ: number,
   loadRadius: number,
-  directionX: number,
-  directionZ: number
+  velocityX: number,
+  velocityZ: number
 ): WarmCoordinate[] {
-  if (Math.hypot(directionX, directionZ) < 0.08) return [];
+  if (Math.hypot(velocityX, velocityZ) < STREAMING_SCHEDULER_PROFILE.predictiveMinimumSpeedMetersPerSecond) {
+    latestPrediction = [];
+    return [];
+  }
   const retentionRadius = loadRadius + STREAMING_SCHEDULER_PROFILE.predictiveExtraRings;
-  const length = Math.hypot(directionX, directionZ) || 1;
-  const nx = directionX / length;
-  const nz = directionZ / length;
+  const length = Math.hypot(velocityX, velocityZ) || 1;
+  const nx = velocityX / length;
+  const nz = velocityZ / length;
   const result = new Map<string, WarmCoordinate>();
   const add = (x: number, z: number, priority: number): void => {
     const id = `${x}:${z}`;
@@ -43,7 +77,9 @@ export function predictiveWarmCoordinates(
   if (Math.abs(nx) >= 0.2 && Math.abs(nz) >= 0.2) {
     add(centerX + Math.sign(nx) * retentionRadius, centerZ + Math.sign(nz) * retentionRadius, 9);
   }
-  return [...result.values()].sort((left, right) => left.priority - right.priority || left.x - right.x || left.z - right.z);
+  const coordinates = [...result.values()].sort((left, right) => left.priority - right.priority || left.x - right.x || left.z - right.z);
+  latestPrediction = coordinates.map((coordinate) => ({ ...coordinate }));
+  return coordinates;
 }
 
 export function streamingFrameCanRunHeavyWork(heavyOperations: number, heavyMs: number): boolean {
