@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-const { cvh1FloorSurfaceMesh, cvh1FloorSurfaceProfile } = await import('../.test-dist/src/renderer/WorldRenderer.js');
+const { cvh1FloorSurfaceMesh, cvh1FloorSurfaceProfile } = await import('../.test-dist/src/renderer/cvh1FloorSurface.js');
+const { canonicalLevel0CarpetUv, resolveCanonicalLevel0CarpetPresentation } = await import('../.test-dist/src/renderer/finalLevel0MaterialPresentation.js');
 const { generateCell } = await import('../.test-dist/src/world/generator.js');
 const { CELL_SIZE, DEFAULT_TUNING } = await import('../.test-dist/src/world/types.js');
 
@@ -25,7 +26,7 @@ function bounds(patch) {
   };
 }
 
-function forcedHoleCell(seed, x, z) {
+function forcedCell(seed, x, z, region = 'ordinary-level-0', carverOverride = 'floor-hole-cluster') {
   return generateCell({
     seed,
     x,
@@ -35,14 +36,27 @@ function forcedHoleCell(seed, x, z) {
     shiftEpoch: 0,
     tuning: {
       ...DEFAULT_TUNING,
-      regionOverride: 'ordinary-level-0',
+      regionOverride: region,
       conditionOverride: 'clear',
-      carverOverride: 'floor-hole-cluster',
+      carverOverride,
       structureOverride: 'none',
       gateBypass: true
     },
     generationVersion: 'gen3-v1'
   });
+}
+
+function forcedHoleCell(seed, x, z, region = 'ordinary-level-0') {
+  return forcedCell(seed, x, z, region, 'floor-hole-cluster');
+}
+
+function findForcedHoleCell(region) {
+  const seed = `cvh1-region-floor:${region}`;
+  for (let x = -3; x <= 3; x += 1) for (let z = -3; z <= 3; z += 1) {
+    const descriptor = forcedHoleCell(seed, x, z, region);
+    if (descriptor.floorPatches.some((patch) => patch.kind === 'hole')) return { seed, x, z, descriptor };
+  }
+  assert.fail(`forced CV-H1 ${region} sample emitted no Hole patches`);
 }
 
 function vertex(mesh, index) {
@@ -72,6 +86,10 @@ function edgeKey(left, right) {
 
 function close(left, right) {
   return Math.abs(left - right) <= EPSILON;
+}
+
+function wrap01(value) {
+  return ((value % 1) + 1) % 1;
 }
 
 function segmentWithin(valueA, valueB, min, max) {
@@ -121,7 +139,7 @@ function assertWatertightTop(mesh, patches) {
   }
 }
 
-test('CV-H1 non-Hole carpet is one coplanar watertight indexed surface with no handoff or side geometry', () => {
+test('CV-H1 non-Hole carpet is one coplanar watertight indexed surface with no handoff, side or material-tiling ownership', () => {
   const patches = [
     hole('northwest', -2.2, -1.8, 1.8, 2.0),
     hole('southeast', 2.1, 2.0, 2.2, 1.6)
@@ -135,7 +153,7 @@ test('CV-H1 non-Hole carpet is one coplanar watertight indexed surface with no h
   assert.equal(profile.renderEntitiesPerHoleCell, 1);
   assert.equal(profile.internalSideFaces, false);
   assert.equal(profile.handoffGeometry, false);
-  assert.deepEqual(profile.materialTiling, [1, 1]);
+  assert.equal('materialTiling' in profile, false, 'CV-H1 must not own canonical carpet material tiling');
   assert.ok(mesh.indices.length > 0);
   assert.equal(mesh.positions.length % 3, 0);
   assert.equal(mesh.normals.length, mesh.positions.length);
@@ -155,7 +173,7 @@ test('CV-H1 non-Hole carpet is one coplanar watertight indexed surface with no h
   assertWatertightTop(mesh, patches);
 });
 
-test('CV-H1 carpet UV phase is continuous through internal triangulation and exactly periodic at Cell borders', () => {
+test('CV-H1 mesh UV basis is continuous through internal triangulation and exactly periodic at Cell borders', () => {
   const patches = [hole('center', 0, 0, 2.4, 2.0)];
   const mesh = cvh1FloorSurfaceMesh(patches);
   const profile = cvh1FloorSurfaceProfile();
@@ -174,10 +192,80 @@ test('CV-H1 carpet UV phase is continuous through internal triangulation and exa
   const north = [...Array(mesh.positions.length / 3).keys()].map((index) => vertex(mesh, index)).filter((point) => close(point.z, -half));
   const south = [...Array(mesh.positions.length / 3).keys()].map((index) => vertex(mesh, index)).filter((point) => close(point.z, half));
   assert.ok(west.length > 0 && east.length > 0 && north.length > 0 && south.length > 0);
-  for (const point of west) assert.ok(close(((point.u % 1) + 1) % 1, 0));
-  for (const point of east) assert.ok(close(((point.u % 1) + 1) % 1, 0));
-  for (const point of north) assert.ok(close(((point.v % 1) + 1) % 1, 0));
-  for (const point of south) assert.ok(close(((point.v % 1) + 1) % 1, 0));
+  for (const point of west) assert.ok(close(wrap01(point.u), 0));
+  for (const point of east) assert.ok(close(wrap01(point.u), 0));
+  for (const point of north) assert.ok(close(wrap01(point.v), 0));
+  for (const point of south) assert.ok(close(wrap01(point.v), 0));
+});
+
+test('canonical M-C1 UV transform gives CV-H1 exactly the same world frequency and phase as a full Region floor', () => {
+  const { descriptor } = findForcedHoleCell('pillar-field');
+  const presentation = resolveCanonicalLevel0CarpetPresentation(descriptor);
+  const profile = cvh1FloorSurfaceProfile();
+  const full = canonicalLevel0CarpetUv(descriptor, presentation.patternSizeMeters, 'full-floor');
+  const cut = canonicalLevel0CarpetUv(descriptor, presentation.patternSizeMeters, 'cvh1-indexed');
+  const bakedRepeatsPerCell = CELL_SIZE / profile.carpetRepeatMeters;
+
+  assert.deepEqual(cut.offset, full.offset);
+  assert.ok(close(bakedRepeatsPerCell * cut.tiling[0], full.tiling[0]));
+  assert.ok(close(bakedRepeatsPerCell * cut.tiling[1], full.tiling[1]));
+
+  const half = CELL_SIZE / 2;
+  for (const local of [-half, -3.1, 0, 2.75, half]) {
+    const cutBasis = (local + half) / profile.carpetRepeatMeters;
+    const fullBasis = (local + half) / CELL_SIZE;
+    assert.ok(close(wrap01(cutBasis * cut.tiling[0] + cut.offset[0]), wrap01(fullBasis * full.tiling[0] + full.offset[0])));
+    assert.ok(close(wrap01(cutBasis * cut.tiling[1] + cut.offset[1]), wrap01(fullBasis * full.tiling[1] + full.offset[1])));
+  }
+
+  const eastDescriptor = {
+    ...descriptor,
+    address: { ...descriptor.address, cellX: descriptor.address.cellX + 1 }
+  };
+  const eastCut = canonicalLevel0CarpetUv(eastDescriptor, presentation.patternSizeMeters, 'cvh1-indexed');
+  const currentEastPhase = wrap01(bakedRepeatsPerCell * cut.tiling[0] + cut.offset[0]);
+  const neighborWestPhase = wrap01(eastCut.offset[0]);
+  assert.ok(close(currentEastPhase, neighborWestPhase), `${currentEastPhase} != ${neighborWestPhase}`);
+});
+
+test('CV-H1 floor presentation stays owned by Ordinary, Pillar and Arch Region truth', () => {
+  const evidence = new Map();
+  for (const region of ['ordinary-level-0', 'pillar-field', 'arch-rooms']) {
+    const { seed, x, z, descriptor: holeDescriptor } = findForcedHoleCell(region);
+    const plainDescriptor = forcedCell(seed, x, z, region, 'none');
+    const holePresentation = resolveCanonicalLevel0CarpetPresentation(holeDescriptor);
+    const plainPresentation = resolveCanonicalLevel0CarpetPresentation(plainDescriptor);
+
+    assert.ok(holeDescriptor.floorPatches.some((patch) => patch.kind === 'hole'));
+    assert.equal(plainDescriptor.floorPatches.some((patch) => patch.kind === 'hole'), false);
+    assert.equal(holeDescriptor.world.regionId, region);
+    assert.equal(plainDescriptor.world.regionId, region);
+    assert.deepEqual(holePresentation, plainPresentation, `${region} Hole changed its underlying floor presentation`);
+    evidence.set(region, holePresentation);
+  }
+
+  assert.notDeepEqual(evidence.get('pillar-field').color, evidence.get('ordinary-level-0').color, 'Pillar Hole leaked Ordinary carpet tint');
+  assert.notDeepEqual(evidence.get('arch-rooms').color, evidence.get('ordinary-level-0').color, 'Arch Hole leaked Ordinary carpet tint');
+  assert.equal(evidence.get('arch-rooms').gloss, 0.11);
+});
+
+test('CV-H1 uses the same canonical Condition-bearing floor path instead of replacing Condition truth', () => {
+  const { descriptor } = findForcedHoleCell('arch-rooms');
+  for (const conditionId of ['damp-carpet', 'deep-wet-carpet', 'shallow-dry-carpet']) {
+    const conditionedHole = {
+      ...descriptor,
+      world: { ...descriptor.world, conditionIds: [conditionId] }
+    };
+    const conditionedPlain = {
+      ...descriptor,
+      floorPatches: descriptor.floorPatches.filter((patch) => patch.kind !== 'hole'),
+      world: { ...descriptor.world, carverIds: [], conditionIds: [conditionId] }
+    };
+    const holePresentation = resolveCanonicalLevel0CarpetPresentation(conditionedHole);
+    const plainPresentation = resolveCanonicalLevel0CarpetPresentation(conditionedPlain);
+    assert.deepEqual(holePresentation, plainPresentation);
+    assert.equal(holePresentation.conditionSignature, conditionId);
+  }
 });
 
 test('CV-H1 touching semantic apertures remain one continuous opening without carpet triangles on their shared join', () => {

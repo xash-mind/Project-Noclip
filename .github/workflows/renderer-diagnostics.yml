@@ -1,0 +1,267 @@
+name: Project Noclip Renderer and Performance Diagnostics
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NOCLIP_WAVE5_PERFORMANCE_BASE_SHA: 4c16a3770d7f29476626062cda6dd13850aa805b
+
+jobs:
+  renderer-profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      NOCLIP_BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      NOCLIP_PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - run: python -m pip install --disable-pip-version-check selenium==4.46.0
+      - name: Capture current renderer diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$NOCLIP_BRANCH_HEAD_SHA"
+          npm run preview > /tmp/noclip-renderer-profile.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; cat /tmp/noclip-renderer-profile.log || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/ >/dev/null; then break; fi
+            if [ "$attempt" -eq 30 ]; then echo "Preview server did not become ready" >&2; exit 1; fi
+            sleep 1
+          done
+          NOCLIP_BASE_URL="http://127.0.0.1:4173" \
+          NOCLIP_RENDERER_DIAGNOSTICS_ARTIFACTS="artifacts/renderer-diagnostics/current" \
+            python scripts/verification-browser-runner.py \
+              --task renderer-profile \
+              --category RENDERER_PERFORMANCE_DIAGNOSTICS \
+              --artifact-dir artifacts/renderer-diagnostics/profile-verification \
+              --screenshot-policy functional-tolerant \
+              scripts/renderer-diagnostics-smoke.py
+          test -s artifacts/renderer-diagnostics/current/renderer-diagnostics.json
+          NOCLIP_BASE_URL="http://127.0.0.1:4173" \
+          NOCLIP_SURFACE_FUSION_ARTIFACTS="artifacts/renderer-diagnostics/surface-fusion" \
+            python scripts/verification-browser-runner.py \
+              --task surface-fusion-diagnostic \
+              --category RENDERER_PERFORMANCE_DIAGNOSTICS \
+              --artifact-dir artifacts/renderer-diagnostics/surface-fusion-verification \
+              --screenshot-policy functional-tolerant \
+              scripts/run-character-aware-smoke.py scripts/surface-fusion-diagnostic.py
+          test -s artifacts/renderer-diagnostics/surface-fusion/report.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: renderer-profile-${{ github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/renderer-diagnostics
+          if-no-files-found: warn
+          retention-days: 30
+
+  runtime-scenarios:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    env:
+      NOCLIP_BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      NOCLIP_PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - run: python -m pip install --disable-pip-version-check selenium==4.46.0
+      - name: Capture comparable runtime scenario evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$NOCLIP_BRANCH_HEAD_SHA"
+          npm run preview > /tmp/noclip-runtime-scenarios.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; cat /tmp/noclip-runtime-scenarios.log || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/ >/dev/null; then break; fi
+            if [ "$attempt" -eq 30 ]; then echo "Preview server did not become ready" >&2; exit 1; fi
+            sleep 1
+          done
+          NOCLIP_BASE_URL="http://127.0.0.1:4173" \
+          NOCLIP_RUNTIME_SAMPLE_SECONDS="2.0" \
+          NOCLIP_RUNTIME_EVIDENCE_ARTIFACTS="artifacts/runtime-diagnostics" \
+            python scripts/verification-browser-runner.py \
+              --task runtime-scenarios \
+              --category RENDERER_PERFORMANCE_DIAGNOSTICS \
+              --artifact-dir artifacts/runtime-diagnostics/verification \
+              --screenshot-policy functional-tolerant \
+              scripts/profile-runtime-scenarios.py
+          test -s artifacts/runtime-diagnostics/runtime-performance-evidence.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-performance-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/runtime-diagnostics
+          if-no-files-found: warn
+          retention-days: 30
+
+  matched-runtime-pairs:
+    name: matched-runtime-pair-${{ matrix.pair }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        pair: [1, 2, 3, 4, 5]
+    env:
+      NOCLIP_BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      NOCLIP_PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install --disable-pip-version-check selenium==4.46.0
+      - name: Build exact Wave 6 candidate and Wave 5 baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$NOCLIP_BRANCH_HEAD_SHA"
+          npm install --no-audit --no-fund
+          npm run build
+          BASE_DIR="/tmp/noclip-wave5-${{ matrix.pair }}"
+          git fetch --no-tags --depth=1 origin "$NOCLIP_WAVE5_PERFORMANCE_BASE_SHA"
+          git worktree add --detach "$BASE_DIR" "$NOCLIP_WAVE5_PERFORMANCE_BASE_SHA"
+          test "$(git -C "$BASE_DIR" rev-parse HEAD)" = "$NOCLIP_WAVE5_PERFORMANCE_BASE_SHA"
+          (
+            cd "$BASE_DIR"
+            npm install --no-audit --no-fund
+            npm run build
+          )
+      - name: Capture same-host matched runtime pair
+        shell: bash
+        run: |
+          set -euo pipefail
+          PAIR="${{ matrix.pair }}"
+          BASE_DIR="/tmp/noclip-wave5-$PAIR"
+          CANDIDATE_DIR="$GITHUB_WORKSPACE"
+          ARTIFACT_ROOT="$GITHUB_WORKSPACE/artifacts/matched/run-$PAIR"
+          mkdir -p "$ARTIFACT_ROOT/candidate" "$ARTIFACT_ROOT/baseline"
+
+          (
+            cd "$CANDIDATE_DIR"
+            PORT=4173 npm run preview > "/tmp/noclip-wave6-$PAIR.log" 2>&1
+          ) &
+          CANDIDATE_PID=$!
+          (
+            cd "$BASE_DIR"
+            PORT=4174 npm run preview > "/tmp/noclip-wave5-$PAIR.log" 2>&1
+          ) &
+          BASELINE_PID=$!
+          trap 'kill "$CANDIDATE_PID" "$BASELINE_PID" 2>/dev/null || true; cat "/tmp/noclip-wave6-'"$PAIR"'.log" 2>/dev/null || true; cat "/tmp/noclip-wave5-'"$PAIR"'.log" 2>/dev/null || true' EXIT
+
+          for port in 4173 4174; do
+            for attempt in {1..30}; do
+              if curl --fail --silent "http://127.0.0.1:$port/" >/dev/null; then break; fi
+              if [ "$attempt" -eq 30 ]; then echo "Preview server on $port did not become ready" >&2; exit 1; fi
+              sleep 1
+            done
+          done
+
+          run_candidate() {
+            cd "$CANDIDATE_DIR"
+            NOCLIP_BASE_URL="http://127.0.0.1:4173" \
+            NOCLIP_BRANCH_HEAD_SHA="$NOCLIP_BRANCH_HEAD_SHA" \
+            NOCLIP_RUNTIME_EVIDENCE_ARTIFACTS="$ARTIFACT_ROOT/candidate" \
+            NOCLIP_MATCHED_RUNTIME_ARTIFACTS="$ARTIFACT_ROOT/candidate" \
+            NOCLIP_MATCHED_RUNTIME_RUN_ID="$PAIR" \
+            NOCLIP_MATCHED_RUNTIME_SAMPLE_SECONDS="45.0" \
+            NOCLIP_MATCHED_RUNTIME_MIN_FRAME_SAMPLES="100" \
+              python "$CANDIDATE_DIR/scripts/matched-runtime-scenarios.py"
+          }
+
+          run_baseline() {
+            cd "$BASE_DIR"
+            NOCLIP_BASE_URL="http://127.0.0.1:4174" \
+            NOCLIP_BRANCH_HEAD_SHA="$NOCLIP_WAVE5_PERFORMANCE_BASE_SHA" \
+            NOCLIP_RUNTIME_EVIDENCE_ARTIFACTS="$ARTIFACT_ROOT/baseline" \
+            NOCLIP_MATCHED_RUNTIME_ARTIFACTS="$ARTIFACT_ROOT/baseline" \
+            NOCLIP_MATCHED_RUNTIME_RUN_ID="$PAIR" \
+            NOCLIP_MATCHED_RUNTIME_SAMPLE_SECONDS="45.0" \
+            NOCLIP_MATCHED_RUNTIME_MIN_FRAME_SAMPLES="100" \
+              python "$CANDIDATE_DIR/scripts/matched-runtime-scenarios.py"
+          }
+
+          if (( PAIR % 2 == 1 )); then
+            run_candidate
+            run_baseline
+          else
+            run_baseline
+            run_candidate
+          fi
+
+          test -s "$ARTIFACT_ROOT/candidate/runtime-performance-matched.json"
+          test -s "$ARTIFACT_ROOT/baseline/runtime-performance-matched.json"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: matched-runtime-pair-${{ matrix.pair }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/matched
+          if-no-files-found: warn
+          retention-days: 30
+
+  matched-runtime-comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: matched-runtime-pairs
+    env:
+      NOCLIP_BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: matched-runtime-pair-*-${{ github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/matched
+          merge-multiple: true
+      - name: Enforce matched performance thresholds
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$NOCLIP_BRANCH_HEAD_SHA"
+          python scripts/compare-matched-runtime.py \
+            --root artifacts/matched \
+            --output artifacts/matched-runtime-comparison.json \
+            --baseline-sha "$NOCLIP_WAVE5_PERFORMANCE_BASE_SHA" \
+            --candidate-sha "$NOCLIP_BRANCH_HEAD_SHA"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: matched-runtime-comparison-${{ github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/matched-runtime-comparison.json
+          if-no-files-found: warn
+          retention-days: 30

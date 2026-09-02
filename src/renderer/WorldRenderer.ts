@@ -1,125 +1,32 @@
 import * as pc from 'playcanvas';
 import type { DroppedItemState, SaveData, SurfaceMark } from '../persistence/types.js';
 import { resolveCircleAgainstAabbs } from '../physics/collision.js';
+import { resolveMFluorescentPanelPresentation } from '../presentation/level0PresentationPolicy.js';
 import { sampleLightField, type LightFieldSample } from '../world/lighting.js';
 import { CELL_SIZE, type CellDescriptor, type FloorPatchSpec } from '../world/types.js';
+import { cvh1FloorSurfaceMesh } from './cvh1FloorSurface.js';
 import { ZONE_PROFILES } from '../world/zones.js';
+import { M_F1_PANEL_DIMENSIONS, mFluorescentFixtureIdentity } from './fixtureVisualOwnership.js';
 import { registerObjectCatalogShowcaseHost, type ObjectCatalogEntry } from './objectCatalog.js';
+import {
+  recordRuntimeCollisionQuery,
+  recordRuntimeDynamicItemUpdate,
+  recordRuntimeInteractionQuery,
+  registerRuntimeInteraction,
+  retireRuntimeDynamicItem,
+  runtimeCollisionCandidates,
+  runtimeDynamicItemCandidates,
+  runtimeInteractionCandidates,
+  unregisterRuntimeInteraction
+} from './runtimePerformance.js';
+import { movementCollisionQueryBounds } from './runtimeSpatialIndex.js';
 import { canvasTexture, makeMaterial, markWorldPoint, clamp01, rayAabb, type CellVisual, type InteractionVisual, type TextureKind, type WorldItemVisual, type WorldWall } from './support.js';
 import { RendererCellBuilder } from './cellBuilder.js';
+import { runRendererCellLoadLifecycle, runRendererCellUnloadLifecycle } from './rendererCellLifecycle.js';
 export type { InteractionVisual, WorldItemVisual } from './support.js';
 
-export interface Cvh1FloorSurfaceMeshData {
-  positions: number[];
-  normals: number[];
-  uvs: number[];
-  indices: number[];
-  visibleArea: number;
-}
-
-export interface Cvh1FloorSurfaceProfile {
-  strategy: 'single-indexed-planar-mesh';
-  topY: number;
-  carpetRepeatMeters: number;
-  materialTiling: readonly [number, number];
-  renderEntitiesPerHoleCell: 1;
-  internalSideFaces: false;
-  handoffGeometry: false;
-}
-
-interface Cvh1HoleBounds {
-  minX: number;
-  maxX: number;
-  minZ: number;
-  maxZ: number;
-}
-
-const CVH1_FLOOR_TOP_Y = 0;
-const CVH1_CARPET_REPEAT_METERS = CELL_SIZE / 5;
-const CVH1_ORDINARY_FLOOR_TINT: [number, number, number] = [0.79, 0.72, 0.55];
-
-function cvh1HoleBounds(hole: FloorPatchSpec): Cvh1HoleBounds {
-  const half = CELL_SIZE / 2;
-  return {
-    minX: Math.max(-half, hole.position.x - hole.scale.x / 2),
-    maxX: Math.min(half, hole.position.x + hole.scale.x / 2),
-    minZ: Math.max(-half, hole.position.z - hole.scale.z / 2),
-    maxZ: Math.min(half, hole.position.z + hole.scale.z / 2)
-  };
-}
-
-function cvh1PointInsideHole(x: number, z: number, holes: readonly Cvh1HoleBounds[]): boolean {
-  return holes.some((hole) => x > hole.minX && x < hole.maxX && z > hole.minZ && z < hole.maxZ);
-}
-
-/**
- * One watertight top surface for a CV-H1 Cell. Hole bounds are the exact
- * semantic FloorPatchSpec bounds; the internal grid exists only to triangulate
- * rectangular apertures and never becomes visible geometry of its own.
- */
-export function cvh1FloorSurfaceMesh(holes: readonly FloorPatchSpec[]): Cvh1FloorSurfaceMeshData {
-  const half = CELL_SIZE / 2;
-  const bounds = holes.map(cvh1HoleBounds);
-  const xEdges = [...new Set([-half, half, ...bounds.flatMap((hole) => [hole.minX, hole.maxX])])].sort((a, b) => a - b);
-  const zEdges = [...new Set([-half, half, ...bounds.flatMap((hole) => [hole.minZ, hole.maxZ])])].sort((a, b) => a - b);
-  const positions: number[] = [];
-  const normals: number[] = [];
-  const uvs: number[] = [];
-  const indices: number[] = [];
-  const vertices = new Map<string, number>();
-  let visibleArea = 0;
-
-  const vertex = (xIndex: number, zIndex: number): number => {
-    const key = `${xIndex}:${zIndex}`;
-    const existing = vertices.get(key);
-    if (existing !== undefined) return existing;
-    const x = xEdges[xIndex]!;
-    const z = zEdges[zIndex]!;
-    const index = positions.length / 3;
-    positions.push(x, CVH1_FLOOR_TOP_Y, z);
-    normals.push(0, 1, 0);
-    // A Cell is exactly five carpet repeats wide. Local UVs therefore meet the
-    // ordinary full-floor [5,5] phase exactly at both Cell borders without a
-    // per-piece material clone or large world-coordinate precision growth.
-    uvs.push((x + half) / CVH1_CARPET_REPEAT_METERS, (z + half) / CVH1_CARPET_REPEAT_METERS);
-    vertices.set(key, index);
-    return index;
-  };
-
-  for (let zIndex = 1; zIndex < zEdges.length; zIndex += 1) {
-    const minZ = zEdges[zIndex - 1]!;
-    const maxZ = zEdges[zIndex]!;
-    if (maxZ - minZ <= 0.000001) continue;
-    for (let xIndex = 1; xIndex < xEdges.length; xIndex += 1) {
-      const minX = xEdges[xIndex - 1]!;
-      const maxX = xEdges[xIndex]!;
-      if (maxX - minX <= 0.000001) continue;
-      const centerX = (minX + maxX) / 2;
-      const centerZ = (minZ + maxZ) / 2;
-      if (cvh1PointInsideHole(centerX, centerZ, bounds)) continue;
-
-      const southwest = vertex(xIndex - 1, zIndex - 1);
-      const northwest = vertex(xIndex - 1, zIndex);
-      const northeast = vertex(xIndex, zIndex);
-      const southeast = vertex(xIndex, zIndex - 1);
-      indices.push(southwest, northwest, northeast, southwest, northeast, southeast);
-      visibleArea += (maxX - minX) * (maxZ - minZ);
-    }
-  }
-
-  return { positions, normals, uvs, indices, visibleArea };
-}
-
-export function cvh1FloorSurfaceProfile(): Cvh1FloorSurfaceProfile {
-  return {
-    strategy: 'single-indexed-planar-mesh',
-    topY: CVH1_FLOOR_TOP_Y,
-    carpetRepeatMeters: CVH1_CARPET_REPEAT_METERS,
-    materialTiling: [1, 1],
-    renderEntitiesPerHoleCell: 1,
-    internalSideFaces: false,
-    handoffGeometry: false
-  };
+function runtimeNow(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
 export class WorldRenderer {
@@ -174,15 +81,25 @@ export class WorldRenderer {
   }
 
   loadCell(descriptor: CellDescriptor): void {
+    runRendererCellLoadLifecycle(this, descriptor, () => this.realizeBaseCell(descriptor));
+  }
+
+  private realizeBaseCell(descriptor: CellDescriptor): void {
     if (this.loaded.has(descriptor.id)) return;
     const visual = this.cellBuilder.buildCell(descriptor);
-    this.replaceFixtureMeshes(visual);
-    if (descriptor.floorPatches.some((patch) => patch.kind === 'hole')) this.replaceHoleFloor(visual);
+    if (descriptor.world.generationVersion === 'gen2') {
+      this.replaceLegacyFixtureMeshes(visual);
+      if (descriptor.floorPatches.some((patch) => patch.kind === 'hole')) this.replaceLegacyHoleFloor(visual);
+    }
     this.loaded.set(descriptor.id, visual);
     this.renderMarksForCell(descriptor.id);
   }
 
   unloadCell(cellId: string): void {
+    runRendererCellUnloadLifecycle(this, cellId, () => this.destroyBaseCell(cellId));
+  }
+
+  private destroyBaseCell(cellId: string): void {
     const visual = this.loaded.get(cellId); if (!visual) return;
     for (const collider of visual.colliders) this.walls.delete(collider.id);
     for (const interaction of visual.interactions) this.interactions.delete(interaction.id);
@@ -191,6 +108,7 @@ export class WorldRenderer {
   }
   refreshCell(descriptor: CellDescriptor): void { this.unloadCell(descriptor.id); this.loadCell(descriptor); }
   removeInteraction(id: string): void {
+    unregisterRuntimeInteraction(this, id);
     const visual = this.interactions.get(id); if (!visual) return;
     if (visual.kind === 'item') visual.light?.destroy(); visual.entity.destroy(); this.interactions.delete(id);
     for (const cell of this.loaded.values()) cell.interactions = cell.interactions.filter((candidate) => candidate.id !== id);
@@ -201,6 +119,7 @@ export class WorldRenderer {
     const visual = this.loaded.get(`${cellX}:${cellZ}`); if (!visual) return;
     const interaction = this.cellBuilder.addItemVisual(visual.root, drop.item, drop.x, drop.y, drop.z, drop.x - cellX * CELL_SIZE, drop.z - cellZ * CELL_SIZE, undefined, drop.activatedAt);
     visual.interactions.push(interaction);
+    registerRuntimeInteraction(this, interaction);
   }
 
   spawnLabShowcase(entries: readonly ObjectCatalogEntry[]): number {
@@ -252,32 +171,39 @@ export class WorldRenderer {
     return entries.length;
   }
 
-  private replaceFixtureMeshes(visual: CellVisual): void {
+  private replaceLegacyFixtureMeshes(visual: CellVisual): void {
     const descriptor = visual.descriptor;
     const rootNode = visual.root as pc.Entity & { children?: pc.Entity[] };
     for (const child of [...(rootNode.children ?? [])]) {
       const name = (child as pc.Entity & { name?: string }).name;
       if (name?.startsWith('fixture:')) child.destroy();
     }
-    const profile = descriptor.world.generationVersion === 'gen3-v1' ? ZONE_PROFILES.baseline : ZONE_PROFILES[descriptor.address.zoneId];
     for (const group of descriptor.lightGroups) {
-      const active = group.state !== 'off';
-      const fixtureMat = this.getMaterial(
-        `fixture:${profile.id}:${group.state}`,
-        active ? [0.98, 0.96, 0.76] : [0.32, 0.32, 0.27],
+      const presentation = resolveMFluorescentPanelPresentation(descriptor, group.state, group.state === 'off' ? 0 : 1);
+      const panelMaterial = this.getMaterial(
+        `m-f1:${descriptor.world.regionId}:${group.state}:${presentation.pulseLevel.toFixed(4)}:${presentation.diffuse.join(',')}:${presentation.emissive?.join(',') ?? 'none'}:${presentation.emissiveIntensity.toFixed(4)}`,
+        presentation.diffuse,
         undefined,
         0,
         [1, 1],
-        active ? [1, 0.95, 0.68] : [0.01, 0.01, 0.008],
-        active ? (group.state === 'flicker' ? 1.35 : 2.35) * profile.lightMultiplier : 0.02
+        presentation.emissive,
+        presentation.emissiveIntensity
       );
       group.fixtures.forEach((fixture, index) => {
-        this.box(`${group.id}:fixture:${index}`, visual.root, [fixture.x, fixture.y, fixture.z], [2.2, 0.08, 0.38], fixtureMat, group.rotationY);
+        const identity = mFluorescentFixtureIdentity(group.id, index);
+        this.box(
+          identity.panelName,
+          visual.root,
+          [fixture.x, fixture.y, fixture.z],
+          [M_F1_PANEL_DIMENSIONS[0], M_F1_PANEL_DIMENSIONS[1], M_F1_PANEL_DIMENSIONS[2]],
+          panelMaterial,
+          group.rotationY
+        );
       });
     }
   }
 
-  private replaceHoleFloor(visual: CellVisual): void {
+  private replaceLegacyHoleFloor(visual: CellVisual): void {
     const descriptor = visual.descriptor;
     const holes = descriptor.floorPatches.filter((patch) => patch.kind === 'hole');
     if (holes.length === 0) return;
@@ -289,12 +215,8 @@ export class WorldRenderer {
       const name = (child as pc.Entity & { name?: string }).name;
       if (name && (removableNames.has(name) || name.startsWith('floor-piece:') || name === 'cvh1-floor-surface')) child.destroy();
     }
-
     const legacyProfile = ZONE_PROFILES[descriptor.address.zoneId];
-    const gen3 = descriptor.world.generationVersion === 'gen3-v1';
-    const floorMat = gen3
-      ? this.getMaterial('floor:cvh1-coherent', CVH1_ORDINARY_FLOOR_TINT, 'carpet', 0, [1, 1])
-      : this.getMaterial(`floor:${legacyProfile.id}:cvh1-coherent`, legacyProfile.floorTint, 'carpet', descriptor.variant % 3, [1, 1]);
+    const floorMat = this.getMaterial(`floor:${legacyProfile.id}:cvh1-coherent`, legacyProfile.floorTint, 'carpet', descriptor.variant % 3, [1, 1]);
     this.addCvh1FloorSurface(visual.root, holes, floorMat);
     for (const hole of holes) this.addRecessedHole(visual.root, hole, legacyProfile.floorTint);
   }
@@ -345,28 +267,44 @@ export class WorldRenderer {
   }
 
   updateDynamicItems(now: number): void {
-    for (const interaction of this.interactions.values()) {
-      if (interaction.kind !== 'item' || interaction.item.definitionId !== 'glow-stick' || !interaction.activatedAt) continue;
-      const remaining = Math.max(0, 1 - (now - interaction.activatedAt) / 600_000);
-      if (interaction.light?.light) { interaction.light.light.intensity = remaining * 0.85; interaction.light.light.range = 2 + remaining * 6; }
+    const started = runtimeNow();
+    const candidates = runtimeDynamicItemCandidates(this);
+    for (const interaction of candidates) {
+      const activatedAt = interaction.activatedAt;
+      if (!activatedAt) continue;
+      const remaining = Math.max(0, 1 - (now - activatedAt) / 600_000);
+      if (interaction.light?.light) {
+        interaction.light.light.intensity = remaining * 0.85;
+        interaction.light.light.range = 2 + remaining * 6;
+      }
       interaction.entity.enabled = remaining > 0.002;
+      if (remaining <= 0) retireRuntimeDynamicItem(this, interaction.id);
     }
+    recordRuntimeDynamicItemUpdate(this, candidates.length, this.interactions.size, runtimeNow() - started);
   }
 
   closestInteraction(x: number, y: number, z: number, fx: number, fz: number, maxDistance = 2.75): InteractionVisual | undefined {
+    const started = runtimeNow();
+    const candidates = runtimeInteractionCandidates(this, x, z, maxDistance);
     let best: InteractionVisual | undefined; let bestDistance = maxDistance;
-    for (const interaction of this.interactions.values()) {
+    for (const interaction of candidates) {
       const dx = interaction.x - x; const dz = interaction.z - z; const distance = Math.hypot(dx, interaction.y - y, dz);
       if (distance >= bestDistance || distance < 0.001) continue;
       const horizontal = Math.max(0.001, Math.hypot(dx, dz));
       if ((dx * fx + dz * fz) / horizontal < 0.15) continue;
       best = interaction; bestDistance = distance;
     }
+    recordRuntimeInteractionQuery(this, candidates.length, this.interactions.size, runtimeNow() - started);
     return best;
   }
 
   resolveMovement(currentX: number, currentZ: number, nextX: number, nextZ: number, radius = 0.34): [number, number] {
-    return resolveCircleAgainstAabbs(currentX, currentZ, nextX, nextZ, [...this.walls.values()], radius);
+    const started = runtimeNow();
+    const bounds = movementCollisionQueryBounds(currentX, currentZ, nextX, nextZ, radius);
+    const candidates = runtimeCollisionCandidates(this, bounds);
+    const result = resolveCircleAgainstAabbs(currentX, currentZ, nextX, nextZ, candidates, radius);
+    recordRuntimeCollisionQuery(this, candidates.length, this.walls.size, runtimeNow() - started);
+    return result;
   }
 
   raycastWall(origin: { x: number; y: number; z: number }, direction: { x: number; y: number; z: number }, maxDistance = 3): { wall: WorldWall; distance: number; x: number; y: number; z: number; u: number; v: number; faceSign: -1 | 1 } | undefined {

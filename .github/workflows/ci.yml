@@ -1,68 +1,68 @@
-name: Project Noclip CI
+name: Project Noclip Core Correctness
+
 on:
+  pull_request:
   push:
     branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  verify:
+  core-correctness:
     runs-on: ubuntu-latest
     timeout-minutes: 24
+    env:
+      NOCLIP_BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      NOCLIP_PR_MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha || '' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout exact branch head
+        uses: actions/checkout@v4
         with:
-          node-version: 22
-      - run: npm install --no-audit --no-fund
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run benchmark
-      - run: npm run build
-      - name: Install browser-smoke driver
-        run: python -m pip install --disable-pip-version-check selenium==4.46.0
-      - name: Run mobile, desktop, CV-H1 floor and world-cohesion Chromium journeys
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - name: Record exact verification identity
         shell: bash
         run: |
           set -euo pipefail
-          npm run preview > /tmp/project-noclip-preview.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill "$SERVER_PID" 2>/dev/null || true; cat /tmp/project-noclip-preview.log || true' EXIT
-          for attempt in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then
-              break
-            fi
-            if [ "$attempt" -eq 30 ]; then
-              echo "Preview server did not become ready" >&2
-              exit 1
-            fi
-            sleep 1
-          done
-          NOCLIP_VERSION_ARTIFACTS="artifacts/browser-smoke" python scripts/version-smoke.py
-          NOCLIP_MOBILE_ARTIFACTS="artifacts/mobile-smoke" python scripts/mobile-smoke.py
-          python scripts/browser-smoke.py
-          NOCLIP_CVH1_ARTIFACTS="artifacts/cvh1-floor-smoke" python scripts/cvh1-floor-smoke.py
-          candidate_version="v$(tr -d '[:space:]' < VERSION)"
-          NOCLIP_BASE_URL="http://127.0.0.1:4173" \
-          NOCLIP_DEPLOYMENT_COMMIT="$GITHUB_SHA" \
-          NOCLIP_DEPLOYMENT_ID="local-ci-cvh1" \
-          NOCLIP_EXPECTED_VERSION="$candidate_version" \
-          NOCLIP_PROFILE_STATIC_SECONDS="1.5" \
-          NOCLIP_PROFILE_ARTIFACTS="artifacts/cvh1-renderer-profile" \
-          python scripts/profile-candidate-renderer.py
-          python scripts/world-cohesion-smoke.py
-      - name: Upload browser-smoke evidence
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$NOCLIP_BRANCH_HEAD_SHA"
+          echo "BRANCH_HEAD_SHA=$actual"
+          echo "PR_MERGE_SHA=${NOCLIP_PR_MERGE_SHA:-none}"
+          echo "VERSION=$(tr -d '[:space:]' < VERSION)"
+          mkdir -p artifacts/core-correctness
+          printf 'BRANCH_HEAD_SHA=%s\nPR_MERGE_SHA=%s\nVERSION=%s\n' \
+            "$actual" "${NOCLIP_PR_MERGE_SHA:-none}" "$(tr -d '[:space:]' < VERSION)" \
+            > artifacts/core-correctness/verification-context.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install project dependencies
+        run: npm install --no-audit --no-fund
+      - name: Verify verification architecture contract
+        run: python scripts/verification-contract-tests.py
+      - name: Presentation definitions / NAL build
+        run: npm run presentation:build
+      - name: Noclip Studio static check
+        run: npm run studio:check
+      - name: Strict TypeScript
+        run: npm run typecheck
+      - name: Full deterministic and system tests
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee artifacts/core-correctness/test.log
+      - name: 10,000-Cell benchmark
+        shell: bash
+        run: npm run benchmark | tee artifacts/core-correctness/benchmark.log
+      - name: Production build + Studio production security boundary
+        run: npm run build
+      - name: Upload core correctness evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-mobile-cvh1-cohesion-smoke-${{ github.sha }}
-          path: |
-            artifacts/browser-smoke
-            artifacts/mobile-smoke
-            artifacts/cvh1-floor-smoke
-            artifacts/cvh1-renderer-profile
-            artifacts/world-cohesion-smoke
+          name: core-correctness-${{ github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/core-correctness
           if-no-files-found: warn
           retention-days: 14

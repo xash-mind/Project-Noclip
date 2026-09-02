@@ -1,11 +1,6 @@
 import * as pc from 'playcanvas';
 import { CELL_SIZE } from '../world/types.js';
-import { installArchDividerRuntimeCorrection } from './archDividerRuntimeCorrection.js';
 import { isMFluorescentPanelVisualName } from './fixtureVisualOwnership.js';
-import { installFixtureLighting } from './fixtureLighting.js';
-import { installLevel0RegionPresentation } from './level0RegionPresentation.js';
-import { installWallJunctionPresentation } from './wallJunctionPresentation.js';
-import { WorldRenderer } from './WorldRenderer.js';
 
 const STATIC_WORLD_BATCH_GROUP_ID_START = 1601;
 const STATIC_WORLD_BATCH_GROUP_NAME = 'level0-static-cell';
@@ -55,6 +50,7 @@ type BatchManager = {
 type BatchApplication = pc.Application & { root: BatchEntity; batcher: BatchManager };
 type ApplicationLookup = typeof pc.Application & { getApplication(id?: string): pc.Application | undefined; };
 let installed = false;
+let markDirty: (() => void) | undefined;
 interface CellBatch { id: number; guid: string; }
 
 function isBatchEntity(node: unknown): node is BatchEntity { return node instanceof pc.Entity; }
@@ -74,19 +70,21 @@ function getRunningApplication(): BatchApplication | undefined {
   return (pc.Application as ApplicationLookup).getApplication('game-canvas') as BatchApplication | undefined;
 }
 
+/** Called by the explicit Cell lifecycle only when residency actually changes. */
+export function markStaticWorldBatchingDirty(): void {
+  markDirty?.();
+}
+
 /** Static geometry is batched per streamed Cell so one entering/leaving Cell never invalidates the whole Level 0 batch. */
 export function installStaticWorldBatching(): void {
   if (installed) return;
   installed = true;
-  installLevel0RegionPresentation();
-  installWallJunctionPresentation();
-  installArchDividerRuntimeCorrection();
-  installFixtureLighting();
   let currentApp: BatchApplication | undefined;
   let nextGroupId = STATIC_WORLD_BATCH_GROUP_ID_START;
   let freeGroupIds: number[] = [];
   let cellBatches = new Map<string, CellBatch>();
   let dirty = true;
+  markDirty = () => { dirty = true; };
 
   const reset = (app: BatchApplication): void => {
     currentApp = app;
@@ -135,19 +133,6 @@ export function installStaticWorldBatching(): void {
     const reconcileMs = performance.now() - reconcileStart;
     batchingDiagnostics.reconcileMs += reconcileMs;
     batchingDiagnostics.maxReconcileMs = Math.max(batchingDiagnostics.maxReconcileMs, reconcileMs);
-  };
-
-  const originalLoadCell = WorldRenderer.prototype.loadCell;
-  WorldRenderer.prototype.loadCell = function batchingLoadCell(this: WorldRenderer, descriptor): void {
-    const loadedBefore = this.loaded.has(descriptor.id);
-    originalLoadCell.call(this, descriptor);
-    if (!loadedBefore && this.loaded.has(descriptor.id)) dirty = true;
-  };
-  const originalUnloadCell = WorldRenderer.prototype.unloadCell;
-  WorldRenderer.prototype.unloadCell = function batchingUnloadCell(this: WorldRenderer, cellId): void {
-    const loadedBefore = this.loaded.has(cellId);
-    originalUnloadCell.call(this, cellId);
-    if (loadedBefore && !this.loaded.has(cellId)) dirty = true;
   };
 
   reconcile();

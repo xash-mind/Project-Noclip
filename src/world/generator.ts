@@ -4,6 +4,7 @@ import { exitsForCell } from './exits.js';
 import { intInRange, stableId, unitFloat, weightedChoice } from './hash.js';
 import { boundaryWallParts, chooseArchetype, layoutFor } from './layouts.js';
 import { generateLightGroups, validateLightClearance } from './lighting.js';
+import { isGen2Compatibility } from './gen2Compatibility.js';
 import { generateGen3Layout, sampleGen3Environment } from './gen3.js';
 import { sampleGen3RegionInfluence } from './gen3Architecture.js';
 import { makeNote } from './notes.js';
@@ -451,7 +452,7 @@ const stability = manilaRoom
 }
 
 export function generateCell(options: GenerateCellOptions): CellDescriptor {
-  return (options.generationVersion ?? 'gen3-v1') === 'gen2'
+  return isGen2Compatibility(options.generationVersion)
     ? generateLegacyCell(options)
     : generateGen3Cell(options);
 }

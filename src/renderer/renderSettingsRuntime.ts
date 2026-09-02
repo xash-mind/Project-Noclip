@@ -1,20 +1,21 @@
 import * as pc from 'playcanvas';
 import { CameraFrame } from 'playcanvas/build/playcanvas/src/extras/render-passes/camera-frame.js';
-import { ProjectNoclipGame } from '../app/ProjectNoclipGame.js';
+import type { ProjectNoclipGame } from '../app/ProjectNoclipGame.js';
 import type { SaveData } from '../persistence/types.js';
 import { calculateExposureDay, calculateWorldDay } from '../simulation/timeline.js';
 import { sampleGen3Environment } from '../world/gen3.js';
 import type { LightFieldSample } from '../world/lighting.js';
 import type { CellDescriptor, WorldTuning } from '../world/types.js';
-import { installStreamingScheduler, reconcileStreaming } from './streamingScheduler.js';
 import type { WorldRenderer } from './WorldRenderer.js';
 import {
   getRenderSettings,
   initializeRenderSettings,
   level0AmbientForBlackout,
   level0FogForSettings,
+  nearestGuaranteedRenderFrontierMeters,
+  rendererParticipatingCellIds,
   renderDistanceProfile,
-  setRendererRenderScope,
+  type RenderDistanceLevel,
   type RenderSettings
 } from './renderSettings.js';
 
@@ -50,34 +51,25 @@ interface GameRuntimeAccess {
   app?: pc.Application;
   camera?: pc.Entity;
   cameraFrame?: CameraFrame;
-  blackoutGuideLight?: pc.Entity;
   flashlight?: pc.Entity;
   renderer?: WorldRenderer;
   save?: SaveData;
   tuning: WorldTuning;
-  currentCellX: number;
-  currentCellZ: number;
   currentCell?: CellDescriptor;
-  streamWarmupToken: number;
   journeyElapsed: number;
   lightField: LightFieldSample;
   blackoutStrength: number;
   ambience: AmbienceAccess;
   update(dt: number): void;
-  refreshRegionExtent(): void;
-  refreshLightField(): void;
-  notifyRegionEntry(): void;
   updateStreaming(force?: boolean, radiusOverride?: number): void;
 }
 
-type RuntimePrototype = {
-  setupEngine(this: ProjectNoclipGame): void;
-  update(this: ProjectNoclipGame, dt: number): void;
-  updateStreaming(this: ProjectNoclipGame, force?: boolean, radiusOverride?: number): void;
-  refreshLightField(this: ProjectNoclipGame): void;
-};
+interface RuntimeFrameTiming {
+  frameTimeMs: number;
+  fps: number;
+}
 
-let installed = false;
+const frameTimings = new WeakMap<ProjectNoclipGame, RuntimeFrameTiming>();
 
 function access(game: ProjectNoclipGame): GameRuntimeAccess {
   return game as unknown as GameRuntimeAccess;
@@ -123,11 +115,27 @@ function applyPostProcessing(frame: CameraFrame | undefined, settings: RenderSet
   frame.update();
 }
 
+function currentGuaranteedFrontier(game: ProjectNoclipGame, settings: RenderSettings): number | undefined {
+  const state = access(game);
+  if (!state.renderer || !state.camera || !state.currentCell) return undefined;
+  const position = state.camera.getPosition();
+  const renderer = state.renderer;
+  return nearestGuaranteedRenderFrontierMeters(
+    settings,
+    state.currentCell.address.cellX,
+    state.currentCell.address.cellZ,
+    position.x,
+    position.z,
+    (cellX, cellZ) => renderer.loaded.has(`${cellX}:${cellZ}`)
+  );
+}
+
 function applyLevel0Atmosphere(game: ProjectNoclipGame, settings: RenderSettings): void {
   const state = access(game);
   if (!state.app) return;
   const ambient = level0AmbientForBlackout(state.blackoutStrength);
-  const fog = level0FogForSettings(settings, state.blackoutStrength);
+  const guaranteedFrontier = currentGuaranteedFrontier(game, settings);
+  const fog = level0FogForSettings(settings, state.blackoutStrength, guaranteedFrontier);
   const scene = modernScene(state.app);
   scene.ambientLight = new pc.Color(ambient.r, ambient.g, ambient.b);
   scene.fog.type = pc.FOG_LINEAR;
@@ -137,7 +145,7 @@ function applyLevel0Atmosphere(game: ProjectNoclipGame, settings: RenderSettings
   const cameraComponent = (state.camera as unknown as { camera?: CameraAccess } | undefined)?.camera;
   if (cameraComponent) {
     cameraComponent.clearColor = new pc.Color(fog.color.r, fog.color.g, fog.color.b);
-    cameraComponent.farClip = fog.end + 2;
+    cameraComponent.farClip = fog.end + 0.5;
   }
 }
 
@@ -148,14 +156,28 @@ function applyRenderQuality(game: ProjectNoclipGame, settings: RenderSettings): 
   applyPostProcessing(state.cameraFrame, settings);
 }
 
-function setupEngine(this: ProjectNoclipGame): void {
-  const state = access(this);
+function recordFrameTiming(game: ProjectNoclipGame, dt: number): void {
+  if (!(dt > 0) || !Number.isFinite(dt)) return;
+  const sample = dt * 1000;
+  const previous = frameTimings.get(game)?.frameTimeMs;
+  const frameTimeMs = previous === undefined ? sample : previous * 0.85 + sample * 0.15;
+  frameTimings.set(game, { frameTimeMs, fps: 1000 / frameTimeMs });
+}
+
+/** Device-local render settings initialization. Installs no application methods. */
+export function initializeRenderSettingsRuntime(): void {
+  initializeRenderSettings();
+}
+
+/** Accepted modern PlayCanvas setup, explicitly invoked by ProjectNoclipGame. */
+export function setupRenderSettingsEngine(game: ProjectNoclipGame): void {
+  const state = access(game);
   const settings = getRenderSettings();
   state.tuning = { ...state.tuning, activeRadius: renderDistanceProfile(settings).loadRadius };
   if (state.app) {
     for (const id of [...(state.renderer?.loaded.keys() ?? [])]) state.renderer?.unloadCell(id);
-    applyLevel0Atmosphere(this, settings);
-    applyRenderQuality(this, settings);
+    applyLevel0Atmosphere(game, settings);
+    applyRenderQuality(game, settings);
     return;
   }
 
@@ -178,7 +200,7 @@ function setupEngine(this: ProjectNoclipGame): void {
   camera.addComponent('camera', {
     clearColor: new pc.Color(fog.color.r, fog.color.g, fog.color.b),
     nearClip: 0.05,
-    farClip: fog.end + 2,
+    farClip: fog.end + 0.5,
     fov: 73,
     frustumCulling: true
   });
@@ -190,13 +212,9 @@ function setupEngine(this: ProjectNoclipGame): void {
     state.cameraFrame = cameraFrame;
   }
 
-  const blackoutGuideLight = new pc.Entity('blackout-external-glimmer');
-  blackoutGuideLight.addComponent('light', {
-    type: 'omni', color: new pc.Color(0.88, 0.84, 0.56), range: 22, intensity: 0, castShadows: false
-  });
-  blackoutGuideLight.enabled = false;
-  app.root.addChild(blackoutGuideLight);
-
+  // Deep-Blackout unaided navigation is owned by the uniform ambient floor.
+  // Do not add a player-relative or exit-direction guide light here: legitimate
+  // extra illumination must come from fixture-owned lights or player/world items.
   const flashlight = new pc.Entity('flashlight');
   flashlight.addComponent('light', {
     type: 'spot', color: new pc.Color(0.93, 0.91, 0.72), range: 22, intensity: 2.4,
@@ -210,20 +228,19 @@ function setupEngine(this: ProjectNoclipGame): void {
   state.app = app;
   state.camera = camera;
   state.cameraFrame = cameraFrame;
-  state.blackoutGuideLight = blackoutGuideLight;
   state.flashlight = flashlight;
-  applyRenderQuality(this, settings);
-  app.on('update', (dt) => state.update(Math.min(dt, 0.05)));
+  applyRenderQuality(game, settings);
+  app.on('update', (dt) => {
+    recordFrameTiming(game, dt);
+    state.update(Math.min(dt, 0.05));
+  });
   app.start();
   window.addEventListener('resize', () => app.resizeCanvas());
 }
 
-function updateStreaming(this: ProjectNoclipGame, force = false, radiusOverride?: number): void {
-  reconcileStreaming(this, force, radiusOverride);
-}
-
-function refreshLightField(this: ProjectNoclipGame): void {
-  const state = access(this);
+/** Accepted light-field/Blackout atmosphere path, explicitly invoked by the app. */
+export function refreshRenderSettingsLightField(game: ProjectNoclipGame): void {
+  const state = access(game);
   if (!state.save || !state.renderer || !state.camera || !state.currentCell || !state.app) return;
   const position = state.camera.getPosition();
   state.lightField = state.renderer.updateLightField(position.x, position.z, state.journeyElapsed, state.save.settings.reducedFlicker);
@@ -237,17 +254,7 @@ function refreshLightField(this: ProjectNoclipGame): void {
   const blackoutEscapeCue = sampled?.blackoutEscapeCue ?? state.currentCell.world.blackoutEscapeCue;
   state.blackoutStrength = blackoutStrength;
   state.ambience.setEnvironment(blackoutStrength, blackoutEscapeCue);
-  applyLevel0Atmosphere(this, getRenderSettings());
-
-  if (state.blackoutGuideLight?.light && sampled && blackoutStrength > 0.52) {
-    state.blackoutGuideLight.enabled = true;
-    state.blackoutGuideLight.setPosition(
-      position.x + sampled.blackoutExitDirection.x * 18,
-      2.35,
-      position.z + sampled.blackoutExitDirection.z * 18
-    );
-    state.blackoutGuideLight.light.intensity = 0.025 + blackoutEscapeCue * 0.24;
-  } else if (state.blackoutGuideLight) state.blackoutGuideLight.enabled = false;
+  applyLevel0Atmosphere(game, getRenderSettings());
 }
 
 export function applyRenderSettingsToGame(game: ProjectNoclipGame, settings = getRenderSettings()): void {
@@ -265,15 +272,27 @@ export function applyRenderSettingsToGame(game: ProjectNoclipGame, settings = ge
 }
 
 export function renderSettingsDiagnostics(game: ProjectNoclipGame): {
+  fps?: number;
+  frameTimeMs?: number;
   activeCells: number;
   retainedCells: number;
+  participatingCells?: number;
+  loadedButNotParticipatingCells?: number;
+  currentCell?: string;
   activeOmnis: number;
   shadowedOmnis: number;
   drawCalls?: number;
+  renderDistance: RenderDistanceLevel;
+  renderScale: number;
   fogStart?: number;
   fogEnd?: number;
+  canonicalFogEnd: number;
+  nearestGuaranteedFrontierMeters?: number;
+  frontierSafetyClamped: boolean;
 } {
   const state = access(game);
+  const settings = getRenderSettings();
+  const profile = renderDistanceProfile(settings);
   const renderer = state.renderer as (WorldRenderer & {
     activeRealtimeFixtureLightCount?: number;
     shadowedRealtimeFixtureLightCount?: number;
@@ -282,23 +301,38 @@ export function renderSettingsDiagnostics(game: ProjectNoclipGame): {
   for (const visual of renderer?.loaded.values() ?? []) if (visual.root.enabled) activeCells += 1;
   const drawCalls = (state.app as unknown as { stats?: { drawCalls?: { total?: number } } } | undefined)?.stats?.drawCalls?.total;
   const fog = state.app ? modernScene(state.app).fog : undefined;
+  const timing = frameTimings.get(game);
+  const participatingIds = renderer ? rendererParticipatingCellIds(renderer) : undefined;
+  const participatingCells = participatingIds?.length;
+  const retainedCells = renderer?.loadedCellCount ?? 0;
+  const position = state.camera?.getPosition();
+  const nearestFrontier = renderer && state.currentCell && position
+    ? nearestGuaranteedRenderFrontierMeters(
+      settings,
+      state.currentCell.address.cellX,
+      state.currentCell.address.cellZ,
+      position.x,
+      position.z,
+      (cellX, cellZ) => renderer.loaded.has(`${cellX}:${cellZ}`)
+    )
+    : undefined;
   return {
+    ...(timing ? { fps: timing.fps, frameTimeMs: timing.frameTimeMs } : {}),
     activeCells,
-    retainedCells: renderer?.loadedCellCount ?? 0,
+    retainedCells,
+    ...(participatingCells === undefined ? {} : {
+      participatingCells,
+      loadedButNotParticipatingCells: Math.max(0, retainedCells - participatingCells)
+    }),
+    ...(state.currentCell ? { currentCell: state.currentCell.id } : {}),
     activeOmnis: renderer?.activeRealtimeFixtureLightCount ?? 0,
     shadowedOmnis: renderer?.shadowedRealtimeFixtureLightCount ?? 0,
     ...(typeof drawCalls === 'number' ? { drawCalls } : {}),
-    ...(fog ? { fogStart: fog.start, fogEnd: fog.end } : {})
+    renderDistance: settings.renderDistance,
+    renderScale: settings.renderScale,
+    ...(fog ? { fogStart: fog.start, fogEnd: fog.end } : {}),
+    canonicalFogEnd: profile.fogEnd,
+    ...(nearestFrontier === undefined ? {} : { nearestGuaranteedFrontierMeters: nearestFrontier }),
+    frontierSafetyClamped: Boolean(fog && fog.end < profile.fogEnd - 0.0001)
   };
-}
-
-export function installRenderSettingsRuntime(): void {
-  if (installed) return;
-  installed = true;
-  initializeRenderSettings();
-  const prototype = ProjectNoclipGame.prototype as unknown as RuntimePrototype;
-  prototype.setupEngine = setupEngine;
-  prototype.updateStreaming = updateStreaming;
-  prototype.refreshLightField = refreshLightField;
-  installStreamingScheduler(prototype);
 }

@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const presentationSource = await readFile(new URL('../src/renderer/level0SurfacePresentation.ts', import.meta.url), 'utf8');
+const wallpaperSource = await readFile(new URL('../src/renderer/level0WallpaperPresentation.ts', import.meta.url), 'utf8');
 const { generateCell } = await import('../.test-dist/src/world/generator.js');
 const { CELL_SIZE, DEFAULT_TUNING } = await import('../.test-dist/src/world/types.js');
 const { PILLAR_WALL_CLEARANCE } = await import('../.test-dist/src/world/gen3SpaceTopologyBuild.js');
@@ -46,8 +47,9 @@ function edgeGap(firstMin, firstMax, secondMin, secondMax) {
 }
 
 test('P-A1 wallpaper presentation uses one rectangular visible solid without corner skins', () => {
-  assert.match(presentationSource, /function pillarWallpaperReferenceWall/);
-  assert.match(presentationSource, /setMaterial\(core, wallMaterial\(cache, descriptor, pillarWallpaperReferenceWall\(prop\)\)\)/);
+  assert.match(presentationSource, /applyLevel0WallpaperPresentation\(renderer, visual\)/);
+  assert.match(wallpaperSource, /function pillarWallpaperReferenceWall/);
+  assert.match(wallpaperSource, /setMaterial\(descendantByName\(visual\.root, `\$\{prop\.id\}:body`\), wallpaperMaterial\(cache, descriptor, reference, decision\.primary\)\)/);
   assert.match(presentationSource, /child\.name\.startsWith\(`\$\{prop\.id\}:wallpaper:`\)/);
   assert.equal(presentationSource.includes('cornerOverlap'), false);
   assert.equal(presentationSource.includes("const faces = ['north', 'south', 'west', 'east']"), false);

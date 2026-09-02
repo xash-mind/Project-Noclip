@@ -1,5 +1,6 @@
 import type { ItemInstance } from '../items/types.js';
 import type { ExposureState } from '../simulation/timeline.js';
+import { generationVersionFromPersisted } from '../world/gen2Compatibility.js';
 import type { GenerationVersion } from '../world/types.js';
 
 export interface SurfaceMark {
@@ -84,7 +85,7 @@ export function migrateSave(input: unknown): SaveData | undefined {
   return {
     ...(candidate as SaveDataV1),
     version: 2,
-    generationVersion: candidate.generationVersion === 'gen3-v1' ? 'gen3-v1' : 'gen2',
+    generationVersion: generationVersionFromPersisted(candidate.generationVersion),
     inventory: candidate.inventory.filter((item): item is ItemInstance => Boolean(item && typeof item === 'object' && typeof (item as ItemInstance).instanceId === 'string')),
     droppedItems: candidate.droppedItems.filter((drop): drop is DroppedItemState => Boolean(drop && typeof drop === 'object' && (drop as DroppedItemState).item)),
     pickedLootNodeIds: Array.isArray(candidate.pickedLootNodeIds) ? candidate.pickedLootNodeIds.filter((id): id is string => typeof id === 'string') : [],

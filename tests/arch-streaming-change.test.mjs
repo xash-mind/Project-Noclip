@@ -3,10 +3,19 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const core = await import('../.test-dist/src/world/gen3ArchitectureCore.js');
+const {
+  ARCH_FRAME_CELL_SEAM_HANDOFF,
+  archFrameBaysForDescriptors: canonicalArchFrameBaysForDescriptors,
+  clipArchIntervalForCell
+} = await import('../.test-dist/src/world/gen3ArchDividerSemantics.js');
 const { generateCell } = await import('../.test-dist/src/world/generator.js');
-const { DEFAULT_TUNING } = await import('../.test-dist/src/world/types.js');
+const { CELL_SIZE, DEFAULT_TUNING } = await import('../.test-dist/src/world/types.js');
 const { routeReservationEnvelopesForCell } = await import('../.test-dist/src/world/gen3SpaceTopologyBuild.js');
-const { archFramePresentationProfile, holeDepthBands } = await import('../.test-dist/src/renderer/level0RegionPresentation.js');
+const {
+  archFramePresentationProfile,
+  archFrameVisibleVolumesForDescriptors,
+  holeDepthBands
+} = await import('../.test-dist/src/renderer/level0RegionPresentation.js');
 const { OBJECT_CATALOG, validateObjectCatalog } = await import('../.test-dist/src/renderer/objectCatalog.js');
 const { resolveGeometry, geometryIsFinite, hasDuplicateTriangles } = await import('../.test-dist/src/presentation/geometry.js');
 const { LEVEL0_FEATURE_PRESENTATION_REGISTRY, MEDIUM_BUCKET_TARGET, SMALL_GREY_OPEN_PAINT_CAN_TARGET } = await import('../.test-dist/src/presentation/level0FeatureRepresentations.js');
@@ -16,7 +25,7 @@ const streamingPolicySource = await readFile(new URL('../src/renderer/streamingP
 const batchingSource = await readFile(new URL('../src/renderer/StaticWorldBatching.ts', import.meta.url), 'utf8');
 const archPresentationSource = await readFile(new URL('../src/renderer/level0RegionPresentation.ts', import.meta.url), 'utf8');
 const featurePresentationSource = await readFile(new URL('../src/renderer/level0FeaturePresentation.ts', import.meta.url), 'utf8');
-const pauPilotSource = await readFile(new URL('../src/renderer/pauFeaturePresentationPilot.ts', import.meta.url), 'utf8');
+const cellBuilderSource = await readFile(new URL('../src/renderer/cellBuilder.ts', import.meta.url), 'utf8');
 const mainSource = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
 
 function tuning(regionOverride) {
@@ -111,14 +120,14 @@ test('Medium Bucket and Small Grey Open Paint Can use the PAU registry and conti
     assert.equal(geometryIsFinite(mesh), true);
     assert.equal(hasDuplicateTriangles(mesh), false);
   }
-  assert.match(pauPilotSource, /addLevel0PilotFeaturePresentation/);
-  assert.match(pauPilotSource, /original\.call\(this, parent, prop, profile\)/);
-  assert.match(mainSource, /installPauFeaturePresentationPilot\(\)/);
+  assert.match(cellBuilderSource, /addLevel0PilotFeaturePresentation/);
+  assert.match(cellBuilderSource, /if \(presentation\) return presentation/);
+  assert.doesNotMatch(mainSource, /installPauFeaturePresentationPilot/);
   assert.match(featurePresentationSource, /resolveRepresentation\(\s*semanticTarget,\s*LEVEL0_FEATURE_PRESENTATION_REGISTRY,/);
   assert.match(featurePresentationSource, /resolveGeometry\(resolved\.definition\.geometryId/);
   assert.match(featurePresentationSource, /`\$\{prop\.id\}:surface`/);
   assert.equal(featurePresentationSource.includes("addComponent('render', { type: 'cylinder' })"), false);
-  assert.match(pauPilotSource, /before the legacy cellBuilder presentation path runs/);
+  assert.doesNotMatch(cellBuilderSource, /patchedAddPropGeometry|original\.call\(this, parent, prop, profile\)/);
 });
 
 test('CV-H1 depth bands preserve an illuminated upper shaft and hide the deep terminator', () => {
@@ -131,7 +140,9 @@ test('CV-H1 depth bands preserve an illuminated upper shaft and hide the deep te
   assert.match(archPresentationSource, /`\$\{hole\.id\}:void`/);
   assert.match(archPresentationSource, /depth-occluder/);
   assert.match(archPresentationSource, /hole\.scale\.x \* 2\.6/);
-  assert.match(archPresentationSource, /lightlessBlackMaterial/);
+  assert.match(archPresentationSource, /cvh1DepthMaterial\(renderer, 'void'\)/);
+  assert.match(archPresentationSource, /resolveCvh1DepthPresentation/);
+  assert.equal(archPresentationSource.includes('lightlessBlackMaterial'), false);
 });
 
 test('streaming scheduler predicts into only the existing retention ring and budgets heavy work', () => {
@@ -141,17 +152,51 @@ test('streaming scheduler predicts into only the existing retention ring and bud
   assert.match(streamingPolicySource, /unloadGraceMs: 1200/);
   assert.match(streamingPolicySource, /const retentionRadius = loadRadius \+ STREAMING_SCHEDULER_PROFILE\.predictiveExtraRings/);
   assert.match(streamingPolicySource, /for \(let offset = -loadRadius; offset <= loadRadius; offset \+= 1\)/);
-  assert.match(streamingSource, /processOneJob\(this\)/);
+  assert.match(streamingSource, /processOneJob\(game\)/);
   assert.equal(streamingSource.includes("enqueue(scheduler, 'refresh', x, z"), false);
   assert.match(streamingSource, /visual\.root\.enabled = false/);
 });
 
 test('A-A1 shared-pier upper mass has canonical single-surface ownership', () => {
-  assert.match(archPresentationSource, /function rectangularUpperRuns/);
-  assert.match(archPresentationSource, /const upperRuns = rectangularUpperRuns\(bays, activeSupportIntervals\)/);
-  assert.match(archPresentationSource, /const clip = clippedInterval\(descriptor, bay\.orientation, bay\.curveStart, bay\.curveEnd\)/);
-  assert.match(archPresentationSource, /entersFromPreviousCell/);
-  assert.match(archPresentationSource, /continuesIntoNextCell/);
+  const seed = 'arch-shared-upper-owner';
+  const descriptors = [];
+  for (let x = -2; x <= 2; x += 1) {
+    for (let z = -2; z <= 2; z += 1) descriptors.push(cell(seed, x, z, 'arch-rooms'));
+  }
+
+  const bays = canonicalArchFrameBaysForDescriptors(descriptors);
+  const upperVolumes = archFrameVisibleVolumesForDescriptors(descriptors)
+    .filter((volume) => volume.role === 'upper-mass');
+  assert.ok(bays.length > 8, `expected repeated canonical A-A1 bays, got ${bays.length}`);
+  assert.ok(upperVolumes.length > 8, `expected repeated visible upper volumes, got ${upperVolumes.length}`);
+
+  const volumesByLine = new Map();
+  for (const volume of upperVolumes) {
+    assert.ok(volume.end > volume.start, `non-positive upper volume ${volume.id}`);
+    const line = volumesByLine.get(volume.lineKey) ?? [];
+    line.push(volume);
+    volumesByLine.set(volume.lineKey, line);
+  }
+  for (const volumes of volumesByLine.values()) {
+    volumes.sort((left, right) => left.start - right.start);
+    for (let index = 1; index < volumes.length; index += 1) {
+      assert.ok(
+        volumes[index].start >= volumes[index - 1].end - 1e-9,
+        `overlapping positive-volume upper ownership ${volumes[index - 1].id} / ${volumes[index].id}`
+      );
+    }
+  }
+
+  const left = cell(seed, 0, 0, 'arch-rooms');
+  const right = cell(seed, 1, 0, 'arch-rooms');
+  const seam = CELL_SIZE / 2;
+  const leftClip = clipArchIntervalForCell(left, 'z', seam - 1, seam + 1);
+  const rightClip = clipArchIntervalForCell(right, 'z', seam - 1, seam + 1);
+  assert.ok(leftClip && rightClip, 'canonical Cell seam clipping removed a real continuation');
+  assert.ok(Math.abs(leftClip[1] - (seam + ARCH_FRAME_CELL_SEAM_HANDOFF)) < 1e-12);
+  assert.ok(Math.abs(rightClip[0] - (seam + ARCH_FRAME_CELL_SEAM_HANDOFF)) < 1e-12);
+  assert.ok(Math.abs(leftClip[1] - rightClip[0]) < 1e-12, 'adjacent Cell ownership no longer meets at one canonical handoff');
+
   assert.equal(archPresentationSource.includes('ARCH_PIER_BRIDGE_OVERLAP'), false);
   assert.equal(archPresentationSource.includes('ARCH_CURVE_JOIN_HANDOFF'), false);
   assert.equal(archPresentationSource.includes('upper-through-pier'), false);

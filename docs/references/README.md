@@ -27,6 +27,18 @@ If different Backrooms sources disagree and the project's accepted canon/source 
 
 Names are not geometry. Never literalize a label without checking references. A term such as `arch` must not automatically become freestanding architectural arches merely because of its name.
 
+## Relationship to the concept provenance ledger
+
+Reference packs answer **what the evidence says and how faithfully a target should be interpreted**. `docs/CONTENT_PROVENANCE.md` answers the related but different question **what part of the resulting Project Noclip concept is source-derived, interpreted, Project-Noclip-original, real-world-inspired, or still unknown**.
+
+Do not move detailed image/audio analysis out of `docs/references/**` and do not duplicate it in the provenance ledger.
+
+When a reference update materially changes a concept's source family, source URL, source-supported facts, interpretation boundary, copied-media status, attribution/license evidence, or unresolved provenance question, update `docs/CONTENT_PROVENANCE.md` in the same change.
+
+When evidence/license/permission is unclear, record `UNKNOWN / REVIEW REQUIRED` rather than inferring a legal conclusion. Public accessibility, wiki hosting, user supply, or technical transformation of an asset does not by itself establish reuse rights.
+
+The normal routing remains efficient: engineering-only work does not read raw reference packs merely to satisfy ceremony. `AGENTS.md` and `docs/WORK_RULES.md` define the provenance trigger and final `PROVENANCE_IMPACT` handoff.
+
 ## Visual grammar extraction
 
 Each major visual pack should explicitly document, where relevant:
